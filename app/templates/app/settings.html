@@ -1,0 +1,321 @@
+{% extends 'app/base.html' %}
+{% load crispy_forms_tags %}
+
+{% block content %}
+<div class="settings-container">
+    <h1 class="page-title">Settings</h1>
+    
+    <div class="settings-content">
+        <div class="settings-section">
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <h2>Application Theme</h2>
+                    <p>Choose the theme for the application interface.</p>
+                </div>
+                
+                <div class="theme-settings">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="theme-options">
+                            <div class="theme-option{% if theme == 'dark' %} active{% endif %}">
+                                <input type="radio" name="theme" id="theme-dark" value="dark" {% if theme == 'dark' %}checked{% endif %} class="theme-radio">
+                                <label for="theme-dark" class="theme-label">
+                                    <div class="theme-preview dark-theme-preview">
+                                        <div class="theme-preview-sidebar"></div>
+                                        <div class="theme-preview-content"></div>
+                                    </div>
+                                    <span class="theme-name">Dark Theme</span>
+                                </label>
+                            </div>
+                            
+                            <div class="theme-option{% if theme == 'light' %} active{% endif %}">
+                                <input type="radio" name="theme" id="theme-light" value="light" {% if theme == 'light' %}checked{% endif %} class="theme-radio">
+                                <label for="theme-light" class="theme-label">
+                                    <div class="theme-preview light-theme-preview">
+                                        <div class="theme-preview-sidebar"></div>
+                                        <div class="theme-preview-content"></div>
+                                    </div>
+                                    <span class="theme-name">Light Theme</span>
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Theme
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="settings-section">
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <h2>Map Settings</h2>
+                    <p>Configure default map settings and behavior.</p>
+                </div>
+                
+                <div class="map-settings">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="form-group mb-3">
+                            <label for="defaultZoom" class="form-label">Default Zoom Level</label>
+                            <input type="range" class="form-range" min="5" max="15" step="1" id="defaultZoom" name="default_zoom" value="9">
+                            <div class="d-flex justify-content-between">
+                                <span>5 (Far)</span>
+                                <span>15 (Close)</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="defaultCenter" class="form-label">Default Center</label>
+                            <select class="form-select" id="defaultCenter" name="default_center">
+                                <option value="negros" selected>Negros Island</option>
+                                <option value="custom">Custom Location</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-3 custom-center d-none">
+                            <div class="row">
+                                <div class="col-6">
+                                    <label for="centerLat" class="form-label">Latitude</label>
+                                    <input type="number" class="form-control" id="centerLat" name="center_lat" placeholder="10.0" step="0.0001">
+                                </div>
+                                <div class="col-6">
+                                    <label for="centerLng" class="form-label">Longitude</label>
+                                    <input type="number" class="form-control" id="centerLng" name="center_lng" placeholder="123.0" step="0.0001">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" name="save_map_settings" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Map Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="settings-section">
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <h2>Pin Style Settings</h2>
+                    <p>Customize the appearance of tree markers on the map.</p>
+                </div>
+                
+                <div class="pin-style-settings">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="form-group mb-3">
+                            <label for="pinIcon" class="form-label">Pin Icon</label>
+                            <select class="form-select" id="pinIcon" name="pin_icon">
+                                <option value="fa-tree" selected>Tree</option>
+                                <option value="fa-leaf">Leaf</option>
+                                <option value="fa-seedling">Seedling</option>
+                                <option value="fa-map-marker-alt">Map Marker</option>
+                                <option value="fa-circle">Circle</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="pinColor" class="form-label">Pin Color</label>
+                            <input type="color" class="form-control form-control-color" id="pinColor" name="pin_color" value="#4caf50">
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="pinSize" class="form-label">Pin Size</label>
+                            <input type="range" class="form-range" min="16" max="40" step="2" id="pinSize" name="pin_size" value="24">
+                            <div class="d-flex justify-content-between">
+                                <span>Small</span>
+                                <span>Large</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="pinBorderColor" class="form-label">Border Color</label>
+                            <input type="color" class="form-control form-control-color" id="pinBorderColor" name="pin_border_color" value="#ffffff">
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="pinBorderWidth" class="form-label">Border Width</label>
+                            <input type="range" class="form-range" min="0" max="5" step="1" id="pinBorderWidth" name="pin_border_width" value="2">
+                            <div class="d-flex justify-content-between">
+                                <span>None</span>
+                                <span>Thick</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="pinBackgroundColor" class="form-label">Background Color</label>
+                            <input type="color" class="form-control form-control-color" id="pinBackgroundColor" name="pin_background_color" value="#000000">
+                            <input type="range" class="form-range mt-2" min="0" max="100" step="5" id="pinBackgroundOpacity" name="pin_background_opacity" value="60">
+                            <div class="d-flex justify-content-between">
+                                <span>Transparent</span>
+                                <span>Opaque</span>
+                            </div>
+                        </div>
+                        
+                        <div class="pin-preview-container mb-4">
+                            <h4>Pin Preview</h4>
+                            <div class="pin-preview">
+                                <div class="pin-marker" id="previewMarker">
+                                    <i class="fas fa-tree" id="previewIcon"></i>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" name="save_pin_style" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Pin Style
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="settings-section">
+            <div class="settings-card">
+                <div class="settings-card-header">
+                    <h2>Display Settings</h2>
+                    <p>Configure how data is displayed in the application.</p>
+                </div>
+                
+                <div class="display-settings">
+                    <form method="post">
+                        {% csrf_token %}
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="showScientificNames" name="show_scientific_names" checked>
+                            <label class="form-check-label" for="showScientificNames">Show Scientific Names</label>
+                        </div>
+                        
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="enableAnimations" name="enable_animations" checked>
+                            <label class="form-check-label" for="enableAnimations">Enable UI Animations</label>
+                        </div>
+                        
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" id="highContrastMode" name="high_contrast_mode">
+                            <label class="form-check-label" for="highContrastMode">High Contrast Mode</label>
+                        </div>
+                        
+                        <div class="form-group mb-3">
+                            <label for="fontSizeScale" class="form-label">Font Size Scale</label>
+                            <input type="range" class="form-range" min="80" max="120" step="10" id="fontSizeScale" name="font_size_scale" value="100">
+                            <div class="d-flex justify-content-between">
+                                <span>Smaller</span>
+                                <span>Larger</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit" name="save_display_settings" class="btn btn-primary">
+                                <i class="fas fa-save"></i> Save Display Settings
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Theme selection
+        const themeOptions = document.querySelectorAll('.theme-option');
+        const themeRadios = document.querySelectorAll('.theme-radio');
+        
+        themeRadios.forEach(radio => {
+            radio.addEventListener('change', function() {
+                // Remove active class from all options
+                themeOptions.forEach(option => option.classList.remove('active'));
+                
+                // Add active class to selected option
+                if (this.checked) {
+                    this.closest('.theme-option').classList.add('active');
+                }
+            });
+        });
+        
+        // Map settings
+        const defaultCenterSelect = document.getElementById('defaultCenter');
+        const customCenterDiv = document.querySelector('.custom-center');
+        
+        if (defaultCenterSelect) {
+            defaultCenterSelect.addEventListener('change', function() {
+                if (this.value === 'custom') {
+                    customCenterDiv.classList.remove('d-none');
+                } else {
+                    customCenterDiv.classList.add('d-none');
+                }
+            });
+        }
+        
+        // Pin style preview
+        const pinIcon = document.getElementById('pinIcon');
+        const pinColor = document.getElementById('pinColor');
+        const pinSize = document.getElementById('pinSize');
+        const pinBorderColor = document.getElementById('pinBorderColor');
+        const pinBorderWidth = document.getElementById('pinBorderWidth');
+        const pinBackgroundColor = document.getElementById('pinBackgroundColor');
+        const pinBackgroundOpacity = document.getElementById('pinBackgroundOpacity');
+        const previewIcon = document.getElementById('previewIcon');
+        const previewMarker = document.getElementById('previewMarker');
+        
+        // Update pin preview function
+        function updatePinPreview() {
+            if (!previewIcon || !previewMarker) return;
+            
+            // Update icon class
+            previewIcon.className = 'fas ' + pinIcon.value;
+            
+            // Update icon color
+            previewIcon.style.color = pinColor.value;
+            
+            // Update icon size
+            previewIcon.style.fontSize = pinSize.value + 'px';
+            
+            // Update marker border
+            previewMarker.style.borderWidth = pinBorderWidth.value + 'px';
+            previewMarker.style.borderColor = pinBorderColor.value;
+            
+            // Update marker background with opacity
+            const opacity = pinBackgroundOpacity.value / 100;
+            const rgb = hexToRgb(pinBackgroundColor.value);
+            previewMarker.style.backgroundColor = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${opacity})`;
+        }
+        
+        // Helper function to convert hex to rgb
+        function hexToRgb(hex) {
+            // Remove # if present
+            hex = hex.replace('#', '');
+            
+            // Parse the hex values
+            const r = parseInt(hex.substring(0, 2), 16);
+            const g = parseInt(hex.substring(2, 4), 16);
+            const b = parseInt(hex.substring(4, 6), 16);
+            
+            return { r, g, b };
+        }
+        
+        // Add event listeners to update preview
+        if (pinIcon) pinIcon.addEventListener('change', updatePinPreview);
+        if (pinColor) pinColor.addEventListener('input', updatePinPreview);
+        if (pinSize) pinSize.addEventListener('input', updatePinPreview);
+        if (pinBorderColor) pinBorderColor.addEventListener('input', updatePinPreview);
+        if (pinBorderWidth) pinBorderWidth.addEventListener('input', updatePinPreview);
+        if (pinBackgroundColor) pinBackgroundColor.addEventListener('input', updatePinPreview);
+        if (pinBackgroundOpacity) pinBackgroundOpacity.addEventListener('input', updatePinPreview);
+        
+        // Initialize preview
+        updatePinPreview();
+    });
+</script>
+{% endblock %}

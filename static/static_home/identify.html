@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Identify Endemic Tree</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" type="image/png" href="../images/favicon.png">
+</head>
+<body>
+    <header>
+        <img src="../images/tree-logo.png" alt="Tree Logo" class="logo">
+        <h1>Identify Endemic Tree</h1>
+    </header>
+    <main>
+        <section class="intro">
+            <h2>Submit an Endemic Tree Sighting</h2>
+            <p>
+                Help us monitor and protect endemic trees by submitting your observation below.
+            </p>
+        </section>
+        <form class="identify-form" enctype="multipart/form-data" autocomplete="off">
+            <div class="form-row">
+                <label for="tree_name">Tree Name</label>
+                <input type="text" id="tree_name" name="tree_name" required placeholder="e.g. Acacia nilotica">
+            </div>
+            <div class="form-row">
+                <label for="latitude">Latitude</label>
+                <input type="number" step="any" id="latitude" name="latitude" required placeholder="e.g. 7.123456">
+            </div>
+            <div class="form-row">
+                <label for="longitude">Longitude</label>
+                <input type="number" step="any" id="longitude" name="longitude" required placeholder="e.g. 80.123456">
+            </div>
+            <div class="form-row" style="margin-top:-10px; margin-bottom:10px;">
+                <button type="button" class="geo-btn" onclick="getLocation()">Get My Location</button>
+            </div>
+            <div class="form-row">
+                <label for="quantity">How Many?</label>
+                <input type="number" id="quantity" name="quantity" min="1" required placeholder="e.g. 3">
+            </div>
+            <div class="form-row">
+                <label for="person_name">Your Name</label>
+                <input type="text" id="person_name" name="person_name" required placeholder="e.g. John Doe">
+            </div>
+            <div class="form-row">
+                <label for="tree_image">Tree Image</label>
+                <input type="file" id="tree_image" name="tree_image" accept="image/*" style="display:block; margin-bottom:8px;">
+                <button type="button" class="camera-btn" onclick="openCamera()">Use Camera</button>
+                <div id="camera-container" style="display:none; flex-direction:column; align-items:center; margin-top:10px;">
+                    <video id="camera-stream" width="320" height="240" autoplay playsinline style="border-radius:12px; background:#222;"></video>
+                    <button type="button" class="capture-btn" onclick="capturePhoto()" style="margin:10px 0;">Capture Photo</button>
+                    <canvas id="snapshot" width="320" height="240" style="display:none;"></canvas>
+                    <img id="photo-preview" src="" alt="Preview" style="display:none; margin-top:10px; border-radius:12px; max-width:100%;">
+                    <button type="button" class="close-btn" onclick="closeCamera()" style="margin-top:8px;">Close Camera</button>
+                </div>
+                <input type="hidden" id="camera_image_data" name="camera_image_data">
+            </div>
+            <div class="form-row" style="text-align:center;">
+                <button type="submit" class="identify-btn">Submit Sighting</button>
+            </div>
+        </form>
+    </main>
+    <footer>
+        <p>&copy; 2024 Endemic Trees Monitoring. All rights reserved.</p>
+    </footer>
+<script>
+function getLocation() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(function(position) {
+            document.getElementById('latitude').value = position.coords.latitude;
+            document.getElementById('longitude').value = position.coords.longitude;
+        }, function(error) {
+            alert('Unable to retrieve your location. Please allow location access or enter manually.');
+        });
+    } else {
+        alert('Geolocation is not supported by this browser.');
+    }
+}
+let stream = null;
+function openCamera() {
+    document.getElementById('tree_image').style.display = 'none';
+    document.querySelector('.camera-btn').style.display = 'none';
+    document.getElementById('camera-container').style.display = 'flex';
+    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+        .then(function(s) {
+            stream = s;
+            document.getElementById('camera-stream').srcObject = stream;
+        })
+        .catch(function(err) {
+            alert('Unable to access camera: ' + err.message);
+            closeCamera();
+        });
+}
+function capturePhoto() {
+    const video = document.getElementById('camera-stream');
+    const canvas = document.getElementById('snapshot');
+    const context = canvas.getContext('2d');
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL('image/png');
+    document.getElementById('photo-preview').src = dataUrl;
+    document.getElementById('photo-preview').style.display = 'block';
+    document.getElementById('camera_image_data').value = dataUrl;
+    canvas.style.display = 'none';
+}
+function closeCamera() {
+    document.getElementById('tree_image').style.display = 'block';
+    document.querySelector('.camera-btn').style.display = 'inline-block';
+    document.getElementById('camera-container').style.display = 'none';
+    document.getElementById('photo-preview').style.display = 'none';
+    document.getElementById('camera_image_data').value = '';
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+}
+</script>
+</body>
+</html> 

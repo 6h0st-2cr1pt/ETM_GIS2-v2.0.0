@@ -1,0 +1,166 @@
+{% extends 'app/base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/layers.css">
+{% endblock %}
+
+{% block content %}
+<div class="layers-container">
+    <h1 class="page-title">Layer Control</h1>
+    
+    <div class="layers-content">
+        <div class="layers-list-container">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Available Layers</h2>
+                    <button class="btn btn-sm btn-primary" id="addLayerBtn">
+                        <i class="fas fa-plus"></i> Add Layer
+                    </button>
+                </div>
+                <div class="card-body">
+                    <div class="layers-list">
+                        {% for layer in layers %}
+                        <div class="layer-item" data-id="{{ layer.id }}">
+                            <div class="layer-info">
+                                <h3>{{ layer.name }}</h3>
+                                <p>{{ layer.description }}</p>
+                                <div class="layer-meta">
+                                    <span class="layer-type">{{ layer.layer_type }}</span>
+                                    <span class="layer-status {% if layer.is_active %}active{% else %}inactive{% endif %}">
+                                        {% if layer.is_active %}Active{% else %}Inactive{% endif %}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="layer-actions">
+                                <button class="btn btn-sm btn-outline-primary edit-layer-btn" data-id="{{ layer.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger delete-layer-btn" data-id="{{ layer.id }}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="no-layers-message">
+                            <i class="fas fa-layer-group"></i>
+                            <p>No layers available. Click "Add Layer" to create one.</p>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="layer-preview-container">
+            <div class="card">
+                <div class="card-header">
+                    <h2>Layer Preview</h2>
+                    <div class="preview-controls">
+                        <select id="previewLayerSelect" class="form-select form-select-sm">
+                            <option value="">Select a layer to preview</option>
+                            {% for layer in layers %}
+                            <option value="{{ layer.id }}">{{ layer.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="previewMap" class="preview-map"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Layer Form Modal -->
+    <div class="modal fade" id="layerFormModal" tabindex="-1" aria-labelledby="layerFormModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="layerFormModalLabel">Add New Layer</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="layerForm">
+                        {% csrf_token %}
+                        <input type="hidden" id="layerId" name="layer_id" value="">
+                        
+                        <div class="mb-3">
+                            <label for="layerName" class="form-label">Layer Name</label>
+                            <input type="text" class="form-control" id="layerName" name="name" required>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="layerDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="layerDescription" name="description" rows="3"></textarea>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="layerType" class="form-label">Layer Type</label>
+                            <select class="form-select" id="layerType" name="layer_type" required>
+                                <option value="">Select Layer Type</option>
+                                <option value="topographic">Topographic</option>
+                                <option value="satellite">Satellite</option>
+                                <option value="street">Street View</option>
+                                <option value="heatmap">Heatmap</option>
+                                <option value="protected">Protected Areas</option>
+                                <option value="landuse">Land Use</option>
+                                <option value="soil">Soil Type</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="layerUrl" class="form-label">Layer URL</label>
+                            <input type="text" class="form-control" id="layerUrl" name="url" required>
+                            <div class="form-text">URL to the layer source (tile URL template, WMS endpoint, or GeoJSON URL)</div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="layerAttribution" class="form-label">Attribution</label>
+                            <input type="text" class="form-control" id="layerAttribution" name="attribution">
+                            <div class="form-text">Attribution text for the layer (if applicable)</div>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="layerIsActive" name="is_active">
+                            <label class="form-check-label" for="layerIsActive">Active</label>
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="layerIsDefault" name="is_default">
+                            <label class="form-check-label" for="layerIsDefault">Default (show by default on map)</label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveLayerBtn">Save Layer</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteLayerModal" tabindex="-1" aria-labelledby="deleteLayerModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteLayerModalLabel">Confirm Delete</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete this layer? This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/layers.js"></script>
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends 'app/base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/dashboard.css">
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+    <h1 class="page-title">Dashboard</h1>
+
+    <div class="dashboard-stats">
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(135deg, rgba(0, 184, 148, 0.9), rgba(0, 206, 201, 0.7)); color: white; border-radius: 8px; padding: 10px; box-shadow: 0 4px 10px rgba(0, 184, 148, 0.3);">
+                <i class="fas fa-tree"></i>
+            </div>
+            <div class="stat-content">
+                <h2>{{ total_trees }}</h2>
+                <p>Total Tree Records</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(135deg, rgba(0, 184, 148, 0.9), rgba(0, 206, 201, 0.7)); color: white; border-radius: 8px; padding: 10px; box-shadow: 0 4px 10px rgba(0, 184, 148, 0.3);">
+                <i class="fas fa-leaf"></i>
+            </div>
+            <div class="stat-content">
+                <h2>{{ unique_species }}</h2>
+                <p>Unique Species</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(135deg, rgba(0, 184, 148, 0.9), rgba(0, 206, 201, 0.7)); color: white; border-radius: 8px; padding: 10px; box-shadow: 0 4px 10px rgba(0, 184, 148, 0.3);">
+                <i class="fas fa-seedling"></i>
+            </div>
+            <div class="stat-content">
+                <h2>{{ tree_population }}</h2>
+                <p>Total Population</p>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-icon" style="background: linear-gradient(135deg, rgba(46, 134, 222, 0.9), rgba(83, 82, 237, 0.7)); color: white; border-radius: 8px; padding: 10px; box-shadow: 0 4px 10px rgba(46, 134, 222, 0.3);">
+                <i class="fas fa-heartbeat"></i>
+            </div>
+            <div class="stat-content">
+                <h2>{{ health_percentage }}%</h2>
+                <p>Trees in Good Health</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="dashboard-charts-container">
+        <div class="dashboard-chart">
+            <h3>Population by Year</h3>
+            <canvas id="populationChart" data-population="{{ population_by_year }}"></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="dashboard-chart">
+            <h3>Species Distribution</h3>
+            <canvas id="speciesChart" data-species="{{ species_by_family }}"></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="dashboard-chart">
+            <h3>Health Status Distribution</h3>
+            <canvas id="healthChart" data-health="{{ health_data }}"></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+    </div>
+
+    <div class="dashboard-table-container">
+        <h3>Recent Updates</h3>
+            <table class="table">
+                <thead>
+                    <tr>
+                    <th>Species</th>
+                    <th>Location</th>
+                        <th>Population</th>
+                        <th>Health Status</th>
+                    <th>Last Updated</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tree in recent_trees %}
+                    <tr>
+                        <td>{{ tree.species.common_name }}</td>
+                    <td>{{ tree.location.name }}</td>
+                        <td>{{ tree.population }}</td>
+                    <td>{{ tree.health_status|title }}</td>
+                    <td>{{ tree.updated_at|date:"M d, Y" }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                    <td colspan="5" class="text-center">No recent updates</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/dashboard.js"></script>
+{% endblock %}

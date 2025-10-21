@@ -1,0 +1,304 @@
+{% extends 'app/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="gis-container">
+    <div class="floating-search-container">
+        <div class="search-bar">
+            <input type="text" id="locationSearch" placeholder="Search for a location...">
+            <button id="searchButton"><i class="fas fa-search"></i></button>
+        </div>
+    </div>
+    <div id="map" class="gis-map"></div>
+    
+    <div class="floating-controls">
+        <div class="control-group map-type-control">
+            <button class="control-toggle" id="mapTypeToggle">
+                <i class="fas fa-layer-group"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Map Type</h4>
+                <div class="control-options">
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeDark" value="dark" checked>
+                        <label for="mapTypeDark">Dark</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeLight" value="light">
+                        <label for="mapTypeLight">Light</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeSatellite" value="satellite">
+                        <label for="mapTypeSatellite">Satellite</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeStreet" value="street">
+                        <label for="mapTypeStreet">Street</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeTopographic" value="topographic">
+                        <label for="mapTypeTopographic">Topographic</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeDarkNormal" value="dark-normal">
+                        <label for="mapTypeDarkNormal">Dark Normal</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group tree-filter-control">
+            <button class="control-toggle" id="treeFilterToggle">
+                <i class="fas fa-filter"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Filter Trees</h4>
+                <div class="control-options tree-filter-list">
+                    <div class="control-option">
+                        <input type="radio" name="treeFilter" id="allTrees" value="all" checked>
+                        <label for="allTrees">All Trees</label>
+                    </div>
+                    
+                    {% if tree_species %}
+                        {% for species in tree_species %}
+                        <div class="control-option">
+                            <input type="radio" name="treeFilter" id="tree{{ species.id }}" value="{{ species.id }}">
+                            <label for="tree{{ species.id }}">{{ species.common_name }}</label>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-species-message">
+                            <p>No tree species found in the database.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group entity-type-control">
+            <button class="control-toggle" id="entityTypeToggle">
+                <i class="fas fa-seedling"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Entity Type</h4>
+                <div class="control-options">
+                    <div class="control-option">
+                        <input type="checkbox" name="entityType" id="showTrees" value="trees" checked>
+                        <label for="showTrees">Mature Trees</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="checkbox" name="entityType" id="showSeeds" value="seeds" checked>
+                        <label for="showSeeds">Planted Seeds</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group layer-control">
+            <button class="control-toggle" id="layerControlToggle">
+                <i class="fas fa-map-marked-alt"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Map Layers</h4>
+                <div class="control-options layer-controls-list" id="layerControlsList">
+                    <!-- Layer controls will be added dynamically -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group tools-control">
+            <button class="control-toggle" id="toolsToggle">
+                <i class="fas fa-tools"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Map Tools</h4>
+                <div class="control-options">
+                    <div class="control-option">
+                        <button id="centerMapBtn" class="tool-button">
+                            <i class="fas fa-crosshairs"></i> Center Map
+                        </button>
+                    </div>
+                    <div class="control-option">
+                        <button id="measureDistanceBtn" class="tool-button">
+                            <i class="fas fa-ruler"></i> Measure Distance
+                        </button>
+                    </div>
+                    <div class="control-option">
+                        <button id="drawPolygonBtn" class="tool-button">
+                            <i class="fas fa-draw-polygon"></i> Draw Area
+                        </button>
+                    </div>
+                    <div class="control-option">
+                        <button id="exportDataBtn" class="tool-button">
+                            <i class="fas fa-file-export"></i> Export Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="{% static 'css/gis.css' %}?v=3" />
+<style>
+/* Force scrollbar for tree filter list */
+.tree-filter-list {
+  max-height: 150px !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  padding-right: 15px !important;
+  margin-right: -15px !important;
+  height: 150px !important;
+}
+
+.tree-filter-list::-webkit-scrollbar {
+  width: 15px !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.3) !important;
+  border-radius: 8px !important;
+  margin: 2px 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-radius: 8px !important;
+  border: 2px solid rgba(255, 255, 255, 0.5) !important;
+  min-height: 50px !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 1) !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-corner {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Firefox scrollbar */
+.tree-filter-list {
+  scrollbar-width: auto !important;
+  scrollbar-color: rgba(255, 255, 255, 0.8) rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Additional aggressive scrollbar forcing */
+.control-dropdown .tree-filter-list {
+  max-height: 150px !important;
+  height: 150px !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  padding-right: 15px !important;
+  margin-right: -15px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+}
+
+/* Force scrollbar to always be visible */
+.control-dropdown .tree-filter-list::-webkit-scrollbar {
+  width: 15px !important;
+  display: block !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.4) !important;
+  border-radius: 8px !important;
+  margin: 2px 0 !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  display: block !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 8px !important;
+  border: 3px solid rgba(255, 255, 255, 0.6) !important;
+  min-height: 60px !important;
+  display: block !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 1) !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-corner {
+  background: rgba(255, 255, 255, 0.4) !important;
+  display: block !important;
+}
+
+/* Force Leaflet popup to dark green glass (inline to beat caching/order) */
+.gis-container .leaflet-container .leaflet-popup .leaflet-popup-content-wrapper {
+  background: linear-gradient(135deg, rgba(6,71,37,0.88), rgba(6,71,37,0.7)) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(46,204,113,0.28) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+  color: #e9f7ef !important;
+}
+.gis-container .leaflet-container .leaflet-popup .leaflet-popup-tip {
+  background: rgba(6,71,37,0.88) !important;
+  border: 1px solid rgba(46,204,113,0.28) !important;
+}
+.gis-container .leaflet-container .leaflet-popup .leaflet-popup-content {
+  margin: 14px 18px !important;
+  color: #e9f7ef !important;
+}
+.gis-container .leaflet-container .leaflet-popup a.leaflet-popup-close-button {
+  color: #d1fae5 !important;
+  background: rgba(255,255,255,0.06) !important;
+  border-radius: 50% !important;
+  width: 26px !important;
+  height: 26px !important;
+  line-height: 22px !important;
+  border: 1px solid rgba(46,204,113,0.25) !important;
+  right: 8px !important;
+  top: 8px !important;
+}
+.gis-container .leaflet-container .leaflet-popup a.leaflet-popup-close-button:hover {
+  background: rgba(46,204,113,0.18) !important;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="{% static 'js/gis.js' %}?v=3"></script>
+<script>
+  // Ensure map is properly initialized
+  document.addEventListener("DOMContentLoaded", function() {
+    console.log("GIS page loaded, map should be initializing...");
+    
+    // Force scrollbar visibility for tree filter list
+    const treeFilterList = document.querySelector('.tree-filter-list');
+    if (treeFilterList) {
+      console.log("Found tree filter list, applying scrollbar fixes...");
+      treeFilterList.style.maxHeight = '150px';
+      treeFilterList.style.overflowY = 'scroll';
+      treeFilterList.style.height = '150px';
+      treeFilterList.style.paddingRight = '15px';
+      treeFilterList.style.marginRight = '-15px';
+      
+      // Force scrollbar to be visible
+      treeFilterList.style.scrollbarWidth = 'auto';
+      treeFilterList.style.scrollbarColor = 'rgba(255, 255, 255, 0.8) rgba(255, 255, 255, 0.3)';
+      
+      // Add a small delay to ensure styles are applied
+      setTimeout(function() {
+        treeFilterList.style.overflowY = 'scroll';
+        console.log("Scrollbar should now be visible");
+      }, 100);
+    }
+    
+    // Force a resize event after a short delay to ensure the map renders correctly
+    setTimeout(function() {
+      window.dispatchEvent(new Event('resize'));
+    }, 500);
+  });
+</script>
+{% endblock %}

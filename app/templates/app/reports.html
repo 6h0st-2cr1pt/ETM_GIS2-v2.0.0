@@ -1,0 +1,189 @@
+{% extends 'app/base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/reports.css">
+<style>
+/* Inline styles to force dropdown visibility */
+.reports-container select option,
+.reports-container .form-select option,
+select option,
+.form-select option,
+option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+  border: none !important;
+  margin: 2px 0 !important;
+}
+
+.reports-container select option:hover,
+.reports-container .form-select option:hover,
+select option:hover,
+.form-select option:hover,
+option:hover {
+  background-color: #333333 !important;
+  color: #ffffff !important;
+}
+
+/* Force all options to be visible */
+* option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+}
+
+/* Additional specificity */
+body * option,
+html * option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="reports-container">
+    <h1 class="page-title">Generate Reports</h1>
+
+    <div class="reports-content">
+        <div class="reports-sidebar">
+            <div class="report-options-card">
+                <div class="card-header">
+                    <h2>Report Options</h2>
+                </div>
+                <div class="card-body">
+                    <form id="reportForm">
+                        {% csrf_token %}
+                        <div class="form-group mb-3">
+                            <label for="reportType">Report Type</label>
+                            <select class="form-select" id="reportType" name="report_type" required style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                <option value="" style="background-color: #000000; color: #ffffff; padding: 8px;">-- Select Report Type --</option>
+                                <option value="species_distribution" style="background-color: #000000; color: #ffffff; padding: 8px;">Species Distribution</option>
+                                <option value="population_trends" style="background-color: #000000; color: #ffffff; padding: 8px;">Population Trends</option>
+                                <option value="health_analysis" style="background-color: #000000; color: #ffffff; padding: 8px;">Health Status Analysis</option>
+                                <option value="conservation_status" style="background-color: #000000; color: #ffffff; padding: 8px;">Conservation Status</option>
+                                <option value="spatial_density" style="background-color: #000000; color: #ffffff; padding: 8px;">Spatial Density</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="timeRange">Time Range</label>
+                            <select class="form-select" id="timeRange" name="time_range" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Available Data</option>
+                                <option value="last_5" style="background-color: #000000; color: #ffffff; padding: 8px;">Last 5 Years</option>
+                                <option value="last_10" style="background-color: #000000; color: #ffffff; padding: 8px;">Last 10 Years</option>
+                                <option value="custom" style="background-color: #000000; color: #ffffff; padding: 8px;">Custom Range</option>
+                            </select>
+                        </div>
+
+                        <div class="custom-time-range d-none">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="form-group mb-3">
+                                        <label for="startYear">Start Year</label>
+                                        <input type="number" class="form-control" id="startYear" name="start_year" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="form-group mb-3">
+                                        <label for="endYear">End Year</label>
+                                        <input type="number" class="form-control" id="endYear" name="end_year" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="speciesFilter">Species Filter</label>
+                            <select class="form-select" id="speciesFilter" name="species_filter" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Species</option>
+                                {% for species in species_list %}
+                                <option value="{{ species.id }}" style="background-color: #000000; color: #ffffff; padding: 8px;">{{ species.common_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="locationFilter">Location Filter</label>
+                            <select class="form-select" id="locationFilter" name="location_filter" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Locations</option>
+                                {% for location in location_list %}
+                                <option value="{{ location.id }}" style="background-color: #000000; color: #ffffff; padding: 8px;">{{ location.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label>Report Sections</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeCharts" name="include_charts" checked style="background-color: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.4);">
+                                <label class="form-check-label" for="includeCharts">Include Charts</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeMap" name="include_map" checked style="background-color: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.4);">
+                                <label class="form-check-label" for="includeMap">Include Map</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="includeTable" name="include_table" checked style="background-color: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.4);">
+                                <label class="form-check-label" for="includeTable">Include Data Table</label>
+                            </div>
+                        </div>
+
+                        <div class="form-group mb-3">
+                            <label for="outputFormat">Output Format</label>
+                            <select class="form-select" id="outputFormat" name="output_format" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                <option value="pdf" style="background-color: #000000; color: #ffffff; padding: 8px;">PDF</option>
+                                <option value="html" style="background-color: #000000; color: #ffffff; padding: 8px;">HTML</option>
+                                <option value="excel" style="background-color: #000000; color: #ffffff; padding: 8px;">Excel</option>
+                            </select>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="button" id="generateReportBtn" class="btn btn-primary w-100">
+                                <i class="fas fa-file-pdf"></i> Generate Report
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="report-preview">
+            <div class="report-preview-card">
+                <div class="card-header">
+                    <h2>Report Preview</h2>
+                    <div class="preview-actions">
+                        <button id="printReportBtn" class="btn btn-sm btn-outline-primary" disabled>
+                            <i class="fas fa-print"></i> Print
+                        </button>
+                        <button id="downloadReportBtn" class="btn btn-sm btn-primary" disabled>
+                            <i class="fas fa-download"></i> Download
+                        </button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="reportPreviewContent">
+                        <div class="no-report-message">
+                            <i class="fas fa-file-alt"></i>
+                            <p>Select report options and click "Generate Report" to see a preview.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.7.0/dist/chart.min.js"></script>
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<!-- html2canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!-- Reports JS -->
+<script src="/static/js/reports.js"></script>
+{% endblock %}

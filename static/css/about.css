@@ -1,0 +1,324 @@
+/* About Page Styles */
+.about-container {
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.about-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2rem;
+}
+
+.about-section {
+  margin-bottom: 2rem;
+}
+
+.about-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--card-border-radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 2rem;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.about-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+}
+
+.about-card-header {
+  margin-bottom: 2rem;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 1rem;
+}
+
+.about-card-header h2 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+/* About App Section */
+.about-app {
+  margin-bottom: 2.5rem;
+}
+
+.about-app .lead {
+  font-size: 1.2rem;
+  line-height: 1.7;
+  margin-bottom: 2rem;
+  color: var(--text-primary);
+}
+
+.about-app h3 {
+  font-size: 1.4rem;
+  font-weight: 600;
+  margin: 2rem 0 1rem;
+  color: var(--text-primary);
+  border-left: 4px solid var(--color-primary);
+  padding-left: 1rem;
+}
+
+.feature-list {
+  margin-bottom: 2rem;
+}
+
+.feature-list ul {
+  list-style-type: none;
+  padding-left: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1rem;
+}
+
+.feature-list li {
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 1rem;
+  border-radius: var(--border-radius-sm);
+  transition: transform 0.2s ease;
+}
+
+.feature-list li:hover {
+  transform: translateX(5px);
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+}
+
+.feature-list li i {
+  margin-right: 1rem;
+  color: var(--color-primary);
+  width: 24px;
+  height: 24px;
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+/* Tech Stack */
+.tech-stack {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.tech-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--border-radius-md);
+  padding: 1.5rem;
+  width: 120px;
+  transition: all 0.3s ease;
+}
+
+.tech-item:hover {
+  transform: translateY(-8px);
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.tech-item i {
+  font-size: 2.5rem;
+  margin-bottom: 1rem;
+  color: var(--color-primary);
+}
+
+.tech-item span {
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* Developer Section */
+.about-developer {
+  padding: 1.5rem 0;
+}
+
+.developer-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--border-radius-md);
+  padding: 2rem;
+}
+
+.developer-avatar {
+  font-size: 6rem;
+  color: var(--color-primary);
+  margin-bottom: 1.5rem;
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+  width: 150px;
+  height: 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 3px solid var(--color-primary);
+}
+
+.developer-bio h3 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  color: var(--text-primary);
+}
+
+.developer-title {
+  font-size: 1.2rem;
+  color: var(--color-primary);
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.developer-description {
+  margin-bottom: 2rem;
+  max-width: 700px;
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+.developer-contact {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.contact-link {
+  display: flex;
+  align-items: center;
+  color: var(--text-primary);
+  text-decoration: none;
+  transition: all 0.3s ease;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--border-radius-sm);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.contact-link:hover {
+  color: var(--color-primary);
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+  transform: translateX(5px);
+}
+
+.contact-link i {
+  margin-right: 1rem;
+  width: 24px;
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+/* Version Section */
+.about-version {
+  padding: 1.5rem 0;
+}
+
+.version-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.version-item {
+  display: flex;
+  flex-direction: column;
+  padding: 1.5rem;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--border-radius-md);
+  transition: transform 0.3s ease;
+}
+
+.version-item:hover {
+  transform: translateY(-5px);
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+}
+
+.version-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+}
+
+.version-value {
+  font-size: 1.2rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.license-info {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: var(--border-radius-md);
+  padding: 1.5rem;
+}
+
+.license-info h4 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-primary);
+}
+
+.license-info p {
+  color: var(--text-primary);
+  line-height: 1.7;
+}
+
+/* Light mode specific styles */
+html[data-theme="light"] .about-card {
+  background-color: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] .tech-item,
+html[data-theme="light"] .version-item,
+html[data-theme="light"] .license-info,
+html[data-theme="light"] .developer-info,
+html[data-theme="light"] .feature-list li,
+html[data-theme="light"] .contact-link {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+html[data-theme="light"] .tech-item:hover,
+html[data-theme="light"] .version-item:hover,
+html[data-theme="light"] .feature-list li:hover,
+html[data-theme="light"] .contact-link:hover {
+  background-color: rgba(var(--color-primary-rgb), 0.1);
+}
+
+/* Responsive adjustments */
+@media (min-width: 768px) {
+  .developer-info {
+    flex-direction: row;
+    text-align: left;
+    align-items: flex-start;
+  }
+
+  .developer-avatar {
+    margin-right: 2rem;
+    margin-bottom: 0;
+  }
+
+  .developer-contact {
+    align-items: flex-start;
+  }
+}
+
+@media (min-width: 992px) {
+  .about-content {
+    grid-template-columns: 1fr;
+  }
+}

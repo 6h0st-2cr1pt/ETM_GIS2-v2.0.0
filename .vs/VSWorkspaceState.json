@@ -1,0 +1,15 @@
+{
+  "ExpandedNodes": [
+    "",
+    "\\app",
+    "\\app\\templates",
+    "\\app\\templates\\app",
+    "\\components",
+    "\\endemic_trees",
+    "\\static",
+    "\\static\\css",
+    "\\static\\js"
+  ],
+  "SelectedNode": "\\app\\models.py",
+  "PreviewInSolutionExplorer": false
+}

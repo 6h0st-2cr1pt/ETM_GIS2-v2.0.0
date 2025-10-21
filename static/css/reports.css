@@ -1,0 +1,490 @@
+/* Reports Styles */
+.reports-container {
+  padding: 2rem;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.reports-content {
+  display: grid;
+  grid-template-columns: 350px 1fr;
+  gap: 2rem;
+  margin-top: 2rem;
+}
+
+.reports-sidebar {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.report-options-card,
+.report-preview-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: var(--card-border-radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--glass-border);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.card-header {
+  padding: 1.5rem;
+  border-bottom: 1px solid var(--glass-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-header h2 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.card-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  font-size: 0.95rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  letter-spacing: 0.5px;
+}
+
+/* Select Dropdown Styles */
+.form-select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #ffffff !important;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23ffffff' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: var(--border-radius-sm);
+  appearance: none;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  font-weight: 500;
+}
+
+/* Light theme select dropdown arrow */
+html[data-theme="light"] .form-select {
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23000000' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+}
+
+.form-select:focus {
+  border-color: var(--color-primary) !important;
+  outline: 0;
+  box-shadow: 0 0 0 0.25rem rgba(78, 115, 223, 0.25);
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Form Control Styles */
+.form-control {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #ffffff !important;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: var(--border-radius-sm);
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  font-weight: 500;
+}
+
+.form-control:focus {
+  border-color: var(--color-primary) !important;
+  outline: 0;
+  box-shadow: 0 0 0 0.25rem rgba(78, 115, 223, 0.25);
+  background-color: rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Checkbox Styles */
+.form-check {
+  margin-bottom: 0.5rem;
+}
+
+.form-check-input {
+  width: 1rem;
+  height: 1rem;
+  margin-top: 0.25rem;
+  margin-right: 0.5rem;
+  background-color: rgba(0, 0, 0, 0.4) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  border-radius: 0.25rem;
+  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+}
+
+.form-check-input:checked {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+.form-check-label {
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+/* Report Preview */
+.report-preview {
+  height: 100%;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+#reportPreviewContent {
+  height: 100%;
+  overflow-y: auto;
+  background-color: white;
+  color: black;
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+  min-height: 300px;
+}
+
+.no-report-message {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.no-report-message i {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+/* Report Document Styles */
+.report-document {
+  padding: 2rem;
+  font-family: "Arial", sans-serif;
+}
+
+.report-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #ddd;
+}
+
+.report-title {
+  font-size: 24px;
+  margin-bottom: 0.5rem;
+}
+
+.report-subtitle {
+  font-size: 16px;
+  color: #666;
+}
+
+.report-date {
+  font-size: 14px;
+  color: #888;
+  margin-top: 0.5rem;
+}
+
+.report-section {
+  margin-bottom: 2rem;
+}
+
+.report-section-title {
+  font-size: 18px;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #eee;
+}
+
+.report-chart-container {
+  margin: 1rem 0;
+  height: 300px;
+}
+
+.report-table-container {
+  margin: 1rem 0;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-table th,
+.report-table td {
+  padding: 0.5rem;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.report-table th {
+  background-color: #f5f5f5;
+}
+
+.report-map-container {
+  margin: 1rem 0;
+  height: 300px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+/* Light mode adjustments */
+html[data-theme="light"] .report-options-card,
+html[data-theme="light"] .report-preview-card {
+  background-color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="light"] .form-group label {
+  color: #000000 !important;
+  text-shadow: none;
+}
+
+html[data-theme="light"] .form-select,
+html[data-theme="light"] .form-control {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  color: #000000 !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+html[data-theme="light"] .form-select:focus,
+html[data-theme="light"] .form-control:focus {
+  background-color: #ffffff !important;
+  border-color: var(--color-primary) !important;
+}
+
+html[data-theme="light"] .form-check-input {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+}
+
+html[data-theme="light"] .form-check-label {
+  color: #000000 !important;
+  text-shadow: none;
+}
+
+/* Button Styles */
+.btn {
+  padding: 0.75rem 1.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-radius: var(--border-radius-sm);
+  transition: all 0.2s ease-in-out;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--color-primary), #2e59d9);
+  border: none;
+  color: white;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #2e59d9, var(--color-primary));
+  transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+  border: 1px solid var(--color-primary);
+  color: var(--color-primary);
+  background: transparent;
+}
+
+.btn-outline-primary:hover {
+  background: var(--color-primary);
+  color: white;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+  .reports-content {
+    grid-template-columns: 1fr;
+  }
+
+  .reports-container {
+    padding: 1rem;
+  }
+
+  .reports-sidebar,
+  .report-preview {
+    height: auto;
+  }
+
+  .report-options-card,
+  .report-preview-card {
+    margin-bottom: 1.5rem;
+  }
+
+  #reportPreviewContent {
+    max-height: 600px;
+  }
+}
+
+@media (max-width: 576px) {
+  .reports-container {
+    padding: 0.75rem;
+  }
+
+  .card-header,
+  .card-body {
+    padding: 1rem;
+  }
+}
+
+/* Additional overrides to ensure text visibility */
+.reports-container .form-group label,
+.reports-container .form-select,
+.reports-container .form-control,
+.reports-container .form-check-label {
+  color: #ffffff !important;
+}
+
+.reports-container .form-select,
+.reports-container .form-control {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+.reports-container .form-check-input {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  border-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+.reports-container .form-check-input:checked {
+  background-color: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+/* Focus states for better visibility */
+.reports-container .form-select:focus,
+.reports-container .form-control:focus {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 0.25rem rgba(78, 115, 223, 0.4) !important;
+}
+
+/* Critical fix for dropdown options - target all possible selectors */
+.reports-container select option,
+.reports-container .form-select option,
+.reports-container option,
+select option,
+.form-select option,
+option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+}
+
+/* Additional specificity for dropdown options */
+.reports-container select option:hover,
+.reports-container .form-select option:hover,
+.reports-container option:hover,
+select option:hover,
+.form-select option:hover,
+option:hover {
+  background-color: #333333 !important;
+  color: #ffffff !important;
+}
+
+/* Force dropdown options to be visible */
+.reports-container * option,
+.reports-container select * option,
+.reports-container .form-select * option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+  border: none !important;
+}
+
+/* Additional global override for all options in the reports page */
+.reports-container option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+  border: none !important;
+  margin: 2px 0 !important;
+}
+
+/* Override the main styles.css form control styles specifically for reports page */
+.reports-container .form-control,
+.reports-container .form-select {
+  background-color: rgba(0, 0, 0, 0.6) !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  padding: 0.75rem 1rem !important;
+}
+
+.reports-container .form-control:focus,
+.reports-container .form-select:focus {
+  background-color: rgba(0, 0, 0, 0.8) !important;
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 0.25rem rgba(78, 115, 223, 0.4) !important;
+}
+
+/* Override light mode styles from main styles.css */
+html[data-theme="light"] .reports-container .form-control,
+html[data-theme="light"] .reports-container .form-select {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+  border-color: rgba(0, 0, 0, 0.2) !important;
+  color: #000000 !important;
+}
+
+html[data-theme="light"] .reports-container .form-control:focus,
+html[data-theme="light"] .reports-container .form-select:focus {
+  background-color: #ffffff !important;
+  border-color: var(--color-primary) !important;
+}
+
+/* Force all dropdown options to be visible with maximum specificity */
+body .reports-container select option,
+body .reports-container .form-select option,
+body .reports-container option,
+body select option,
+body .form-select option,
+body option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+  border: none !important;
+  margin: 2px 0 !important;
+}
+
+/* Additional override for light theme options */
+html[data-theme="light"] body .reports-container select option,
+html[data-theme="light"] body .reports-container .form-select option,
+html[data-theme="light"] body .reports-container option {
+  background-color: #000000 !important;
+  color: #ffffff !important;
+  padding: 8px !important;
+  font-weight: 500 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  margin: 2px 0 !important;
+}

@@ -1,0 +1,236 @@
+{% extends 'app/base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/datasets.css">
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="datasets-container">
+    <h1 class="page-title">Datasets</h1>
+    
+    <div class="datasets-actions">
+        <a href="{% url 'app:upload' %}" class="btn btn-primary">
+            <i class="fas fa-upload"></i> Upload New Data
+        </a>
+        
+        <div class="datasets-search">
+            <div class="input-group">
+                <input type="text" id="datasetSearch" class="form-control" placeholder="Search datasets...">
+                <button class="btn btn-outline-secondary" type="button">
+                    <i class="fas fa-search"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="export-dropdown">
+            <select id="exportFormat" class="form-select form-select-sm">
+                <option value="csv">CSV</option>
+                <option value="json">JSON</option>
+                <option value="excel">Excel</option>
+            </select>
+            <button id="exportDataBtn" class="btn btn-outline-primary btn-sm ms-2">
+                <i class="fas fa-download"></i> Export
+            </button>
+        </div>
+    </div>
+    
+    <div class="datasets-table-container">
+        <div class="table-responsive">
+            <table class="table datasets-table" id="datasetsTable">
+                <thead>
+                    <tr>
+                        <th data-sort="common_name">Common Name</th>
+                        <th data-sort="scientific_name">Scientific Name</th>
+                        <th data-sort="species">Species</th>
+                        <th data-sort="family">Family</th>
+                        <th data-sort="genus">Genus</th>
+                        <th data-sort="population">Population</th>
+                        <th data-sort="health_status">Health Status</th>
+                        <th data-sort="coordinates">Coordinates</th>
+                        <th data-sort="year">Year</th>
+                        <th data-sort="notes">Notes</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tree in trees %}
+                    <tr>
+                        <td data-common_name="{{ tree.species.common_name }}">{{ tree.species.common_name }}</td>
+                        <td data-scientific_name="{{ tree.species.scientific_name }}"><em>{{ tree.species.scientific_name }}</em></td>
+                        <td data-species="{{ tree.species }}">{{ tree.species }}</td>
+                        <td data-family="{{ tree.species.genus.family.name }}">{{ tree.species.genus.family.name }}</td>
+                        <td data-genus="{{ tree.species.genus.name }}">{{ tree.species.genus.name }}</td>
+                        <td data-population="{{ tree.population }}">{{ tree.population }}</td>
+                        <td data-health_status="{{ tree.health_status }}">
+                            {% if tree.health_status == 'very_poor' %}
+                                <span class="badge bg-danger">Very Poor</span>
+                            {% elif tree.health_status == 'poor' %}
+                                <span class="badge bg-warning text-dark">Poor</span>
+                            {% elif tree.health_status == 'good' %}
+                                <span class="badge bg-success">Good</span>
+                            {% elif tree.health_status == 'very_good' %}
+                                <span class="badge bg-primary">Very Good</span>
+                            {% elif tree.health_status == 'excellent' %}
+                                <span class="badge bg-info">Excellent</span>
+                            {% else %}
+                                <span class="badge bg-secondary">Unknown</span>
+                            {% endif %}
+                        </td>
+                        <td data-coordinates="{{ tree.location.latitude }},{{ tree.location.longitude }}">{{ tree.location.latitude }}, {{ tree.location.longitude }}</td>
+                        <td data-year="{{ tree.year }}">{{ tree.year }}</td>
+                        <td data-notes="{{ tree.notes }}">
+                            {% if tree.notes %}
+                                <span class="notes-preview">{{ tree.notes|truncatechars:20 }}</span>
+                                <span class="notes-tooltip d-none">{{ tree.notes }}</span>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <div class="table-actions">
+                                <button class="action-button action-view" title="View Details" data-id="{{ tree.id }}">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <button class="action-button action-edit" title="Edit" data-id="{{ tree.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="action-button action-delete" title="Delete" data-id="{{ tree.id }}">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center">No data available</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="datasets-pagination">
+            <div class="pagination-info">
+                Showing <span id="showing-start">1</span> to <span id="showing-end">{{ trees|length }}</span> of <span id="total-entries">{{ trees|length }}</span> entries
+            </div>
+            <div class="pagination-controls">
+                <button class="pagination-button" id="prev-page" disabled>&laquo; Previous</button>
+                <button class="pagination-button active">1</button>
+                <button class="pagination-button" id="next-page" disabled>Next &raquo;</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tree Details Modal -->
+    <div class="modal fade" id="treeDetailsModal" tabindex="-1" aria-labelledby="treeDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="treeDetailsModalLabel">Tree Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Common Name:</strong> <span id="view-common-name"></span></p>
+                            <p><strong>Scientific Name:</strong> <span id="view-scientific-name"></span></p>
+                            <p><strong>Family:</strong> <span id="view-family"></span></p>
+                            <p><strong>Genus:</strong> <span id="view-genus"></span></p>
+                            <p><strong>Population:</strong> <span id="view-population"></span></p>
+                            <p><strong>Health Status:</strong> <span id="view-health-status"></span></p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Year:</strong> <span id="view-year"></span></p>
+                            <p><strong>Latitude:</strong> <span id="view-latitude"></span></p>
+                            <p><strong>Longitude:</strong> <span id="view-longitude"></span></p>
+                            <p><strong>Notes:</strong></p>
+                            <div id="view-notes" class="p-2 border rounded bg-light"></div>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div id="view-map" style="height: 300px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Tree Modal -->
+    <div class="modal fade" id="editTreeModal" tabindex="-1" aria-labelledby="editTreeModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="editTreeModalLabel">Edit Tree Record</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="editTreeForm">
+                        {% csrf_token %}
+                        <input type="hidden" id="edit-tree-id" name="tree_id">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="edit-species" class="form-label">Species</label>
+                                    <select class="form-control" id="edit-species" name="species" required>
+                                        {% for species in species_list %}
+                                        <option value="{{ species.id }}">{{ species.common_name }} ({{ species.scientific_name }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-population" class="form-label">Population</label>
+                                    <input type="number" class="form-control" id="edit-population" name="population" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-year" class="form-label">Year</label>
+                                    <input type="number" class="form-control" id="edit-year" name="year" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="edit-health-status" class="form-label">Health Status</label>
+                                    <select class="form-control" id="edit-health-status" name="health_status" required>
+                                        <option value="excellent">Excellent</option>
+                                        <option value="very_good">Very Good</option>
+                                        <option value="good">Good</option>
+                                        <option value="poor">Poor</option>
+                                        <option value="very_poor">Very Poor</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-latitude" class="form-label">Latitude</label>
+                                    <input type="number" step="any" class="form-control" id="edit-latitude" name="latitude" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-longitude" class="form-label">Longitude</label>
+                                    <input type="number" step="any" class="form-control" id="edit-longitude" name="longitude" required>
+                                </div>
+                            </div>
+                            <div class="col-12">
+                                <div class="mb-3">
+                                    <label for="edit-notes" class="form-label">Notes</label>
+                                    <textarea class="form-control" id="edit-notes" name="notes" rows="3"></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveTreeChanges">Save Changes</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/datasets.js"></script>
+{% endblock %}

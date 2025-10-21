@@ -1,0 +1,63 @@
+{% extends 'app/auth_base.html' %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2>Create Account</h2>
+            <p>Join Endemic Trees Monitoring</p>
+        </div>
+
+        <form method="post" action="{% url 'app:register' %}" class="auth-form">
+            {% csrf_token %}
+
+            {% if error_message %}
+            <div class="alert alert-danger">
+                {{ error_message }}
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <div class="input-group">
+                    <span class="input-icon"><i class="fas fa-user"></i></span>
+                    <input type="text" id="username" name="username" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="email">Email</label>
+                <div class="input-group">
+                    <span class="input-icon"><i class="fas fa-envelope"></i></span>
+                    <input type="email" id="email" name="email" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password1">Password</label>
+                <div class="input-group">
+                    <span class="input-icon"><i class="fas fa-lock"></i></span>
+                    <input type="password" id="password1" name="password1" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password2">Confirm Password</label>
+                <div class="input-group">
+                    <span class="input-icon"><i class="fas fa-lock"></i></span>
+                    <input type="password" id="password2" name="password2" class="form-control" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary auth-btn">
+                <span>Register</span>
+                <i class="fas fa-user-plus"></i>
+            </button>
+
+            <div class="auth-links">
+                <a href="{% url 'app:login' %}">Already have an account? Login</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends 'app/base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/analytics.css">
+{% endblock %}
+
+{% block content %}
+<div class="analytics-container">
+    <h1 class="page-title">Analytics</h1>
+
+    {% if error_message %}
+    <div class="alert alert-danger">
+        {{ error_message }}
+    </div>
+    {% else %}
+    <div class="analytics-charts-container">
+        <div class="analytics-chart-card">
+            <h3>Population Growth Over Time</h3>
+            <canvas id="populationTimeChart" data-population='{{ population_data }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="analytics-chart-card">
+            <h3>Health Status Distribution</h3>
+            <canvas id="healthDistributionChart" data-health='{{ health_status_data }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="analytics-chart-card">
+            <h3>Family Distribution</h3>
+            <canvas id="familyDistributionChart" data-family='{{ family_data }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="analytics-chart-card">
+            <h3>Species Distribution by Genus</h3>
+            <canvas id="genusDistributionChart" data-genus='{{ genus_data }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+    </div>
+
+    <div class="analytics-metrics-container">
+        <div class="metrics-card">
+            <h3>Tree Distribution Map</h3>
+            <div id="distributionMap" class="mini-map" data-locations='{{ location_data }}'></div>
+        </div>
+
+        <div class="metrics-card">
+            <h3>Annual Growth Rate</h3>
+            <canvas id="growthRateChart" data-growth='{{ growth_rate_by_year }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+    </div>
+
+        <div class="analytics-charts-container">
+            <div class="analytics-chart-card">
+            <h3>Top Species by Population</h3>
+            <canvas id="speciesPopulationChart" data-species='{{ species_data }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+            </div>
+
+            <div class="analytics-chart-card">
+            <h3>Health Status by Year</h3>
+            <canvas id="healthByYearChart" data-health-year='{{ health_by_year }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/analytics.js?v=3"></script>
+{% endblock %}

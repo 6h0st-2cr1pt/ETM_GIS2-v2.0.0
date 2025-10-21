@@ -1,0 +1,325 @@
+{% extends 'app/base.html' %}
+{% load crispy_forms_tags %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{% static 'css/upload.css' %}">
+{% endblock %}
+
+{% block content %}
+<div class="upload-container">
+   <h1 class="page-title">Upload Data</h1>
+
+   <div class="tab-navigation">
+      <button class="tab-button active" data-tab="manual-entry">Manual Tree Entry</button>
+      <button class="tab-button" data-tab="seed-entry">Seed Planting</button>
+      <button class="tab-button" data-tab="csv-upload">CSV Upload</button>
+   </div>
+
+   <div class="upload-content">
+      <!-- CSV Upload Tab -->
+      <div class="upload-section csv-upload-section tab-content" id="csv-upload" style="display: none;">
+         <div class="upload-card">
+            <div class="upload-card-header">
+               <h2>Upload CSV</h2>
+               <p>Upload a CSV file with tree data. The file must have the correct headers as shown below.</p>
+            </div>
+
+            <div class="csv-upload-area" id="dropzone">
+               <form method="post" enctype="multipart/form-data" id="csv-upload-form">
+                  {% csrf_token %}
+                  <div class="drag-drop-area">
+                     <div class="drag-drop-icon">
+                        <i class="fas fa-file-csv"></i>
+                     </div>
+                     <div class="drag-drop-text">
+                        <p>Drag & Drop your CSV file here</p>
+                        <p>or</p>
+                        <label for="csv_file" class="btn btn-outline-primary">Browse Files</label>
+                        <input type="file" name="csv_file" id="csv_file" class="d-none" accept=".csv">
+                     </div>
+                  </div>
+
+                  <div class="selected-file" id="selected-file-info">
+                     <p>No file selected</p>
+                  </div>
+
+                  <div class="upload-actions">
+                     <button type="submit" name="submit_csv" class="btn btn-primary" id="upload-csv-btn" disabled>
+                        <i class="fas fa-upload"></i> Upload CSV
+                     </button>
+                  </div>
+               </form>
+            </div>
+
+            <div class="csv-format-info">
+               <h4>Required CSV Format</h4>
+               <p>Your CSV file should have the following columns:</p>
+               <div class="table-responsive">
+                  <table class="table table-sm">
+                     <thead>
+                        <tr>
+                           <th>common_name</th>
+                           <th>scientific_name</th>
+                           <th>family</th>
+                           <th>genus</th>
+                           <th>population</th>
+                           <th>healthy_count</th>
+                           <th>good_count</th>
+                           <th>bad_count</th>
+                           <th>deceased_count</th>
+                           <th>latitude</th>
+                           <th>longitude</th>
+                           <th>year</th>
+                           <th>notes</th>
+                        </tr>
+                     </thead>
+                     <tbody>
+                        <tr>
+                           <td>Tindalo</td>
+                           <td>Afzelia rhomboidea</td>
+                           <td>Fabaceae</td>
+                           <td>Afzelia</td>
+                           <td>120</td>
+                           <td>80</td>
+                           <td>30</td>
+                           <td>8</td>
+                           <td>2</td>
+                           <td>10.4234</td>
+                           <td>123.1234</td>
+                           <td>2023</td>
+                           <td>Mixed health population</td>
+                        </tr>
+                     </tbody>
+                  </table>
+               </div>
+            </div>
+         </div>
+      </div>
+
+      <!-- Manual Entry Tab -->
+      <div class="upload-section manual-entry-section tab-content active" id="manual-entry">
+         <div class="upload-card">
+            <div class="upload-card-header">
+               <h2>Manual Tree Entry</h2>
+               <p>Add a single tree record by filling out the form below.</p>
+            </div>
+
+            <div class="manual-entry-form">
+               <form method="post" id="manual-entry-form">
+                  {% csrf_token %}
+                  <div class="form-grid">
+                     <div class="form-group">
+                        <label for="common_name">Common Name</label>
+                        <input type="text" name="common_name" id="common_name" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="scientific_name">Scientific Name</label>
+                        <input type="text" name="scientific_name" id="scientific_name" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="family">Family</label>
+                        <input type="text" name="family" id="family" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="genus">Genus</label>
+                        <input type="text" name="genus" id="genus" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="population">Total Population</label>
+                        <input type="number" name="population" id="population" class="form-control" min="1" required>
+                        <small class="form-text text-muted">Total number of trees in this location</small>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="year">Year</label>
+                        <input type="number" name="year" id="year" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="latitude">Latitude</label>
+                        <input type="number" name="latitude" id="latitude" class="form-control" step="0.000001" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="longitude">Longitude</label>
+                        <input type="number" name="longitude" id="longitude" class="form-control" step="0.000001" required>
+                     </div>
+                  </div>
+
+                  <div class="health-status-section">
+                     <h3>Health Status Distribution</h3>
+                     <p class="health-status-info">Enter the number of trees in each health category. The total should match the population count: <span id="population-count">0</span></p>
+
+                     <div class="health-status-grid">
+                        <div class="health-status-card">
+                           <div class="health-icon healthy">
+                              <i class="fas fa-heart"></i>
+                           </div>
+                           <label for="healthy_count">Healthy</label>
+                           <input type="number" name="healthy_count" id="healthy_count" class="form-control health-count" min="0" value="0">
+                        </div>
+
+                        <div class="health-status-card">
+                           <div class="health-icon good">
+                              <i class="fas fa-check-circle"></i>
+                           </div>
+                           <label for="good_count">Good</label>
+                           <input type="number" name="good_count" id="good_count" class="form-control health-count" min="0" value="0">
+                        </div>
+
+                        <div class="health-status-card">
+                           <div class="health-icon bad">
+                              <i class="fas fa-exclamation-triangle"></i>
+                           </div>
+                           <label for="bad_count">Bad</label>
+                           <input type="number" name="bad_count" id="bad_count" class="form-control health-count" min="0" value="0">
+                        </div>
+
+                        <div class="health-status-card">
+                           <div class="health-icon deceased">
+                              <i class="fas fa-times-circle"></i>
+                           </div>
+                           <label for="deceased_count">Deceased</label>
+                           <input type="number" name="deceased_count" id="deceased_count" class="form-control health-count" min="0" value="0">
+                        </div>
+                     </div>
+
+                     <div class="health-status-validation">
+                        <div class="progress">
+                           <div id="health-progress-bar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
+                        </div>
+                        <p id="health-status-message" class="mt-2">Please enter health status counts that sum to the total population.</p>
+                     </div>
+                  </div>
+
+                  <div class="form-group full-width">
+                     <label for="notes">Notes</label>
+                     <textarea name="notes" id="notes" class="form-control" rows="3"></textarea>
+                  </div>
+
+                  <div class="form-actions">
+                     <button type="submit" name="submit_manual" id="submit-manual-btn" class="btn btn-primary" disabled>
+                        <i class="fas fa-save"></i> Save Record
+                     </button>
+                  </div>
+               </form>
+            </div>
+         </div>
+      </div>
+
+      <!-- Seed Entry Tab -->
+      <div class="upload-section tab-content" id="seed-entry" style="display: none;">
+         <div class="upload-card">
+            <div class="upload-card-header">
+               <h2>Plant New Tree Seeds</h2>
+               <p>Record new seed plantings and track their germination progress.</p>
+            </div>
+
+            <div class="manual-entry-form">
+               <form method="post" class="data-form" id="seed-entry-form">
+                  {% csrf_token %}
+                  <div class="form-grid">
+                     <div class="form-group">
+                        <label for="seed_common_name">Common Name</label>
+                        <input type="text" id="seed_common_name" name="seed_common_name" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_scientific_name">Scientific Name</label>
+                        <input type="text" id="seed_scientific_name" name="seed_scientific_name" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_family">Family</label>
+                        <select id="seed_family" name="seed_family" class="form-control" required>
+                           <option value="">Select Family</option>
+                           {% for family in families %}
+                           <option value="{{ family.id }}">{{ family.name }}</option>
+                           {% endfor %}
+                        </select>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_genus">Genus</label>
+                        <select id="seed_genus" name="seed_genus" class="form-control" required>
+                           <option value="">Select Genus</option>
+                           {% for genus in genera %}
+                           <option value="{{ genus.id }}" data-family="{{ genus.family.id }}">{{ genus.name }}</option>
+                           {% endfor %}
+                        </select>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_quantity">Quantity</label>
+                        <input type="number" id="seed_quantity" name="seed_quantity" class="form-control" min="1" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_planting_date">Planting Date</label>
+                        <input type="date" id="seed_planting_date" name="seed_planting_date" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_germination_status">Germination Status</label>
+                        <select id="seed_germination_status" name="seed_germination_status" class="form-control" required>
+                           <option value="not_germinated">Not Germinated</option>
+                           <option value="germinating">Germinating</option>
+                           <option value="partially_germinated">Partially Germinated</option>
+                           <option value="fully_germinated">Fully Germinated</option>
+                           <option value="failed">Failed to Germinate</option>
+                        </select>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_germination_date">Germination Date</label>
+                        <input type="date" id="seed_germination_date" name="seed_germination_date" class="form-control">
+                        <small class="form-text text-muted">If applicable</small>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_survival_rate">Survival Rate (%)</label>
+                        <input type="number" id="seed_survival_rate" name="seed_survival_rate" class="form-control" min="0" max="100" step="0.1">
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_expected_maturity_date">Expected Maturity Date</label>
+                        <input type="date" id="seed_expected_maturity_date" name="seed_expected_maturity_date" class="form-control">
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_latitude">Latitude</label>
+                        <input type="number" id="seed_latitude" name="seed_latitude" class="form-control" step="0.000001" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_longitude">Longitude</label>
+                        <input type="number" id="seed_longitude" name="seed_longitude" class="form-control" step="0.000001" required>
+                     </div>
+                  </div>
+
+                  <div class="form-group full-width">
+                     <label for="seed_notes">Notes</label>
+                     <textarea id="seed_notes" name="seed_notes" class="form-control" rows="3"></textarea>
+                  </div>
+
+                  <div class="form-actions">
+                     <button type="submit" name="submit_seed" class="btn btn-primary">
+                        <i class="fas fa-seedling"></i> Submit Seed Planting
+                     </button>
+                  </div>
+               </form>
+            </div>
+         </div>
+      </div>
+   </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/upload.js' %}"></script>
+{% endblock %}
