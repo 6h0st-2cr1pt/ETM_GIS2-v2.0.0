@@ -36,4 +36,12 @@ urlpatterns = [
     path('generate-report/', views.generate_report, name='generate_report'),
     path('edit-tree/<uuid:tree_id>/', views.edit_tree, name='edit_tree'),
     path('delete-tree/<uuid:tree_id>/', views.delete_tree, name='delete_tree'),
+    path('delete-trees-bulk/', views.delete_trees_bulk, name='delete_trees_bulk'),
+    path('delete-all-trees/', views.delete_all_trees, name='delete_all_trees'),
+    path('delete-seed/<uuid:seed_id>/', views.delete_seed, name='delete_seed'),
+    path('delete-seeds-bulk/', views.delete_seeds_bulk, name='delete_seeds_bulk'),
+    path('delete-all-seeds/', views.delete_all_seeds, name='delete_all_seeds'),
+    path('edit-seed/<uuid:seed_id>/', views.edit_seed, name='edit_seed'),
+    path('api/species-list/', views.api_species_list, name='api_species_list'),
+    path('api/locations-list/', views.api_locations_list, name='api_locations_list'),
 ]

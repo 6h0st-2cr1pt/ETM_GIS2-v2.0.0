@@ -397,11 +397,13 @@ def datasets(request):
     Display and manage datasets
     """
     trees = EndemicTree.objects.select_related('species', 'location').all()
+    seeds = TreeSeed.objects.select_related('species', 'location').all()
     species_list = TreeSpecies.objects.all().order_by('common_name')
 
     context = {
         'active_page': 'datasets',
         'trees': trees,
+        'seeds': seeds,
         'species_list': species_list,
     }
     return render(request, 'app/datasets.html', context)
@@ -595,8 +597,8 @@ def upload_data(request):
                 # Get form data
                 common_name = request.POST.get('seed_common_name')
                 scientific_name = request.POST.get('seed_scientific_name')
-                family_id = request.POST.get('seed_family')
-                genus_id = request.POST.get('seed_genus')
+                family_name = request.POST.get('seed_family')
+                genus_name = request.POST.get('seed_genus')
                 quantity = int(request.POST.get('seed_quantity'))
                 planting_date = request.POST.get('seed_planting_date')
                 germination_status = request.POST.get('seed_germination_status')
@@ -611,13 +613,12 @@ def upload_data(request):
                 longitude = float(request.POST.get('seed_longitude'))
                 notes = request.POST.get('seed_notes', '')
 
-                # Get family and genus by ID
-                try:
-                    family = TreeFamily.objects.get(id=family_id)
-                    genus = TreeGenus.objects.get(id=genus_id)
-                except (TreeFamily.DoesNotExist, TreeGenus.DoesNotExist):
-                    messages.error(request, "Invalid family or genus selection.")
-                    return redirect('app:upload')
+                # Get or create family and genus by name
+                family, _ = TreeFamily.objects.get_or_create(name=family_name)
+                genus, _ = TreeGenus.objects.get_or_create(
+                    name=genus_name,
+                    defaults={'family': family}
+                )
 
                 # Get or create species
                 species, created = TreeSpecies.objects.get_or_create(
@@ -788,7 +789,7 @@ def about(request):
 @login_required(login_url='app:login')
 def reports(request):
     """View for generating reports."""
-    # Get all species and locations for the filters
+    # Get all species and locations for the filters - fresh from database
     species_list = TreeSpecies.objects.all().order_by('common_name')
     location_list = Location.objects.all().order_by('name')
 
@@ -797,6 +798,71 @@ def reports(request):
         'species_list': species_list,
         'location_list': location_list
     })
+
+
+@login_required(login_url='app:login')
+def api_species_list(request):
+    """API endpoint to get current list of species for dropdown updates."""
+    try:
+        # Force fresh query from database - no caching
+        species_list = TreeSpecies.objects.all().order_by('common_name')
+        species_data = [
+            {
+                'id': str(species.id),
+                'common_name': species.common_name,
+                'scientific_name': species.scientific_name
+            }
+            for species in species_list
+        ]
+        
+        # Add timestamp to prevent caching
+        response = JsonResponse({
+            'success': True,
+            'species': species_data,
+            'timestamp': timezone.now().isoformat()
+        })
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_locations_list(request):
+    """API endpoint to get current list of locations for dropdown updates."""
+    try:
+        # Force fresh query from database - no caching
+        location_list = Location.objects.all().order_by('name')
+        location_data = [
+            {
+                'id': str(location.id),
+                'name': location.name,
+                'latitude': float(location.latitude),
+                'longitude': float(location.longitude)
+            }
+            for location in location_list
+        ]
+        
+        # Add timestamp to prevent caching
+        response = JsonResponse({
+            'success': True,
+            'locations': location_data,
+            'timestamp': timezone.now().isoformat()
+        })
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        return response
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 
 @login_required(login_url='app:login')
@@ -1464,6 +1530,33 @@ def edit_tree(request, tree_id):
     return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
+def cleanup_orphaned_taxonomy(species):
+    """
+    Helper function to clean up orphaned taxonomy records (species, genus, family)
+    that are no longer referenced by any trees.
+    """
+    if not species:
+        return
+    
+    # Check if species is still used by any trees
+    if species.trees.exists():
+        return  # Species is still in use, don't delete
+    
+    # Species is orphaned, get genus before deleting species
+    genus = species.genus
+    species.delete()
+    
+    # Check if genus is still used by any species
+    if genus and not genus.species.exists():
+        # Genus is orphaned, get family before deleting genus
+        family = genus.family
+        genus.delete()
+        
+        # Check if family is still used by any genera
+        if family and not family.genera.exists():
+            family.delete()
+
+
 @login_required(login_url='app:login')
 @require_POST
 def delete_tree(request, tree_id):
@@ -1471,11 +1564,16 @@ def delete_tree(request, tree_id):
     try:
         tree = get_object_or_404(EndemicTree, id=tree_id)
         location = tree.location
+        species = tree.species  # Store species before deleting tree
+        
         tree.delete()
         
         # Delete the location if it's not used by any other tree
         if location and not location.trees.exists():
             location.delete()
+        
+        # Clean up orphaned taxonomy (species, genus, family)
+        cleanup_orphaned_taxonomy(species)
             
         return JsonResponse({'success': True})
     except EndemicTree.DoesNotExist:
@@ -1488,6 +1586,262 @@ def delete_tree(request, tree_id):
             'success': False,
             'error': str(e)
         }, status=500)
+
+
+@login_required(login_url='app:login')
+@require_POST
+def delete_trees_bulk(request):
+    """View for deleting multiple tree records."""
+    try:
+        data = json.loads(request.body)
+        tree_ids = data.get('tree_ids', [])
+        
+        if not tree_ids:
+            return JsonResponse({
+                'success': False,
+                'error': 'No tree IDs provided'
+            }, status=400)
+        
+        # Get all trees to delete
+        trees = EndemicTree.objects.filter(id__in=tree_ids)
+        deleted_count = 0
+        locations_to_check = []
+        species_to_check = set()  # Use set to avoid duplicates
+        
+        for tree in trees:
+            location = tree.location
+            species = tree.species
+            locations_to_check.append(location)
+            if species:
+                species_to_check.add(species)
+            tree.delete()
+            deleted_count += 1
+        
+        # Delete locations that are no longer used
+        for location in locations_to_check:
+            if location and not location.trees.exists():
+                location.delete()
+        
+        # Clean up orphaned taxonomy records
+        for species in species_to_check:
+            cleanup_orphaned_taxonomy(species)
+        
+        return JsonResponse({
+            'success': True,
+            'deleted_count': deleted_count
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+@require_POST
+def delete_all_trees(request):
+    """View for deleting all tree records."""
+    try:
+        # Get count before deletion
+        total_count = EndemicTree.objects.count()
+        
+        # Get all locations and species to check after deletion
+        locations_to_check = list(Location.objects.filter(trees__isnull=False).distinct())
+        species_to_check = set(TreeSpecies.objects.filter(trees__isnull=False).distinct())
+        
+        # Delete all trees
+        EndemicTree.objects.all().delete()
+        
+        # Delete locations that are no longer used
+        for location in locations_to_check:
+            if not location.trees.exists():
+                location.delete()
+        
+        # Clean up all orphaned taxonomy records
+        for species in species_to_check:
+            cleanup_orphaned_taxonomy(species)
+        
+        return JsonResponse({
+            'success': True,
+            'deleted_count': total_count
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+@require_POST
+def delete_seed(request, seed_id):
+    """View for deleting a seed record."""
+    try:
+        seed = get_object_or_404(TreeSeed, id=seed_id)
+        location = seed.location
+        seed.delete()
+        
+        # Delete the location if it's not used by any other tree or seed
+        if location and not location.trees.exists() and not location.seeds.exists():
+            location.delete()
+            
+        return JsonResponse({'success': True})
+    except TreeSeed.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Seed record not found'
+        }, status=404)
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+@require_POST
+def delete_seeds_bulk(request):
+    """View for deleting multiple seed records."""
+    try:
+        data = json.loads(request.body)
+        seed_ids = data.get('seed_ids', [])
+        
+        if not seed_ids:
+            return JsonResponse({
+                'success': False,
+                'error': 'No seed IDs provided'
+            }, status=400)
+        
+        # Get all seeds to delete
+        seeds = TreeSeed.objects.filter(id__in=seed_ids)
+        deleted_count = 0
+        locations_to_check = []
+        
+        for seed in seeds:
+            location = seed.location
+            locations_to_check.append(location)
+            seed.delete()
+            deleted_count += 1
+        
+        # Delete locations that are no longer used
+        for location in locations_to_check:
+            if location and not location.trees.exists() and not location.seeds.exists():
+                location.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'deleted_count': deleted_count
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+@require_POST
+def delete_all_seeds(request):
+    """View for deleting all seed records."""
+    try:
+        # Get count before deletion
+        total_count = TreeSeed.objects.count()
+        
+        # Get all locations to check after deletion
+        locations_to_check = list(Location.objects.filter(seeds__isnull=False).distinct())
+        
+        # Delete all seeds
+        TreeSeed.objects.all().delete()
+        
+        # Delete locations that are no longer used
+        for location in locations_to_check:
+            if not location.trees.exists() and not location.seeds.exists():
+                location.delete()
+        
+        return JsonResponse({
+            'success': True,
+            'deleted_count': total_count
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def edit_seed(request, seed_id):
+    """View for editing a seed record."""
+    try:
+        seed = get_object_or_404(TreeSeed, id=seed_id)
+        
+        if request.method == 'POST':
+            try:
+                # Get form data
+                species_id = request.POST.get('species')
+                quantity = int(request.POST.get('quantity'))
+                planting_date = request.POST.get('planting_date')
+                germination_status = request.POST.get('germination_status')
+                germination_date = request.POST.get('germination_date') or None
+                survival_rate = request.POST.get('survival_rate')
+                if survival_rate:
+                    survival_rate = float(survival_rate)
+                else:
+                    survival_rate = None
+                expected_maturity_date = request.POST.get('expected_maturity_date') or None
+                latitude = float(request.POST.get('latitude'))
+                longitude = float(request.POST.get('longitude'))
+                notes = request.POST.get('notes')
+                
+                # Validate data
+                if not all([species_id, quantity, planting_date, germination_status, latitude, longitude]):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'All required fields must be provided'
+                    }, status=400)
+                
+                # Update seed record
+                seed.species_id = species_id
+                seed.quantity = quantity
+                seed.planting_date = planting_date
+                seed.germination_status = germination_status
+                seed.germination_date = germination_date
+                seed.survival_rate = survival_rate
+                seed.expected_maturity_date = expected_maturity_date
+                seed.notes = notes
+                
+                # Update location
+                if not seed.location:
+                    seed.location = Location.objects.create(
+                        latitude=latitude,
+                        longitude=longitude
+                    )
+                else:
+                    seed.location.latitude = latitude
+                    seed.location.longitude = longitude
+                    seed.location.save()
+                
+                seed.save()
+                
+                return JsonResponse({'success': True})
+            except (ValueError, TypeError) as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid data format: {str(e)}'
+                }, status=400)
+            except Exception as e:
+                return JsonResponse({
+                    'success': False,
+                    'error': str(e)
+                }, status=500)
+        
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': f'Error accessing seed record: {str(e)}'
+        }, status=500)
+    
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
 
 
 def api_layers(request):

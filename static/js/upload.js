@@ -242,30 +242,7 @@ document.addEventListener("DOMContentLoaded", () => {
     return isValid
   }
 
-  // Dynamic filtering for genus based on family selection
-  const familySelect = document.getElementById("seed_family")
-  const genusSelect = document.getElementById("seed_genus")
-
-  if (familySelect && genusSelect) {
-    familySelect.addEventListener("change", function () {
-      const familyId = this.value
-
-      // Hide all genus options
-      Array.from(genusSelect.options).forEach((option) => {
-        if (option.value === "") return // Skip the placeholder option
-
-        const optionFamilyId = option.getAttribute("data-family")
-        if (optionFamilyId === familyId) {
-          option.style.display = ""
-        } else {
-          option.style.display = "none"
-        }
-      })
-
-      // Reset genus selection
-      genusSelect.value = ""
-    })
-  }
+  // Family and genus are now textboxes, no filtering needed
 
   // Add animation effects to form elements
   const formGroups = document.querySelectorAll(".form-group")

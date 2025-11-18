@@ -97,22 +97,32 @@ html * option {
 
                         <div class="form-group mb-3">
                             <label for="speciesFilter">Species Filter</label>
-                            <select class="form-select" id="speciesFilter" name="species_filter" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
-                                <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Species</option>
-                                {% for species in species_list %}
-                                <option value="{{ species.id }}" style="background-color: #000000; color: #ffffff; padding: 8px;">{{ species.common_name }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="d-flex gap-2">
+                                <select class="form-select" id="speciesFilter" name="species_filter" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                    <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Species</option>
+                                    {% for species in species_list %}
+                                    <option value="{{ species.id }}" style="background-color: #000000; color: #ffffff; padding: 8px;">{{ species.common_name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" id="refreshSpeciesBtn" class="btn btn-sm btn-outline-secondary" title="Refresh species list" style="white-space: nowrap;">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="form-group mb-3">
                             <label for="locationFilter">Location Filter</label>
-                            <select class="form-select" id="locationFilter" name="location_filter" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
-                                <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Locations</option>
-                                {% for location in location_list %}
-                                <option value="{{ location.id }}" style="background-color: #000000; color: #ffffff; padding: 8px;">{{ location.name }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="d-flex gap-2">
+                                <select class="form-select" id="locationFilter" name="location_filter" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                    <option value="all" style="background-color: #000000; color: #ffffff; padding: 8px;">All Locations</option>
+                                    {% for location in location_list %}
+                                    <option value="{{ location.id }}" style="background-color: #000000; color: #ffffff; padding: 8px;">{{ location.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="button" id="refreshLocationBtn" class="btn btn-sm btn-outline-secondary" title="Refresh location list" style="white-space: nowrap;">
+                                    <i class="fas fa-sync-alt"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="form-group mb-3">
