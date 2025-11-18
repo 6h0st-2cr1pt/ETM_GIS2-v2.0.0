@@ -139,3 +139,12 @@ INTERNAL_IPS = [
 THEME_SETTINGS = {
     'DEFAULT_THEME': 'dark',  # or 'light'
 }
+
+# Increase allowed request body size to 20 MB (set to None to disable)
+DATA_UPLOAD_MAX_MEMORY_SIZE = 20 * 1024 * 1024  # 20 MB
+
+# Control per-file in-memory threshold before writing to disk (2 MB here)
+FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2 MB
+
+# Increase number of allowed form fields for very large JSON/form payloads
+DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000

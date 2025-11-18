@@ -19,7 +19,6 @@ urlpatterns = [
     # Authentication URLs
     path('login/', views.user_login, name='login'),
     path('logout/', views.user_logout, name='logout'),
-    path('register/', views.register, name='register'),
 
     # API endpoints
     path('api/tree-data/', views.tree_data, name='tree_data'),
@@ -28,7 +27,7 @@ urlpatterns = [
     path('api/analytics-data/', views.analytics_data, name='analytics_data'),
     # Map layer APIs
     path('api/layers/', views.api_layers, name='api_layers'),
-    path('api/layers/<uuid:layer_id>/', views.api_layers_detail, name='api_layers_detail'),
+    path('api/layers/<int:layer_id>/', views.api_layers_detail, name='api_layers_detail'),
     path('api/supabase-data/', views.api_supabase_data, name='api_supabase_data'),
     path('api/set-theme/', views.set_theme, name='set_theme'),
     path('api/set-map-style/', views.set_map_style, name='set_map_style'),

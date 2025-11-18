@@ -472,6 +472,12 @@ def upload_data(request):
                             # Create tree record
                             notes = row.get('notes', '')
                             health_status = row.get('health_status', 'good')
+                            
+                            # Get health distribution counts from CSV
+                            healthy_count = int(row.get('healthy_count', 0))
+                            good_count = int(row.get('good_count', 0))
+                            bad_count = int(row.get('bad_count', 0))
+                            deceased_count = int(row.get('deceased_count', 0))
 
                             tree = EndemicTree(
                                 species=species,
@@ -479,6 +485,10 @@ def upload_data(request):
                                 population=row['population'],
                                 year=row['year'],
                                 health_status=health_status,
+                                healthy_count=healthy_count,
+                                good_count=good_count,
+                                bad_count=bad_count,
+                                deceased_count=deceased_count,
                                 notes=notes
                             )
                             tree.save()
@@ -1480,14 +1490,19 @@ def delete_tree(request, tree_id):
         }, status=500)
 
 
-@login_required(login_url='app:login')
 def api_layers(request):
     """API endpoint for managing map layers."""
+    # Only require authentication for POST requests (creating/editing layers)
+    if request.method == 'POST' and not request.user.is_authenticated:
+        return JsonResponse({'error': 'Authentication required'}, status=401)
+        
     if request.method == 'GET':
+        print("[DEBUG] API layers GET request received")
         layers = MapLayer.objects.all().order_by('-id')
+        print(f"[DEBUG] Found {layers.count()} layers in database")
         layers_data = []
         for layer in layers:
-            layers_data.append({
+            layer_data = {
                 'id': str(layer.id),
                 'name': layer.name,
                 'description': layer.description,
@@ -1497,8 +1512,13 @@ def api_layers(request):
                 'is_active': layer.is_active,
                 'is_default': layer.is_default,
                 'z_index': layer.z_index
-            })
-        return JsonResponse({'layers': layers_data})
+            }
+            layers_data.append(layer_data)
+            print(f"[DEBUG] Layer: {layer.name} (active: {layer.is_active})")
+        
+        response_data = {'layers': layers_data}
+        print(f"[DEBUG] Returning response: {response_data}")
+        return JsonResponse(response_data)
     
     elif request.method == 'POST':
         try:
@@ -1571,8 +1591,8 @@ def api_layers(request):
 def api_layers_detail(request, layer_id):
     """API endpoint for managing individual map layers."""
     try:
-        layer = get_object_or_404(MapLayer, id=layer_id)
-    except Exception:
+        layer = MapLayer.objects.get(id=layer_id)
+    except MapLayer.DoesNotExist:
         return JsonResponse({
             'success': False,
             'error': 'Layer not found'
@@ -1596,6 +1616,9 @@ def api_layers_detail(request, layer_id):
     elif request.method == 'PUT':
         try:
             data = json.loads(request.body)
+            print(f"PUT request data: {data}")  # Debug logging
+            print(f"URL from data: {data.get('url')}")  # Debug logging
+            
             layer.name = data.get('name', layer.name)
             layer.description = data.get('description', layer.description)
             layer.layer_type = data.get('layer_type', layer.layer_type)
@@ -1603,6 +1626,8 @@ def api_layers_detail(request, layer_id):
             layer.attribution = data.get('attribution', layer.attribution)
             layer.is_active = data.get('is_active', layer.is_active)
             layer.is_default = data.get('is_default', layer.is_default)
+            
+            print(f"About to save layer with URL: {layer.url}")  # Debug logging
             layer.save()
             
             return JsonResponse({
@@ -1620,6 +1645,7 @@ def api_layers_detail(request, layer_id):
                 }
             })
         except Exception as e:
+            print(f"Error updating layer: {str(e)}")  # Debug logging
             return JsonResponse({
                 'success': False,
                 'error': str(e)

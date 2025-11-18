@@ -1,6 +1,13 @@
 document.addEventListener("DOMContentLoaded", () => {
   // Declare L at the beginning of the script to ensure it's defined
   const L = window.L
+  
+  // Check if leaflet-heat is loaded
+  if (typeof L.heatLayer === 'undefined') {
+    console.error("❌ Leaflet Heat plugin is not loaded! Heatmap functionality will not work.")
+  } else {
+    console.log("✅ Leaflet Heat plugin is loaded and ready")
+  }
 
   // Location search functionality
   const searchInput = document.getElementById("locationSearch")
@@ -83,7 +90,7 @@ document.addEventListener("DOMContentLoaded", () => {
     })
     .addTo(map)
 
-  // Map base layers - Using both OpenStreetMap and free Esri layers
+  // Map base layers - Using both OpenStreetMap and free Esri/Stadia layers
   const baseLayers = {
     dark: L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution:
@@ -91,12 +98,23 @@ document.addEventListener("DOMContentLoaded", () => {
       subdomains: "abcd",
       maxZoom: 19,
     }),
-    // Fix for dark-normal - using a different provider that doesn't require authentication
-    "dark-normal": L.tileLayer("https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a>, &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="http://openstreetmap.org">OpenStreetMap</a> contributors',
-      maxZoom: 20,
-    }),
+    // Streets (Night) - Esri Dark Gray Base + Reference labels
+    "streets-night": L.layerGroup([
+      L.tileLayer(
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: 'Basemap &copy; Esri',
+          maxZoom: 19,
+        }
+      ),
+      L.tileLayer(
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: 'Labels &copy; Esri',
+          maxZoom: 19,
+        }
+      ),
+    ]),
     // OpenStreetMap topographic layer
     topographic: L.tileLayer("https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png", {
       attribution:
@@ -119,6 +137,31 @@ document.addEventListener("DOMContentLoaded", () => {
         maxZoom: 19,
       },
     ),
+    // Esri Imagery Hybrid (Imagery + Label overlays)
+    "imagery-hybrid": L.layerGroup([
+      L.tileLayer(
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution:
+            "Imagery &copy; Esri",
+          maxZoom: 19,
+        }
+      ),
+      L.tileLayer(
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Labels &copy; Esri",
+          maxZoom: 19,
+        }
+      ),
+      L.tileLayer(
+        "https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+        {
+          attribution: "Transportation &copy; Esri",
+          maxZoom: 19,
+        }
+      ),
+    ]),
     // Standard OpenStreetMap
     street: L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -140,27 +183,15 @@ document.addEventListener("DOMContentLoaded", () => {
   // Create layer groups for additional layers - Fix for issue #12
   const additionalLayers = {
     heatmap: L.layerGroup(),
-    protected: L.layerGroup(),
-    landuse: L.layerGroup(),
-    soil: L.layerGroup(),
   }
+
+  // Object to store custom layers from database
+  const customLayers = {}
 
   // Add sample layers for demonstration
   // Heatmap layer (will be populated with actual data)
   const heatmapLayer = L.layerGroup()
   additionalLayers.heatmap = heatmapLayer
-
-  // Protected areas layer (using a GeoJSON placeholder)
-  const protectedAreasLayer = L.layerGroup()
-  additionalLayers.protected = protectedAreasLayer
-
-  // Land use layer
-  const landUseLayer = L.layerGroup()
-  additionalLayers.landuse = landUseLayer
-
-  // Soil type layer
-  const soilTypeLayer = L.layerGroup()
-  additionalLayers.soil = soilTypeLayer
 
   // Populate layer controls
   const layerControlsList = document.getElementById("layerControlsList")
@@ -168,13 +199,131 @@ document.addEventListener("DOMContentLoaded", () => {
   // Define available layers
   const availableLayers = [
     { id: "heatmap", name: "Heatmap", active: false },
-    { id: "protected", name: "Protected Areas", active: false },
-    { id: "landuse", name: "Land Use", active: false },
-    { id: "soil", name: "Soil Type", active: false },
   ]
 
-  // Add layer controls to the UI
-  availableLayers.forEach((layer) => {
+  // (Removed) Local import helpers moved to Layer Control page
+
+  // Load custom layers from database
+  fetch('/api/layers/', {
+    cache: 'no-store' // Prevent caching to always get latest layer settings
+  })
+    .then(response => {
+      console.log('API response status:', response.status);
+      console.log('API response headers:', response.headers);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      return response.json();
+    })
+    .then(data => {
+      console.log('Loaded custom layers:', data);
+      if (data.layers && data.layers.length > 0) {
+        console.log('Layer details:');
+        data.layers.forEach(layer => {
+          console.log(`  - ${layer.name}: is_default=${layer.is_default}, is_active=${layer.is_active}`);
+        });
+        
+        // Iterate all layers; show controls for all, add to map per flags
+        console.log(`Loaded ${data.layers.length} layers from server`);
+        data.layers.forEach(layer => {
+          console.log(`Processing layer: ${layer.name} (id: ${layer.id})`);
+          console.log(`  - is_active: ${layer.is_active}`);
+          console.log(`  - is_default: ${layer.is_default}`);
+          console.log(`  - layer_type: ${layer.layer_type}`);
+          console.log(`  - url: ${layer.url}`);
+
+          // Convert ArcGIS URLs if needed
+          let layerUrl = layer.url;
+          if (layerUrl && layerUrl.includes('MapServer') && !layerUrl.includes('{z}')) {
+            layerUrl = layerUrl.replace(/\/MapServer.*$/, '/MapServer/tile/{z}/{y}/{x}');
+          }
+
+          // Create Leaflet layer based on URL type
+          let leafletLayer;
+          if (layerUrl && layerUrl.includes('{z}') && layerUrl.includes('{x}') && layerUrl.includes('{y}')) {
+            // Tile layer
+            leafletLayer = L.tileLayer(layerUrl, {
+              attribution: layer.attribution || '',
+              maxZoom: 19
+            });
+          } else if (layerUrl && (layerUrl.endsWith('.json') || layerUrl.endsWith('.geojson'))) {
+            // GeoJSON layer
+            leafletLayer = L.layerGroup();
+            fetch(layerUrl)
+              .then(r => r.json())
+              .then(geojson => {
+                L.geoJSON(geojson).addTo(leafletLayer);
+              })
+              .catch(err => console.error('Error loading GeoJSON:', err));
+          } else if (layerUrl && layerUrl.startsWith('data:application/json')) {
+            // Embedded data URL GeoJSON
+            try {
+              const base64 = layerUrl.split(',')[1]
+              const jsonStr = decodeURIComponent(escape(atob(base64)))
+              const geojson = JSON.parse(jsonStr)
+              leafletLayer = L.layerGroup();
+              L.geoJSON(geojson).addTo(leafletLayer)
+            } catch (e) {
+              console.error('Error parsing embedded GeoJSON data URL:', e)
+            }
+          }
+
+          if (leafletLayer) {
+            // Store the layer
+            customLayers[layer.id] = {
+              layer: leafletLayer,
+              info: layer
+            };
+
+            // Add to map only if it's marked as default (show by default on map)
+            if (layer.is_default) {
+              console.log('Adding layer to map:', layer.name,
+                         '(default:', layer.is_default, ', active:', layer.is_active, ')');
+
+              // Check if layer is already on the map to prevent duplicates
+              if (!map.hasLayer(leafletLayer)) {
+                leafletLayer.addTo(map);
+              } else {
+                console.log('Layer already on map, skipping:', layer.name);
+              }
+            }
+
+            // Add to available layers list (show all)
+            availableLayers.push({
+              id: `custom-${layer.id}`,
+              name: layer.name,
+              active: !!layer.is_active,
+              custom: true,
+              layerId: layer.id
+            });
+          }
+        });
+
+        // Render all layers after custom ones are loaded
+        renderLayerControls();
+      } else {
+        // No custom layers, just render default ones
+        renderLayerControls();
+      }
+    })
+    .catch(error => {
+      console.error('Error loading custom layers:', error);
+      console.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        url: '/api/layers/'
+      });
+      // Render default layers even if custom layers fail to load
+      renderLayerControls();
+    });
+
+  // Function to render layer controls
+  function renderLayerControls() {
+    // Clear existing controls
+    layerControlsList.innerHTML = '';
+    
+    // Add layer controls to the UI
+    availableLayers.forEach((layer) => {
     const layerItem = document.createElement("div")
     layerItem.className = "control-option"
     layerItem.innerHTML = `
@@ -187,17 +336,62 @@ document.addEventListener("DOMContentLoaded", () => {
     const checkbox = layerItem.querySelector(`#layer-${layer.id}`)
     checkbox.addEventListener("change", function () {
       if (this.checked) {
-        additionalLayers[layer.id].addTo(map)
+        // Handle custom layers
+        if (layer.custom && customLayers[layer.layerId]) {
+          customLayers[layer.layerId].layer.addTo(map);
+        }
+        // Handle predefined layers  
+        else if (layer.id === 'heatmap') {
+          // Load tree data and create heatmap
+          fetch("/api/tree-data/")
+            .then((response) => response.json())
+            .then((data) => {
+              updateHeatmap(data)
+              additionalLayers[layer.id].addTo(map)
+            })
+            .catch((error) => {
+              console.error("Error loading data for heatmap:", error)
+            })
+        } else {
+          additionalLayers[layer.id].addTo(map)
+        }
       } else {
-        map.removeLayer(additionalLayers[layer.id])
+        // Handle custom layers
+        if (layer.custom && customLayers[layer.layerId]) {
+          map.removeLayer(customLayers[layer.layerId].layer);
+        }
+        // Handle predefined layers
+        else if (additionalLayers[layer.id]) {
+          map.removeLayer(additionalLayers[layer.id])
+        }
       }
     })
 
-    // Add active layers to map
-    if (layer.active) {
-      additionalLayers[layer.id].addTo(map)
+    // Add active layers to map (only for predefined layers, custom layers are handled during load)
+    if (layer.active && !layer.custom) {
+      console.log('Processing active predefined layer:', layer.name);
+
+      if (layer.id === 'heatmap') {
+        // Load tree data and create heatmap for initially active heatmap
+        fetch("/api/tree-data/")
+          .then((response) => response.json())
+          .then((data) => {
+            updateHeatmap(data)
+            additionalLayers[layer.id].addTo(map)
+          })
+          .catch((error) => {
+            console.error("Error loading initial data for heatmap:", error)
+          })
+      } else if (additionalLayers[layer.id]) {
+        // Handle other predefined layers
+        console.log('Adding active predefined layer to map:', layer.name);
+        additionalLayers[layer.id].addTo(map)
+      }
     }
   })
+}
+
+  // (Removed) Local import handlers moved to Layer Control page
 
   // Create a container for the filtered tree data
   const filteredDataContainer = document.createElement("div")
@@ -371,9 +565,10 @@ document.addEventListener("DOMContentLoaded", () => {
     map.setView([10.0, 123.0], 9)
   })
 
-  // Measure distance tool
+  // Measure distance tool (guard if button not present)
   let measureControl = null
-  document.getElementById("measureDistanceBtn").addEventListener("click", function () {
+  const measureBtn = document.getElementById("measureDistanceBtn")
+  if (measureBtn) measureBtn.addEventListener("click", function () {
     if (measureControl) {
       // If measurement is active, remove it
       map.removeControl(measureControl)
@@ -393,9 +588,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   })
 
-  // Draw polygon tool
+  // Draw polygon tool (guard if button not present)
   let drawControl = null
-  document.getElementById("drawPolygonBtn").addEventListener("click", function () {
+  const drawBtn = document.getElementById("drawPolygonBtn")
+  if (drawBtn) drawBtn.addEventListener("click", function () {
     if (drawControl) {
       // If drawing is active, remove it
       map.removeControl(drawControl)
@@ -945,16 +1141,28 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Function to update heatmap
   function updateHeatmap(geojson) {
+    console.log("🔥 Updating heatmap with data:", geojson)
+    
     // Clear existing heatmap
     additionalLayers.heatmap.clearLayers()
+
+    // Check if we have valid data
+    if (!geojson || !geojson.features || geojson.features.length === 0) {
+      console.log("No data available for heatmap")
+      return
+    }
 
     // Extract points for heatmap
     const heatPoints = []
     geojson.features.forEach((feature) => {
-      const coords = feature.geometry.coordinates
-      const intensity = feature.properties.population
-      heatPoints.push([coords[1], coords[0], intensity / 10]) // lat, lng, intensity
+      if (feature.geometry && feature.geometry.coordinates && feature.properties) {
+        const coords = feature.geometry.coordinates
+        const intensity = feature.properties.population || 1
+        heatPoints.push([coords[1], coords[0], intensity / 10]) // lat, lng, intensity
+      }
     })
+
+    console.log(`Creating heatmap with ${heatPoints.length} points`)
 
     // Create heatmap layer
     if (heatPoints.length > 0) {
@@ -966,6 +1174,9 @@ document.addEventListener("DOMContentLoaded", () => {
         gradient: { 0.4: "blue", 0.65: "lime", 1: "red" },
       })
       additionalLayers.heatmap.addLayer(heat)
+      console.log("✅ Heatmap layer created and added successfully")
+    } else {
+      console.log("❌ No valid points found for heatmap")
     }
   }
 

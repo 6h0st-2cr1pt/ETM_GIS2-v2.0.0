@@ -40,8 +40,12 @@
                         <label for="mapTypeTopographic">Topographic</label>
                     </div>
                     <div class="control-option">
-                        <input type="radio" name="mapType" id="mapTypeDarkNormal" value="dark-normal">
-                        <label for="mapTypeDarkNormal">Dark Normal</label>
+                        <input type="radio" name="mapType" id="mapTypeStreetsNight" value="streets-night">
+                        <label for="mapTypeStreetsNight">Streets (Night)</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeImageryHybrid" value="imagery-hybrid">
+                        <label for="mapTypeImageryHybrid">Imagery Hybrid</label>
                     </div>
                 </div>
             </div>
@@ -116,16 +120,6 @@
                     <div class="control-option">
                         <button id="centerMapBtn" class="tool-button">
                             <i class="fas fa-crosshairs"></i> Center Map
-                        </button>
-                    </div>
-                    <div class="control-option">
-                        <button id="measureDistanceBtn" class="tool-button">
-                            <i class="fas fa-ruler"></i> Measure Distance
-                        </button>
-                    </div>
-                    <div class="control-option">
-                        <button id="drawPolygonBtn" class="tool-button">
-                            <i class="fas fa-draw-polygon"></i> Draw Area
                         </button>
                     </div>
                     <div class="control-option">
@@ -268,7 +262,7 @@
 {% block extra_js %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
-<script src="{% static 'js/gis.js' %}?v=3"></script>
+<script src="{% static 'js/gis.js' %}?v=8"></script>
 <script>
   // Ensure map is properly initialized
   document.addEventListener("DOMContentLoaded", function() {

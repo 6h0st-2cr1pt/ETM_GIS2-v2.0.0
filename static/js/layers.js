@@ -34,8 +34,15 @@ document.addEventListener("DOMContentLoaded", () => {
             .then((layer) => {
               // Map backend field to expected keys
               const type = layer.layer.layer_type
-              const url = layer.layer.url
+              let url = layer.layer.url
               const attribution = layer.layer.attribution || ''
+
+              // Auto-convert ArcGIS MapServer URLs to tile format
+              if (url && url.includes('MapServer') && !url.includes('{z}')) {
+                // Convert ArcGIS REST URL to tile URL
+                url = url.replace(/\/MapServer.*$/, '/MapServer/tile/{z}/{y}/{x}');
+                console.log('Converted ArcGIS URL to:', url);
+              }
 
               // Add the layer to the preview map based on its type
               switch (type) {
@@ -113,6 +120,86 @@ document.addEventListener("DOMContentLoaded", () => {
       })
     }
   
+    // Source type toggle (URL vs File)
+    const sourceUrlRadio = document.getElementById("sourceUrl")
+    const sourceFileRadio = document.getElementById("sourceFile")
+    const urlSourceGroup = document.getElementById("urlSourceGroup")
+    const fileSourceGroup = document.getElementById("fileSourceGroup")
+    const layerUrlInput = document.getElementById("layerUrl")
+
+    function updateSourceVisibility() {
+      if (sourceFileRadio && sourceFileRadio.checked) {
+        if (urlSourceGroup) urlSourceGroup.style.display = 'none'
+        if (fileSourceGroup) fileSourceGroup.style.display = ''
+        if (layerUrlInput) layerUrlInput.removeAttribute('required')
+      } else {
+        if (urlSourceGroup) urlSourceGroup.style.display = ''
+        if (fileSourceGroup) fileSourceGroup.style.display = 'none'
+        if (layerUrlInput) layerUrlInput.setAttribute('required', 'required')
+      }
+    }
+    if (sourceUrlRadio) sourceUrlRadio.addEventListener('change', updateSourceVisibility)
+    if (sourceFileRadio) sourceFileRadio.addEventListener('change', updateSourceVisibility)
+    updateSourceVisibility()
+
+    // Local file preview handlers (GeoJSON/Shapefile)
+    const previewGeoJsonBtn = document.getElementById('previewGeoJsonBtn')
+    const localGeoJsonFile = document.getElementById('localGeoJsonFile')
+    const previewShapefileBtn = document.getElementById('previewShapefileBtn')
+    const localShapefileZip = document.getElementById('localShapefileZip')
+    let localPreviewLayer = null
+
+    function clearLocalPreview() {
+      if (localPreviewLayer) {
+        try { previewMap.removeLayer(localPreviewLayer) } catch(e) {}
+        localPreviewLayer = null
+      }
+    }
+
+    if (previewGeoJsonBtn && localGeoJsonFile) {
+      previewGeoJsonBtn.addEventListener('click', function() {
+        const file = localGeoJsonFile.files && localGeoJsonFile.files[0]
+        if (!file) { alert('Please choose a GeoJSON file'); return }
+        const reader = new FileReader()
+        reader.onload = function(e) {
+          try {
+            const geojson = JSON.parse(e.target.result)
+            clearLocalPreview()
+            localPreviewLayer = L.geoJSON(geojson, {
+              style: { color: "#22c55e", weight: 2, opacity: 0.8 }
+            }).addTo(previewMap)
+            try { previewMap.fitBounds(localPreviewLayer.getBounds()) } catch(_) {}
+          } catch(err) {
+            console.error('Invalid GeoJSON:', err)
+            alert('Invalid GeoJSON file')
+          }
+        }
+        reader.readAsText(file)
+      })
+    }
+
+    if (previewShapefileBtn && localShapefileZip && typeof window.shp !== 'undefined') {
+      previewShapefileBtn.addEventListener('click', function() {
+        const file = localShapefileZip.files && localShapefileZip.files[0]
+        if (!file) { alert('Please choose a .zip Shapefile'); return }
+        const reader = new FileReader()
+        reader.onload = function(e) {
+          const arrayBuffer = e.target.result
+          window.shp(arrayBuffer).then(function(geojson){
+            clearLocalPreview()
+            localPreviewLayer = L.geoJSON(geojson, {
+              style: { color: "#0ea5e9", weight: 2, opacity: 0.8 }
+            }).addTo(previewMap)
+            try { previewMap.fitBounds(localPreviewLayer.getBounds()) } catch(_) {}
+          }).catch(function(err){
+            console.error('Error reading shapefile:', err)
+            alert('Could not read shapefile. Ensure it\'s a zipped Shapefile (.shp, .shx, .dbf).')
+          })
+        }
+        reader.readAsArrayBuffer(file)
+      })
+    }
+
     // Add Layer button functionality
     const addLayerBtn = document.getElementById("addLayerBtn")
     const layerFormModal = new bootstrap.Modal(document.getElementById("layerFormModal"))
@@ -125,6 +212,11 @@ document.addEventListener("DOMContentLoaded", () => {
         layerForm.reset()
         document.getElementById("layerId").value = ""
         document.getElementById("layerFormModalLabel").textContent = "Add New Layer"
+          // Default to URL source on add
+          const srcUrl = document.getElementById('sourceUrl')
+          const srcFile = document.getElementById('sourceFile')
+          if (srcUrl) srcUrl.checked = true
+          if (typeof updateSourceVisibility === 'function') updateSourceVisibility()
         layerFormModal.show()
       })
     }
@@ -163,6 +255,10 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("layerAttribution").value = layer.layer.attribution || "";
             document.getElementById("layerIsActive").checked = layer.layer.is_active;
             document.getElementById("layerIsDefault").checked = layer.layer.is_default;
+            // Force URL source on edit to avoid accidental local file overwrite
+            const srcUrl = document.getElementById('sourceUrl')
+            if (srcUrl) srcUrl.checked = true
+            if (typeof updateSourceVisibility === 'function') updateSourceVisibility()
   
             document.getElementById("layerFormModalLabel").textContent = "Edit Layer";
             layerFormModal.show();
@@ -175,60 +271,188 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   
     // Save Layer functionality
-    if (saveLayerBtn) {
-      saveLayerBtn.addEventListener("click", () => {
-        const formData = new FormData(layerForm);
-        const layerId = formData.get("layer_id");
-        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
-  
-        const url = layerId ? `/api/layers/${layerId}/` : "/api/layers/";
-        const method = layerId ? "PUT" : "POST";
+    function getCookie(name) {
+      const value = `; ${document.cookie}`
+      const parts = value.split(`; ${name}=`)
+      if (parts.length === 2) return parts.pop().split(';').shift()
+      return null
+    }
 
-        // Convert FormData to JSON for proper API communication
+    if (saveLayerBtn) {
+      saveLayerBtn.addEventListener("click", function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        
+        alert("Button clicked! Check console now.");
+        console.log("=== SAVE BUTTON CLICKED ===");
+        
+        // Get all form inputs
+        const inputs = document.querySelectorAll('#layerForm input, #layerForm select, #layerForm textarea');
+        console.log("All form inputs:", inputs);
+        inputs.forEach(input => {
+          console.log(`Field ${input.id || input.name}: "${input.value}"`);
+        });
+        
+        // Get CSRF token (prefer cookie, fallback to hidden input)
+        let csrfToken = getCookie('csrftoken');
+        if (!csrfToken) {
+          const csrfEl = document.querySelector('[name=csrfmiddlewaretoken]')
+          csrfToken = csrfEl ? csrfEl.value : ''
+        }
+        
+        // Get URL field specifically
+        const layerUrlInput = document.getElementById("layerUrl");
+        console.log("URL input element:", layerUrlInput);
+        console.log("URL value:", layerUrlInput ? layerUrlInput.value : "ELEMENT NOT FOUND");
+        
+        if (!layerUrlInput) {
+          alert("ERROR: URL input field not found!");
+          return false;
+        }
+        
+        // Build data object
         const data = {
-          name: formData.get("name"),
-          description: formData.get("description"),
-          layer_type: formData.get("layer_type"),
-          url: formData.get("layerUrl"),
-          attribution: formData.get("layerAttribution"),
+          name: document.getElementById("layerName").value.trim(),
+          description: document.getElementById("layerDescription").value.trim(),
+          layer_type: document.getElementById("layerType").value,
+          url: document.getElementById("layerUrl").value.trim(),
+          attribution: document.getElementById("layerAttribution").value.trim(),
           is_active: document.getElementById("layerIsActive").checked,
           is_default: document.getElementById("layerIsDefault").checked
         };
+        
+        console.log("Data object:", data);
+        console.log("URL in data object:", data.url);
+        console.log("URL length:", data.url ? data.url.length : 0);
+        
+        // Validate
+        // Validate URL when URL source selected
+        if (sourceUrlRadio && sourceUrlRadio.checked && !data.url) {
+          alert("ERROR: URL is empty!\n\nPlease type a URL in the Layer URL field.");
+          console.error("URL field is empty");
+          return false;
+        }
 
-        fetch(url, {
-          method: method,
-          headers: {
-            "Content-Type": "application/json",
-            "X-CSRFToken": csrfToken,
-            "X-Requested-With": "XMLHttpRequest"
-          },
-          body: JSON.stringify(data),
-        })
-          .then((response) => {
-            console.log("Response status:", response.status);
-            console.log("Response ok:", response.ok);
-            if (!response.ok) {
-              return response.json().then(data => {
-                console.log("Error response data:", data);
-                throw new Error(data.error || "Failed to save layer")
+        // Helper to perform the actual save
+        function doSave(finalData) {
+          // Determine method and endpoint
+          const layerId = document.getElementById("layerId").value;
+          const apiUrl = layerId ? `/api/layers/${layerId}/` : "/api/layers/";
+          const method = layerId ? "PUT" : "POST";
+
+          console.log("Sending to:", apiUrl);
+          console.log("Method:", method);
+          console.log("Payload:", JSON.stringify(finalData, null, 2));
+
+          fetch(apiUrl, {
+            method: method,
+            headers: {
+              "Content-Type": "application/json",
+              "X-CSRFToken": csrfToken,
+              "X-Requested-With": "XMLHttpRequest"
+            },
+            credentials: 'same-origin',
+            body: JSON.stringify(finalData),
+          })
+            .then(async (response) => {
+              console.log("Response status:", response.status);
+              console.log("Response ok:", response.ok);
+              const contentType = response.headers.get('content-type') || ''
+              if (response.redirected) {
+                const redirectedTo = response.url || '(unknown)'
+                throw new Error(`Redirected to ${redirectedTo}. You may need to log in again.`)
+              }
+              if (!response.ok) {
+                if (contentType.includes('application/json')) {
+                  const data = await response.json()
+                  console.log("Error response data:", data)
+                  throw new Error(data.error || "Failed to save layer")
+                } else {
+                  const text = await response.text()
+                  console.log("Error response text:", text)
+                  const snippet = (text || '').slice(0, 200)
+                  throw new Error('Failed to save layer (non-JSON). Snippet: ' + snippet)
+                }
+              }
+              if (contentType.includes('application/json')) {
+                return response.json()
+              } else {
+                return { success: true }
+              }
+            })
+            .then((resp) => {
+              if (resp.success) {
+                alert("Layer saved successfully!")
+                window.location.reload()
+              } else {
+                throw new Error(resp.error || "Failed to save layer")
+              }
+            })
+            .catch((error) => {
+              console.error("Error saving layer:", error)
+              alert("Error saving layer: " + error.message)
+            })
+        }
+
+        // If local file selected, convert to embedded data URL GeoJSON and save
+        if (sourceFileRadio && sourceFileRadio.checked) {
+          const fileGeo = document.getElementById('localGeoJsonFile')
+          const fileShp = document.getElementById('localShapefileZip')
+          const selectedGeo = fileGeo && fileGeo.files && fileGeo.files[0]
+          const selectedZip = fileShp && fileShp.files && fileShp.files[0]
+
+          if (!selectedGeo && !selectedZip) {
+            alert('Please choose a GeoJSON or Shapefile (.zip) file.')
+            return false
+          }
+
+          // Encode JSON string as base64 data URL
+          function jsonToDataUrl(obj) {
+            const jsonStr = JSON.stringify(obj)
+            const base64 = btoa(unescape(encodeURIComponent(jsonStr)))
+            return `data:application/json;base64,${base64}`
+          }
+
+          if (selectedGeo) {
+            const reader = new FileReader()
+            reader.onload = function(e) {
+              try {
+                const geojson = JSON.parse(e.target.result)
+                data.url = jsonToDataUrl(geojson)
+                // Treat as custom/geojson type
+                data.layer_type = data.layer_type || 'custom'
+                doSave(data)
+              } catch(err) {
+                console.error('Invalid GeoJSON:', err)
+                alert('Invalid GeoJSON file')
+              }
+            }
+            reader.readAsText(selectedGeo)
+            return false
+          }
+
+          if (selectedZip && typeof window.shp !== 'undefined') {
+            const reader = new FileReader()
+            reader.onload = function(e) {
+              const arrayBuffer = e.target.result
+              window.shp(arrayBuffer).then(function(geojson){
+                data.url = jsonToDataUrl(geojson)
+                data.layer_type = data.layer_type || 'custom'
+                doSave(data)
+              }).catch(function(err){
+                console.error('Error reading shapefile:', err)
+                alert('Could not read shapefile. Ensure it\'s a zipped Shapefile (.shp, .shx, .dbf).')
               })
             }
-            return response.json()
-          })
-          .then((data) => {
-            // Show success message
-            if (data.success) {
-              alert("Layer saved successfully!")
-              // Reload page to show updated layers
-              window.location.reload()
-            } else {
-              throw new Error(data.error || "Failed to save layer")
-            }
-          })
-          .catch((error) => {
-            console.error("Error saving layer:", error)
-            alert("Error saving layer: " + error.message)
-          })
+            reader.readAsArrayBuffer(selectedZip)
+            return false
+          }
+
+          return false
+        }
+
+        // URL mode
+        doSave(data)
       })
     }
   
