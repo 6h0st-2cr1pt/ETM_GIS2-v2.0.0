@@ -1533,13 +1533,13 @@ def edit_tree(request, tree_id):
 def cleanup_orphaned_taxonomy(species):
     """
     Helper function to clean up orphaned taxonomy records (species, genus, family)
-    that are no longer referenced by any trees.
+    that are no longer referenced by any trees or seeds.
     """
     if not species:
         return
     
-    # Check if species is still used by any trees
-    if species.trees.exists():
+    # Check if species is still used by any trees or seeds
+    if species.trees.exists() or species.seeds.exists():
         return  # Species is still in use, don't delete
     
     # Species is orphaned, get genus before deleting species
@@ -1679,11 +1679,15 @@ def delete_seed(request, seed_id):
     try:
         seed = get_object_or_404(TreeSeed, id=seed_id)
         location = seed.location
+        species = seed.species
         seed.delete()
         
         # Delete the location if it's not used by any other tree or seed
         if location and not location.trees.exists() and not location.seeds.exists():
             location.delete()
+        
+        # Clean up orphaned taxonomy records
+        cleanup_orphaned_taxonomy(species)
             
         return JsonResponse({'success': True})
     except TreeSeed.DoesNotExist:
@@ -1716,10 +1720,14 @@ def delete_seeds_bulk(request):
         seeds = TreeSeed.objects.filter(id__in=seed_ids)
         deleted_count = 0
         locations_to_check = []
+        species_to_check = set()
         
         for seed in seeds:
             location = seed.location
+            species = seed.species
             locations_to_check.append(location)
+            if species:
+                species_to_check.add(species)
             seed.delete()
             deleted_count += 1
         
@@ -1727,6 +1735,10 @@ def delete_seeds_bulk(request):
         for location in locations_to_check:
             if location and not location.trees.exists() and not location.seeds.exists():
                 location.delete()
+        
+        # Clean up orphaned taxonomy records
+        for species in species_to_check:
+            cleanup_orphaned_taxonomy(species)
         
         return JsonResponse({
             'success': True,
@@ -1747,8 +1759,9 @@ def delete_all_seeds(request):
         # Get count before deletion
         total_count = TreeSeed.objects.count()
         
-        # Get all locations to check after deletion
+        # Get all locations and species to check after deletion
         locations_to_check = list(Location.objects.filter(seeds__isnull=False).distinct())
+        species_to_check = set(TreeSpecies.objects.filter(seeds__isnull=False).distinct())
         
         # Delete all seeds
         TreeSeed.objects.all().delete()
@@ -1757,6 +1770,10 @@ def delete_all_seeds(request):
         for location in locations_to_check:
             if not location.trees.exists() and not location.seeds.exists():
                 location.delete()
+        
+        # Clean up all orphaned taxonomy records
+        for species in species_to_check:
+            cleanup_orphaned_taxonomy(species)
         
         return JsonResponse({
             'success': True,
