@@ -58,11 +58,12 @@
                         <th data-sort="family">Family</th>
                         <th data-sort="genus">Genus</th>
                         <th data-sort="population">Population</th>
+                        <th data-sort="hectares">Hectares</th>
                         <th data-sort="health_status">Health Status</th>
                         <th data-sort="coordinates">Coordinates</th>
                         <th data-sort="year">Year</th>
                         <th data-sort="notes">Notes</th>
-                        <th>Actions</th>
+                        <th style="min-width: 120px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -77,6 +78,7 @@
                         <td data-family="{{ tree.species.genus.family.name }}">{{ tree.species.genus.family.name }}</td>
                         <td data-genus="{{ tree.species.genus.name }}">{{ tree.species.genus.name }}</td>
                         <td data-population="{{ tree.population }}">{{ tree.population }}</td>
+                        <td data-hectares="{{ tree.hectares }}">{{ tree.hectares|floatformat:2 }} ha</td>
                         <td data-health_status="{{ tree.health_status }}">
                             {% if tree.health_status == 'very_poor' %}
                                 <span class="badge bg-danger">Very Poor</span>
@@ -107,6 +109,9 @@
                                 <button class="action-button action-view" title="View Details" data-id="{{ tree.id }}">
                                     <i class="fas fa-eye"></i>
                                 </button>
+                                <button class="action-button action-image" title="Preview Image" data-id="{{ tree.id }}" data-image-url="{% if tree.image %}{{ tree.image.url }}{% endif %}">
+                                    <i class="fas fa-image"></i>
+                                </button>
                                 <button class="action-button action-edit" title="Edit" data-id="{{ tree.id }}">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -118,7 +123,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center">No data available</td>
+                        <td colspan="13" class="text-center">No data available</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -186,10 +191,11 @@
                         <th data-sort="germination_status">Germination Status</th>
                         <th data-sort="germination_date">Germination Date</th>
                         <th data-sort="survival_rate">Survival Rate</th>
+                        <th data-sort="hectares">Hectares</th>
                         <th data-sort="expected_maturity_date">Expected Maturity</th>
                         <th data-sort="coordinates">Coordinates</th>
                         <th data-sort="notes">Notes</th>
-                        <th>Actions</th>
+                        <th style="min-width: 120px;">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -219,6 +225,7 @@
                         </td>
                         <td data-germination_date="{{ seed.germination_date|default:'' }}">{{ seed.germination_date|default:"-" }}</td>
                         <td data-survival_rate="{{ seed.survival_rate|default:'' }}">{{ seed.survival_rate|default:"-" }}{% if seed.survival_rate %}%{% endif %}</td>
+                        <td data-hectares="{{ seed.hectares }}">{{ seed.hectares|floatformat:2 }} ha</td>
                         <td data-expected_maturity_date="{{ seed.expected_maturity_date|default:'' }}">{{ seed.expected_maturity_date|default:"-" }}</td>
                         <td data-coordinates="{{ seed.location.latitude }},{{ seed.location.longitude }}">{{ seed.location.latitude }}, {{ seed.location.longitude }}</td>
                         <td data-notes="{{ seed.notes }}">
@@ -245,7 +252,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="12" class="text-center">No seed data available</td>
+                        <td colspan="13" class="text-center">No seed data available</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -284,6 +291,7 @@
                         </div>
                         <div class="col-md-6">
                             <p><strong>Survival Rate:</strong> <span id="view-seed-survival-rate"></span></p>
+                            <p><strong>Hectares:</strong> <span id="view-seed-hectares"></span></p>
                             <p><strong>Expected Maturity Date:</strong> <span id="view-seed-expected-maturity-date"></span></p>
                             <p><strong>Latitude:</strong> <span id="view-seed-latitude"></span></p>
                             <p><strong>Longitude:</strong> <span id="view-seed-longitude"></span></p>
@@ -350,6 +358,10 @@
                                     <input type="number" step="0.1" min="0" max="100" class="form-control" id="edit-seed-survival-rate" name="survival_rate">
                                 </div>
                                 <div class="mb-3">
+                                    <label for="edit-seed-hectares" class="form-label">Hectares *</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" id="edit-seed-hectares" name="hectares" required>
+                                </div>
+                                <div class="mb-3">
                                     <label for="edit-seed-expected-maturity-date" class="form-label">Expected Maturity Date</label>
                                     <input type="date" class="form-control" id="edit-seed-expected-maturity-date" name="expected_maturity_date">
                                 </div>
@@ -395,6 +407,7 @@
                             <p><strong>Family:</strong> <span id="view-family"></span></p>
                             <p><strong>Genus:</strong> <span id="view-genus"></span></p>
                             <p><strong>Population:</strong> <span id="view-population"></span></p>
+                            <p><strong>Hectares:</strong> <span id="view-hectares"></span></p>
                             <p><strong>Health Status:</strong> <span id="view-health-status"></span></p>
                         </div>
                         <div class="col-md-6">
@@ -409,6 +422,30 @@
                         <div class="col-12">
                             <div id="view-map" style="height: 300px;"></div>
                         </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Preview Modal -->
+    <div class="modal fade" id="imagePreviewModal" tabindex="-1" aria-labelledby="imagePreviewModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="imagePreviewModalLabel">Tree Image Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <div id="image-preview-container" style="min-height: 300px; display: flex; align-items: center; justify-content: center;">
+                        <div id="image-preview-placeholder" style="color: #999;">
+                            <i class="fas fa-image" style="font-size: 4rem; opacity: 0.3;"></i>
+                            <p>No image available</p>
+                        </div>
+                        <img id="image-preview-img" src="" alt="Tree Image" style="max-width: 100%; max-height: 500px; border-radius: 8px; display: none;">
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -445,6 +482,10 @@
                                     <input type="number" class="form-control" id="edit-population" name="population" required>
                                 </div>
                                 <div class="mb-3">
+                                    <label for="edit-hectares" class="form-label">Hectares *</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" id="edit-hectares" name="hectares" required>
+                                </div>
+                                <div class="mb-3">
                                     <label for="edit-year" class="form-label">Year</label>
                                     <input type="number" class="form-control" id="edit-year" name="year" required>
                                 </div>
@@ -473,6 +514,19 @@
                                 <div class="mb-3">
                                     <label for="edit-notes" class="form-label">Notes</label>
                                     <textarea class="form-control" id="edit-notes" name="notes" rows="3"></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="edit-tree-image" class="form-label">Tree Image</label>
+                                    <input type="file" class="form-control" id="edit-tree-image" name="tree_image" accept="image/*">
+                                    <small class="form-text text-muted">Upload a new image. This will update the image for all trees with the same location, common name, and scientific name.</small>
+                                    <div id="edit-image-preview-container" style="margin-top: 10px; display: none;">
+                                        <p><strong>Current Image:</strong></p>
+                                        <img id="edit-image-preview" src="" alt="Current Image" style="max-width: 300px; max-height: 200px; border-radius: 4px; border: 1px solid #ddd;">
+                                    </div>
+                                    <div id="edit-image-new-preview-container" style="margin-top: 10px; display: none;">
+                                        <p><strong>New Image Preview:</strong></p>
+                                        <img id="edit-image-new-preview" src="" alt="New Image Preview" style="max-width: 300px; max-height: 200px; border-radius: 4px; border: 1px solid #ddd;">
+                                    </div>
                                 </div>
                             </div>
                         </div>

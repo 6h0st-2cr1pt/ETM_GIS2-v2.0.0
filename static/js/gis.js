@@ -1107,6 +1107,14 @@ document.addEventListener("DOMContentLoaded", () => {
         const __pos = typeof layer.getLatLng === 'function' ? layer.getLatLng() : { lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0] }
 
         const imageHtml = p.image_url ? `<div style="margin:8px 0"><img src="${p.image_url}" alt="${p.common_name}" style="max-width:220px;border-radius:6px"></div>` : ''
+        // Format hectares - handle null, undefined, or numeric values (including 0)
+        let hectaresDisplay = 'N/A'
+        if (p.hectares !== null && p.hectares !== undefined && p.hectares !== '') {
+          const hectaresNum = Number(p.hectares)
+          if (!isNaN(hectaresNum) && hectaresNum >= 0) {
+            hectaresDisplay = `${hectaresNum.toFixed(2)} ha`
+          }
+        }
         const popupContent = `
           <div class="tree-popup">
             <h3>${p.common_name}</h3>
@@ -1116,6 +1124,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <tr><td>Family:</td><td>${p.family}</td></tr>
               <tr><td>Genus:</td><td>${p.genus}</td></tr>
               <tr><td>Population:</td><td>${p.population}</td></tr>
+              <tr><td><strong>Hectares:</strong></td><td>${hectaresDisplay}</td></tr>
               <tr><td>Health Status:</td><td>${p.health_status.replace(/_/g, " ")}</td></tr>
               <tr><td>Health Distribution:</td><td>
                 <div class="health-distribution">

@@ -1,4 +1,26 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // Image preview functionality for location images
+  const locationImageInput = document.getElementById('location_image')
+  const locationImagePreview = document.getElementById('image-preview')
+  const locationImagePreviewContainer = document.getElementById('image-preview-container')
+  
+  if (locationImageInput && locationImagePreview) {
+    locationImageInput.addEventListener('change', function(e) {
+      const file = e.target.files[0]
+      if (file) {
+        const reader = new FileReader()
+        reader.onload = function(e) {
+          locationImagePreview.src = e.target.result
+          locationImagePreviewContainer.style.display = 'block'
+        }
+        reader.readAsDataURL(file)
+      } else {
+        locationImagePreviewContainer.style.display = 'none'
+      }
+    })
+  }
+  
+  
   // Tab switching functionality
   const tabButtons = document.querySelectorAll(".tab-button")
   const tabContents = document.querySelectorAll(".tab-content")

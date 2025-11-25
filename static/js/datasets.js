@@ -9,6 +9,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // View and Edit button handlers
     const viewButtons = document.querySelectorAll('.action-view');
+    const imageButtons = document.querySelectorAll('.action-image');
     const editButtons = document.querySelectorAll('.action-edit');
     const deleteButtons = document.querySelectorAll('.action-delete');
     
@@ -151,6 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Initialize Bootstrap modals
     const treeDetailsModal = new bootstrap.Modal(document.getElementById('treeDetailsModal'));
+    const imagePreviewModal = new bootstrap.Modal(document.getElementById('imagePreviewModal'));
     const editTreeModal = new bootstrap.Modal(document.getElementById('editTreeModal'));
 
     // View button click handler
@@ -164,6 +166,8 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById('view-family').textContent = row.querySelector('[data-family]').dataset.family;
             document.getElementById('view-genus').textContent = row.querySelector('[data-genus]').dataset.genus;
             document.getElementById('view-population').textContent = row.querySelector('[data-population]').dataset.population;
+            const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || 'N/A';
+            document.getElementById('view-hectares').textContent = hectares !== 'N/A' ? parseFloat(hectares).toFixed(2) + ' ha' : 'N/A';
             document.getElementById('view-health-status').textContent = row.querySelector('[data-health_status]').dataset.health_status;
             document.getElementById('view-year').textContent = row.querySelector('[data-year]').dataset.year;
             
@@ -179,29 +183,128 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
 
+    // Image preview button click handler
+    imageButtons.forEach(button => {
+        button.addEventListener('click', () => {
+            const imageUrl = button.dataset.imageUrl;
+            const placeholder = document.getElementById('image-preview-placeholder');
+            const image = document.getElementById('image-preview-img');
+            
+            if (imageUrl && imageUrl.trim() !== '') {
+                image.src = imageUrl;
+                image.style.display = 'block';
+                placeholder.style.display = 'none';
+            } else {
+                image.style.display = 'none';
+                placeholder.style.display = 'block';
+            }
+            
+            imagePreviewModal.show();
+        });
+    });
+
     // Edit button click handler
     editButtons.forEach(button => {
-        button.addEventListener('click', () => {
+        button.addEventListener('click', async () => {
             const row = button.closest('tr');
             const treeId = button.dataset.id;
             
-            // Populate edit form with data from the row
-            document.getElementById('edit-tree-id').value = treeId;
-            document.getElementById('edit-species').value = row.querySelector('[data-species]').dataset.species;
-            document.getElementById('edit-population').value = row.querySelector('[data-population]').dataset.population;
-            document.getElementById('edit-health-status').value = row.querySelector('[data-health_status]').dataset.health_status;
-            document.getElementById('edit-year').value = row.querySelector('[data-year]').dataset.year;
-            
-            const coordinates = row.querySelector('[data-coordinates]').dataset.coordinates.split(',');
-            document.getElementById('edit-latitude').value = coordinates[0];
-            document.getElementById('edit-longitude').value = coordinates[1];
-            
-            document.getElementById('edit-notes').value = row.querySelector('[data-notes]').dataset.notes || '';
+            // Fetch tree details including image
+            try {
+                const response = await fetch(`/edit-tree/${treeId}/`, {
+                    method: 'GET',
+                    headers: {
+                        'X-CSRFToken': csrfToken,
+                        'Accept': 'application/json'
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    
+                    // Populate edit form with data
+                    document.getElementById('edit-tree-id').value = treeId;
+                    document.getElementById('edit-species').value = data.species_id;
+                    document.getElementById('edit-population').value = data.population;
+                    document.getElementById('edit-hectares').value = data.hectares || '';
+                    document.getElementById('edit-health-status').value = data.health_status;
+                    document.getElementById('edit-year').value = data.year;
+                    document.getElementById('edit-latitude').value = data.latitude;
+                    document.getElementById('edit-longitude').value = data.longitude;
+                    document.getElementById('edit-notes').value = data.notes || '';
+                    
+                    // Handle image preview
+                    const currentImagePreview = document.getElementById('edit-image-preview');
+                    const currentImageContainer = document.getElementById('edit-image-preview-container');
+                    if (data.image_url) {
+                        currentImagePreview.src = data.image_url;
+                        currentImageContainer.style.display = 'block';
+                    } else {
+                        currentImageContainer.style.display = 'none';
+                    }
+                    
+                    // Reset new image preview
+                    document.getElementById('edit-image-new-preview-container').style.display = 'none';
+                    document.getElementById('edit-tree-image').value = '';
+                } else {
+                    // Fallback to row data if API fails
+                    document.getElementById('edit-tree-id').value = treeId;
+                    document.getElementById('edit-species').value = row.querySelector('[data-species]').dataset.species;
+                    document.getElementById('edit-population').value = row.querySelector('[data-population]').dataset.population;
+                    const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || '';
+                    document.getElementById('edit-hectares').value = hectares;
+                    document.getElementById('edit-health-status').value = row.querySelector('[data-health_status]').dataset.health_status;
+                    document.getElementById('edit-year').value = row.querySelector('[data-year]').dataset.year;
+                    
+                    const coordinates = row.querySelector('[data-coordinates]').dataset.coordinates.split(',');
+                    document.getElementById('edit-latitude').value = coordinates[0];
+                    document.getElementById('edit-longitude').value = coordinates[1];
+                    
+                    document.getElementById('edit-notes').value = row.querySelector('[data-notes]').dataset.notes || '';
+                }
+            } catch (error) {
+                console.error('Error fetching tree details:', error);
+                // Fallback to row data
+                document.getElementById('edit-tree-id').value = treeId;
+                document.getElementById('edit-species').value = row.querySelector('[data-species]').dataset.species;
+                document.getElementById('edit-population').value = row.querySelector('[data-population]').dataset.population;
+                const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || '';
+                document.getElementById('edit-hectares').value = hectares;
+                document.getElementById('edit-health-status').value = row.querySelector('[data-health_status]').dataset.health_status;
+                document.getElementById('edit-year').value = row.querySelector('[data-year]').dataset.year;
+                
+                const coordinates = row.querySelector('[data-coordinates]').dataset.coordinates.split(',');
+                document.getElementById('edit-latitude').value = coordinates[0];
+                document.getElementById('edit-longitude').value = coordinates[1];
+                
+                document.getElementById('edit-notes').value = row.querySelector('[data-notes]').dataset.notes || '';
+            }
 
             // Show the edit modal
             editTreeModal.show();
         });
     });
+    
+    // Image preview for new image upload in edit form
+    const editImageInput = document.getElementById('edit-tree-image');
+    if (editImageInput) {
+        editImageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const newPreviewContainer = document.getElementById('edit-image-new-preview-container');
+            const newPreview = document.getElementById('edit-image-new-preview');
+            
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    newPreview.src = e.target.result;
+                    newPreviewContainer.style.display = 'block';
+                };
+                reader.readAsDataURL(file);
+            } else {
+                newPreviewContainer.style.display = 'none';
+            }
+        });
+    }
 
     // Save changes button click handler
     document.getElementById('saveTreeChanges').addEventListener('click', async () => {
@@ -214,14 +317,16 @@ document.addEventListener("DOMContentLoaded", () => {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': csrfToken
+                    // Don't set Content-Type header - let browser set it with boundary for FormData
                 },
                 body: formData
             });
 
             const data = await response.json();
 
-            if (response.ok) {
+            if (response.ok && data.success) {
                 editTreeModal.hide();
+                alert('Tree record updated successfully!');
                 window.location.reload();
             } else {
                 throw new Error(data.error || 'Failed to update tree record');
@@ -720,6 +825,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const survivalRate = row.querySelector('[data-survival_rate]')?.dataset.survival_rate;
       if (survivalRateEl) survivalRateEl.textContent = survivalRate ? survivalRate + '%' : '-';
       
+      const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || 'N/A';
+      const hectaresEl = document.getElementById('view-seed-hectares');
+      if (hectaresEl) hectaresEl.textContent = hectares !== 'N/A' ? parseFloat(hectares).toFixed(2) + ' ha' : 'N/A';
+      
       if (expectedMaturityDateEl) expectedMaturityDateEl.textContent = row.querySelector('[data-expected_maturity_date]')?.dataset.expected_maturity_date || '-';
       
       const coordinates = row.querySelector('[data-coordinates]')?.dataset.coordinates?.split(',') || ['-', '-'];
@@ -759,6 +868,9 @@ document.addEventListener("DOMContentLoaded", () => {
       
       const survivalRate = row.querySelector('[data-survival_rate]').dataset.survival_rate;
       document.getElementById('edit-seed-survival-rate').value = survivalRate || '';
+      
+      const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || '';
+      document.getElementById('edit-seed-hectares').value = hectares;
       
       const expectedMaturityDate = row.querySelector('[data-expected_maturity_date]').dataset.expected_maturity_date;
       document.getElementById('edit-seed-expected-maturity-date').value = expectedMaturityDate || '';

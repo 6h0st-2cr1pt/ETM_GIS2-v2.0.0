@@ -75,10 +75,50 @@ pip install -r requirements.txt
 ```
 
 ### 4. Database Setup
-```bash
-python manage.py makemigrations
-python manage.py migrate
-```
+
+#### PostgreSQL Configuration
+
+1. **Install PostgreSQL** (if not already installed):
+   - Download from [PostgreSQL official website](https://www.postgresql.org/download/)
+   - Or use a package manager: `brew install postgresql` (Mac), `apt-get install postgresql` (Linux)
+
+2. **Create PostgreSQL Database**:
+   ```bash
+   # Connect to PostgreSQL
+   psql -U postgres
+   
+   # Create database
+   CREATE DATABASE endemic_trees;
+   
+   # Exit psql
+   \q
+   ```
+
+3. **Configure Environment Variables**:
+   - Copy `env.example` to `.env`:
+     ```bash
+     # Windows
+     copy env.example .env
+     
+     # Linux/Mac
+     cp env.example .env
+     ```
+   - Edit `.env` and update with your PostgreSQL credentials:
+     ```
+     DB_NAME=endemic_trees
+     DB_USER=postgres
+     DB_PASSWORD=your_password
+     DB_HOST=localhost
+     DB_PORT=5432
+     ```
+
+4. **Run Migrations**:
+   ```bash
+   python manage.py makemigrations
+   python manage.py migrate
+   ```
+
+**Note**: The application is configured to use PostgreSQL by default. Make sure PostgreSQL is running before starting the application.
 
 ### 5. Create Superuser (Optional)
 ```bash

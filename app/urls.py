@@ -29,6 +29,7 @@ urlpatterns = [
     path('api/layers/', views.api_layers, name='api_layers'),
     path('api/layers/<int:layer_id>/', views.api_layers_detail, name='api_layers_detail'),
     path('api/supabase-data/', views.api_supabase_data, name='api_supabase_data'),
+    path('public-submission-image/<int:submission_id>/', views.public_submission_image, name='public_submission_image'),
     path('api/set-theme/', views.set_theme, name='set_theme'),
     path('api/set-map-style/', views.set_map_style, name='set_map_style'),
     path('api/set-pin-style/', views.set_pin_style, name='set_pin_style'),

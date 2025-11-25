@@ -115,7 +115,8 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.08);
     padding: 1.5rem;
-    overflow: hidden;
+    overflow-x: auto;
+    overflow-y: visible;
     max-width: 100%;
   }
   
@@ -129,7 +130,7 @@
   
   .datasets-table {
     width: 100%;
-    min-width: 1100px; /* Minimum width to prevent squishing */
+    min-width: 1200px; /* Minimum width to prevent squishing - increased for Hectares column */
     color: var(--text-primary);
     table-layout: fixed;
   }
@@ -142,11 +143,32 @@
   .datasets-table th:nth-child(5), .datasets-table td:nth-child(5) { width: 8%; }  /* Family */
   .datasets-table th:nth-child(6), .datasets-table td:nth-child(6) { width: 8%; }  /* Genus */
   .datasets-table th:nth-child(7), .datasets-table td:nth-child(7) { width: 8%; }  /* Population */
-  .datasets-table th:nth-child(8), .datasets-table td:nth-child(8) { width: 10%; } /* Health Status */
-  .datasets-table th:nth-child(9), .datasets-table td:nth-child(9) { width: 11%; } /* Coordinates */
-  .datasets-table th:nth-child(10), .datasets-table td:nth-child(10) { width: 6%; }  /* Year */
-  .datasets-table th:nth-child(11), .datasets-table td:nth-child(11) { width: 10%; } /* Notes */
-  .datasets-table th:nth-child(12), .datasets-table td:nth-child(12) { width: 8%; }  /* Actions */
+  .datasets-table th:nth-child(8), .datasets-table td:nth-child(8) { width: 7%; }  /* Hectares */
+  .datasets-table th:nth-child(9), .datasets-table td:nth-child(9) { width: 10%; } /* Health Status */
+  .datasets-table th:nth-child(10), .datasets-table td:nth-child(10) { width: 11%; } /* Coordinates */
+  .datasets-table th:nth-child(11), .datasets-table td:nth-child(11) { width: 6%; }  /* Year */
+  .datasets-table th:nth-child(12), .datasets-table td:nth-child(12) { width: 10%; } /* Notes */
+  .datasets-table th:nth-child(13), .datasets-table td:nth-child(13) { 
+    width: 10% !important; 
+    min-width: 120px !important;
+    max-width: none !important;
+    position: sticky;
+    right: 0;
+    background-color: inherit;
+    z-index: 10;
+  }
+  
+  /* Ensure Actions column header is also sticky */
+  .datasets-table thead th:nth-child(13) {
+    position: sticky;
+    right: 0;
+    z-index: 11;
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  
+  html[data-theme="light"] .datasets-table thead th:nth-child(13) {
+    background-color: rgba(0, 0, 0, 0.05);
+  }
   
   .datasets-table thead th {
     background-color: rgba(255, 255, 255, 0.05);
@@ -170,7 +192,7 @@
   
   /* Allow text wrapping for specific columns */
   .datasets-table td:nth-child(3), /* Scientific Name */
-  .datasets-table td:nth-child(11) { /* Notes */
+  .datasets-table td:nth-child(12) { /* Notes */
     white-space: normal;
     word-wrap: break-word;
   }
@@ -399,7 +421,7 @@
   /* Responsive adjustments */
   @media (max-width: 1200px) {
     .datasets-table {
-      min-width: 1000px;
+      min-width: 1200px;
     }
   }
   

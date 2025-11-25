@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TreeKeeper - Endemic Tree Photography</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+    <!-- Home Page -->
+    <div id="homePage" class="page active">
+        <nav class="navbar">
+            <div class="nav-container">
+                <div class="logo">
+                    <i class="fas fa-leaf"></i>
+                    <span>TreeKeeper</span>
+                </div>
+                <button class="nav-btn" onclick="goToUpload()">Upload Tree</button>
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div class="hero-content">
+                <h1>Preserve Endemic Trees</h1>
+                <p>Document and protect the unique flora of Negros Island</p>
+                <button class="btn btn-primary btn-large" onclick="goToUpload()">Start Contributing</button>
+            </div>
+            <div class="hero-image">
+                <div class="tree-illustration">
+                    <i class="fas fa-tree"></i>
+                </div>
+            </div>
+        </section>
+
+        <section class="features">
+            <h2>Why TreeKeeper?</h2>
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <i class="fas fa-camera"></i>
+                    <h3>Easy Upload</h3>
+                    <p>Share photos of endemic trees with precise location data</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-map-location-dot"></i>
+                    <h3>GPS Location</h3>
+                    <p>Automatic GPS tagging and interactive map selection</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-shield"></i>
+                    <h3>Conservation</h3>
+                    <p>Help scientists and researchers study endemic species</p>
+                </div>
+                <div class="feature-card">
+                    <i class="fas fa-users"></i>
+                    <h3>Community</h3>
+                    <p>Join a community dedicated to biodiversity preservation</p>
+                </div>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>&copy; 2025 TreeKeeper. Dedicated to preserving Negros Island's endemic trees.</p>
+        </footer>
+    </div>
+
+    <!-- Upload Page -->
+    <div id="uploadPage" class="page">
+        <nav class="navbar">
+            <div class="nav-container">
+                <button class="back-btn" onclick="goToHome()">
+                    <i class="fas fa-arrow-left"></i>
+                    Back
+                </button>
+                <div class="logo">
+                    <i class="fas fa-leaf"></i>
+                    <span>TreeKeeper</span>
+                </div>
+                <div></div>
+            </div>
+        </nav>
+
+        <section class="upload-container">
+            <div class="form-wrapper">
+                <h2>Document an Endemic Tree</h2>
+                <form id="treeForm">
+                    <!-- Your Name -->
+                    <div class="form-group">
+                        <label for="userName">Your Name *</label>
+                        <input type="text" id="userName" placeholder="Enter your name" required>
+                        <span class="error-msg" id="nameError"></span>
+                    </div>
+
+                    <!-- Tree Description -->
+                    <div class="form-group">
+                        <label for="treeDescription">Tree Description *</label>
+                        <textarea id="treeDescription" placeholder="Describe the endemic tree (species, characteristics, location details)..." rows="4" required></textarea>
+                        <span class="error-msg" id="descError"></span>
+                    </div>
+
+                    <!-- Tree Image -->
+                    <div class="form-group">
+                        <label for="treeImage">Tree Image *</label>
+                        <div class="image-upload-section">
+                            <div class="image-preview" id="imagePreview">
+                                <i class="fas fa-image"></i>
+                                <p>No image selected</p>
+                            </div>
+                            <div class="button-group">
+                                <button type="button" class="btn btn-secondary" onclick="captureImage()">
+                                    <i class="fas fa-camera"></i> Capture Photo
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="document.getElementById('imageInput').click()">
+                                    <i class="fas fa-upload"></i> Upload Image
+                                </button>
+                            </div>
+                            <input type="file" id="imageInput" accept="image/jpeg,image/png" style="display:none;">
+                            <span class="image-size-info">Max 2MB • JPEG or PNG</span>
+                            <span class="error-msg" id="imageError"></span>
+                        </div>
+                    </div>
+
+                    <!-- Latitude -->
+                    <div class="form-group">
+                        <label for="latitude">Latitude (Decimal Degrees) *</label>
+                        <div class="input-with-buttons">
+                            <input type="text" id="latitude" placeholder="e.g., 10.2938" readonly>
+                            <button type="button" class="btn btn-icon" onclick="getGPSLocation()" title="Get GPS Location">
+                                <i class="fas fa-satellite"></i>
+                            </button>
+                            <button type="button" class="btn btn-icon" onclick="openMapModal()" title="Select on Map">
+                                <i class="fas fa-map"></i>
+                            </button>
+                        </div>
+                        <span class="error-msg" id="latError"></span>
+                    </div>
+
+                    <!-- Longitude -->
+                    <div class="form-group">
+                        <label for="longitude">Longitude (Decimal Degrees) *</label>
+                        <div class="input-with-buttons">
+                            <input type="text" id="longitude" placeholder="e.g., 123.8854" readonly>
+                            <button type="button" class="btn btn-icon" onclick="getGPSLocation()" title="Get GPS Location">
+                                <i class="fas fa-satellite"></i>
+                            </button>
+                            <button type="button" class="btn btn-icon" onclick="openMapModal()" title="Select on Map">
+                                <i class="fas fa-map"></i>
+                            </button>
+                        </div>
+                        <span class="error-msg" id="longError"></span>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary btn-large">Submit Tree Documentation</button>
+                </form>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>&copy; 2025 TreeKeeper. Dedicated to preserving Negros Island's endemic trees.</p>
+        </footer>
+    </div>
+
+    <!-- Map Modal -->
+    <div id="mapModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Select Location on Negros Island Map</h3>
+                <button class="close-btn" onclick="closeMapModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div id="map" class="map"></div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeMapModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmMapLocation()">Confirm Location</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div id="cameraModal" class="modal">
+        <div class="modal-content modal-camera">
+            <div class="modal-header">
+                <h3>Capture Tree Photo</h3>
+                <button class="close-btn" onclick="closeCameraModal()">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <video id="cameraVideo" autoplay playsinline></video>
+            <canvas id="cameraCanvas" style="display:none;"></canvas>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCameraModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="capturePhoto()">
+                    <i class="fas fa-camera"></i> Capture
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div id="successModal" class="modal">
+        <div class="modal-content modal-success">
+            <div class="success-icon">
+                <i class="fas fa-check-circle"></i>
+            </div>
+            <h3>Upload Successful!</h3>
+            <p>Thank you for documenting this endemic tree. Your contribution helps preserve Negros Island's biodiversity.</p>
+            <button class="btn btn-primary" onclick="resetForm()">Upload Another Tree</button>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
