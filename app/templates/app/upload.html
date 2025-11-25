@@ -63,7 +63,8 @@
                            <th>scientific_name</th>
                            <th>family</th>
                            <th>genus</th>
-                           <th>population</th>
+                          <th>population</th>
+                          <th>hectars (hectares)</th>
                            <th>healthy_count</th>
                            <th>good_count</th>
                            <th>bad_count</th>
@@ -81,6 +82,7 @@
                            <td>Fabaceae</td>
                            <td>Afzelia</td>
                            <td>120</td>
+                           <td>5.5</td>
                            <td>80</td>
                            <td>30</td>
                            <td>8</td>
@@ -106,7 +108,7 @@
             </div>
 
             <div class="manual-entry-form">
-               <form method="post" id="manual-entry-form">
+               <form method="post" id="manual-entry-form" enctype="multipart/form-data">
                   {% csrf_token %}
                   <div class="form-grid">
                      <div class="form-group">
@@ -136,6 +138,12 @@
                      </div>
 
                      <div class="form-group">
+                        <label for="hectares">Hectares *</label>
+                        <input type="number" name="hectares" id="hectares" class="form-control" step="0.01" min="0" required>
+                        <small class="form-text text-muted">Area covered in hectares</small>
+                     </div>
+
+                     <div class="form-group">
                         <label for="year">Year</label>
                         <input type="number" name="year" id="year" class="form-control" required>
                      </div>
@@ -148,6 +156,15 @@
                      <div class="form-group">
                         <label for="longitude">Longitude</label>
                         <input type="number" name="longitude" id="longitude" class="form-control" step="0.000001" required>
+                     </div>
+
+                     <div class="form-group full-width">
+                        <label for="location_image">Tree Image</label>
+                        <input type="file" name="location_image" id="location_image" class="form-control" accept="image/*">
+                        <small class="form-text text-muted">Upload an image for this tree. This image will be shared by all trees with the same location, common name, and scientific name, and displayed in the GIS map popup.</small>
+                        <div id="image-preview-container" style="margin-top: 10px; display: none;">
+                           <img id="image-preview" src="" alt="Preview" style="max-width: 300px; max-height: 200px; border-radius: 4px; border: 1px solid #ddd;">
+                        </div>
                      </div>
                   </div>
 
@@ -221,7 +238,7 @@
             </div>
 
             <div class="manual-entry-form">
-               <form method="post" class="data-form" id="seed-entry-form">
+               <form method="post" class="data-form" id="seed-entry-form" enctype="multipart/form-data">
                   {% csrf_token %}
                   <div class="form-grid">
                      <div class="form-group">
@@ -247,6 +264,12 @@
                      <div class="form-group">
                         <label for="seed_quantity">Quantity</label>
                         <input type="number" id="seed_quantity" name="seed_quantity" class="form-control" min="1" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="seed_hectares">Hectares *</label>
+                        <input type="number" id="seed_hectares" name="seed_hectares" class="form-control" step="0.01" min="0" required>
+                        <small class="form-text text-muted">Area covered in hectares</small>
                      </div>
 
                      <div class="form-group">
@@ -290,6 +313,7 @@
                         <label for="seed_longitude">Longitude</label>
                         <input type="number" id="seed_longitude" name="seed_longitude" class="form-control" step="0.000001" required>
                      </div>
+
                   </div>
 
                   <div class="form-group full-width">

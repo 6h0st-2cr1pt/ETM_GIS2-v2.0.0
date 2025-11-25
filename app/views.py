@@ -11,7 +11,7 @@ import base64
 from io import BytesIO
 
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse, HttpResponse, HttpResponseNotFound, HttpResponseServerError
 from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.core.serializers import serialize
@@ -27,7 +27,6 @@ from .models import (
     EndemicTree, MapLayer, UserSetting, TreeFamily,
     TreeGenus, TreeSpecies, Location, PinStyle, TreeSeed
 )
-from .supabase_config import get_supabase_client
 from .forms import (
     EndemicTreeForm, CSVUploadForm, ThemeSettingsForm,
     PinStyleForm, LocationForm
@@ -431,7 +430,7 @@ def upload_data(request):
                 # Process CSV file
                 try:
                     df = pd.read_csv(csv_file)
-                    required_columns = ['common_name', 'scientific_name', 'family', 'genus', 'population', 'latitude',
+                    required_columns = ['common_name', 'scientific_name', 'family', 'genus', 'population', 'hectares', 'latitude',
                                         'longitude', 'year']
 
                     # Check if all required columns exist
@@ -465,11 +464,13 @@ def upload_data(request):
                             )
 
                             # Get or create location
-                            location, _ = Location.objects.get_or_create(
+                            location, created = Location.objects.get_or_create(
                                 latitude=row['latitude'],
                                 longitude=row['longitude'],
                                 defaults={'name': f"{row['common_name']} location"}
                             )
+                            
+                            # Note: CSV upload doesn't support images - images must be uploaded via manual entry
 
                             # Create tree record
                             notes = row.get('notes', '')
@@ -481,6 +482,21 @@ def upload_data(request):
                             bad_count = int(row.get('bad_count', 0))
                             deceased_count = int(row.get('deceased_count', 0))
 
+                            # Get hectares from CSV (required). Accept both "hectares" and "hectars" headers.
+                            hectares_value = row.get('hectares')
+                            if hectares_value is None or pd.isna(hectares_value):
+                                hectares_value = row.get('hectars')
+                            if hectares_value is None or (isinstance(hectares_value, str) and not hectares_value.strip()) or pd.isna(hectares_value):
+                                raise ValueError(f"Row {_ + 1}: hectares (hectars) is required")
+                            try:
+                                hectares = float(hectares_value)
+                                if hectares < 0:
+                                    raise ValueError(f"Row {_ + 1}: hectares must be non-negative")
+                            except (ValueError, TypeError) as e:
+                                if isinstance(e, ValueError) and "must be non-negative" in str(e):
+                                    raise
+                                raise ValueError(f"Row {_ + 1}: invalid hectares value: {hectares_value}")
+                            
                             tree = EndemicTree(
                                 species=species,
                                 location=location,
@@ -491,6 +507,7 @@ def upload_data(request):
                                 good_count=good_count,
                                 bad_count=bad_count,
                                 deceased_count=deceased_count,
+                                hectares=hectares,
                                 notes=notes
                             )
                             tree.save()
@@ -545,6 +562,19 @@ def upload_data(request):
                 latitude = float(request.POST.get('latitude'))
                 longitude = float(request.POST.get('longitude'))
                 year = int(request.POST.get('year'))
+                # Get hectares (required)
+                hectares_str = request.POST.get('hectares', '').strip()
+                if not hectares_str:
+                    messages.error(request, 'Hectares is required')
+                    return redirect('app:upload')
+                try:
+                    hectares = float(hectares_str)
+                    if hectares < 0:
+                        messages.error(request, 'Hectares must be non-negative')
+                        return redirect('app:upload')
+                except (ValueError, TypeError):
+                    messages.error(request, 'Invalid hectares value')
+                    return redirect('app:upload')
                 notes = request.POST.get('notes', '')
 
                 # Get or create family
@@ -571,9 +601,61 @@ def upload_data(request):
                     longitude=longitude,
                     defaults={'name': f"{common_name} Location"}
                 )
+                
+                # Image sharing logic:
+                # Images are shared ONLY when trees have:
+                # - Same location (latitude + longitude)
+                # - Same common_name (via species)
+                # - Same scientific_name (via species)
+                # 
+                # If same common_name + scientific_name but different location = different images
+                # If same location but different species = different images
+                
+                # Check if there's an existing tree with same location AND species
+                # This ensures all trees with same location, common_name, and scientific_name share the same image
+                existing_tree = EndemicTree.objects.filter(
+                    species=species,  # Same common_name + scientific_name
+                    location=location  # Same location (latitude + longitude)
+                ).exclude(image__isnull=True).exclude(image='').first()
+                
+                # Handle image upload
+                image_file = None
+                if 'location_image' in request.FILES:
+                    image_file = request.FILES['location_image']
+                
+                # Determine which image to use:
+                # 1. If new image uploaded, use it and update all existing trees with same location+species
+                # 2. If existing tree has image and no new image, use existing image
+                # 3. Otherwise, no image
+                tree_image = None
+                if image_file:
+                    # New image uploaded - use it and update ONLY trees with same location AND species
+                    # We need to copy the file for each tree, not just reference it
+                    image_file.seek(0)  # Reset file pointer
+                    from django.core.files.base import ContentFile
+                    image_data = image_file.read()
+                    # Create a ContentFile for the new tree
+                    new_image_file = ContentFile(image_data, name=image_file.name)
+                    tree_image = new_image_file
+                    # Update all existing trees with same location AND species to use this image
+                    # Note: Trees with same species but different location will NOT be updated
+                    for existing_tree_obj in EndemicTree.objects.filter(
+                        species=species,  # Same common_name + scientific_name
+                        location=location  # Same location
+                    ):
+                        # Create a new ContentFile for each existing tree
+                        existing_image_file = ContentFile(image_data, name=image_file.name)
+                        existing_tree_obj.image.save(
+                            existing_image_file.name,
+                            existing_image_file,
+                            save=True
+                        )
+                elif existing_tree and existing_tree.image:
+                    # Use existing image from another tree with same location AND species
+                    tree_image = existing_tree.image
 
                 # Create endemic tree record
-                tree = EndemicTree.objects.create(
+                tree = EndemicTree(
                     species=species,
                     location=location,
                     population=population,
@@ -583,8 +665,25 @@ def upload_data(request):
                     bad_count=bad_count,
                     deceased_count=deceased_count,
                     year=year,
+                    hectares=hectares,
                     notes=notes
                 )
+                # Save tree first to get an ID
+                tree.save()
+                
+                # Now assign and save the image if we have one
+                if tree_image:
+                    from django.core.files.base import ContentFile
+                    if isinstance(tree_image, ContentFile):
+                        tree.image.save(
+                            tree_image.name,
+                            tree_image,
+                            save=True
+                        )
+                    else:
+                        # If it's an existing ImageField, just assign it
+                        tree.image = tree_image
+                        tree.save()
 
                 messages.success(request, f"Successfully added {common_name} record.")
                 # Redirect to GIS page to see the newly added data
@@ -609,6 +708,19 @@ def upload_data(request):
                 else:
                     survival_rate = None
                 expected_maturity_date = request.POST.get('seed_expected_maturity_date') or None
+                # Get hectares (required)
+                hectares_str = request.POST.get('seed_hectares', '').strip()
+                if not hectares_str:
+                    messages.error(request, 'Hectares is required')
+                    return redirect('app:upload')
+                try:
+                    hectares = float(hectares_str)
+                    if hectares < 0:
+                        messages.error(request, 'Hectares must be non-negative')
+                        return redirect('app:upload')
+                except (ValueError, TypeError):
+                    messages.error(request, 'Invalid hectares value')
+                    return redirect('app:upload')
                 latitude = float(request.POST.get('seed_latitude'))
                 longitude = float(request.POST.get('seed_longitude'))
                 notes = request.POST.get('seed_notes', '')
@@ -635,6 +747,11 @@ def upload_data(request):
                     longitude=longitude,
                     defaults={'name': f"{common_name} Seed Planting Location"}
                 )
+                
+                # Handle image upload for seed location - only update if new image is provided
+                if 'seed_location_image' in request.FILES:
+                    location.image = request.FILES['seed_location_image']
+                    location.save()
 
                 # Create tree seed record
                 seed = TreeSeed.objects.create(
@@ -645,6 +762,7 @@ def upload_data(request):
                     germination_status=germination_status,
                     germination_date=germination_date,
                     survival_rate=survival_rate,
+                    hectares=hectares,
                     expected_maturity_date=expected_maturity_date,
                     notes=notes
                 )
@@ -867,17 +985,30 @@ def api_locations_list(request):
 
 @login_required(login_url='app:login')
 def new_data(request):
-    """View for inspecting and managing Supabase data."""
+    """View for inspecting and managing public tree photo submissions."""
     try:
-        supabase = get_supabase_client()
+        from public.models import TreePhotoSubmission
         
-        # Fetch data from Supabase
-        response = supabase.table('tree_sightings').select('*').execute()
-        supabase_data = response.data if response.data else []
+        # Fetch data from public app TreePhotoSubmission
+        public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
         
-        print(f"Fetched {len(supabase_data)} records from Supabase")
-        if supabase_data:
-            print("Sample record:", supabase_data[0])
+        # Convert to format similar to Supabase data for template compatibility
+        public_data = []
+        for submission in public_submissions:
+            public_data.append({
+                'id': submission.id,
+                'tree_description': submission.tree_description,
+                'person_name': submission.person_name,
+                'latitude': submission.latitude,
+                'longitude': submission.longitude,
+                'image_url': f'/public-submission-image/{submission.id}/',  # URL to view image
+                'created_at': submission.created_at,
+                'image_format': submission.image_format,
+            })
+        
+        print(f"Fetched {len(public_data)} records from public submissions")
+        if public_data:
+            print("Sample record:", public_data[0])
         
         # Get existing species and locations for reference
         species_list = TreeSpecies.objects.all().order_by('common_name')
@@ -885,20 +1016,22 @@ def new_data(request):
         
         context = {
             'active_page': 'new_data',
-            'supabase_data': supabase_data,
+            'supabase_data': public_data,  # Keep same key for template compatibility
             'species_list': species_list,
             'location_list': location_list,
         }
         return render(request, 'app/new_data.html', context)
         
     except Exception as e:
-        print(f"Error connecting to Supabase: {str(e)}")
+        print(f"Error fetching public submissions: {str(e)}")
+        import traceback
+        traceback.print_exc()
         context = {
             'active_page': 'new_data',
             'supabase_data': [],
             'species_list': [],
             'location_list': [],
-            'error': f"Error connecting to Supabase: {str(e)}"
+            'error': f"Error fetching public submissions: {str(e)}"
         }
         return render(request, 'app/new_data.html', context)
 
@@ -1093,6 +1226,9 @@ def tree_data(request):
                     'good_count': tree.good_count,
                     'bad_count': tree.bad_count,
                     'deceased_count': tree.deceased_count,
+                    'hectares': tree.hectares,
+                    # Include tree image URL if available (shared by trees with same location, common_name, scientific_name)
+                    'image_url': tree.image.url if tree.image and tree.image.name else None,
                 }
             }
             features.append(feature)
@@ -1233,6 +1369,7 @@ def filter_trees(request, species_id):
                     'good_count': tree.good_count,
                     'bad_count': tree.bad_count,
                     'deceased_count': tree.deceased_count,
+                    'hectares': tree.hectares,
                 }
             }
             features.append(feature)
@@ -1475,6 +1612,24 @@ def edit_tree(request, tree_id):
                 # Get form data
                 species_id = request.POST.get('species')
                 population = int(request.POST.get('population'))
+                hectares_str = request.POST.get('hectares', '').strip()
+                if not hectares_str:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Hectares is required'
+                    }, status=400)
+                try:
+                    hectares = float(hectares_str)
+                    if hectares < 0:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Hectares must be non-negative'
+                        }, status=400)
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Invalid hectares value'
+                    }, status=400)
                 year = int(request.POST.get('year'))
                 health_status = request.POST.get('health_status')
                 latitude = float(request.POST.get('latitude'))
@@ -1491,6 +1646,7 @@ def edit_tree(request, tree_id):
                 # Update tree record
                 tree.species_id = species_id
                 tree.population = population
+                tree.hectares = hectares
                 tree.year = year
                 tree.health_status = health_status
                 tree.notes = notes
@@ -1506,6 +1662,29 @@ def edit_tree(request, tree_id):
                     tree.location.latitude = latitude
                     tree.location.longitude = longitude
                     tree.location.save()
+                
+                # Handle image upload
+                if 'tree_image' in request.FILES:
+                    image_file = request.FILES['tree_image']
+                    tree.image = image_file
+                    tree.save()
+                    # Update all trees with same location and species to use this image
+                    # We need to copy the file for each tree, not just reference it
+                    for existing_tree in EndemicTree.objects.filter(
+                        species=tree.species,
+                        location=tree.location
+                    ).exclude(id=tree.id):
+                        if not existing_tree.image:
+                            # Read the image file and create a copy
+                            image_file.seek(0)  # Reset file pointer
+                            from django.core.files.base import ContentFile
+                            image_data = image_file.read()
+                            new_image_file = ContentFile(image_data, name=image_file.name)
+                            existing_tree.image.save(
+                                new_image_file.name,
+                                new_image_file,
+                                save=True
+                            )
 
                 tree.save()
 
@@ -1520,6 +1699,21 @@ def edit_tree(request, tree_id):
                     'success': False,
                     'error': str(e)
                 }, status=500)
+        
+        elif request.method == 'GET':
+            # GET request - return tree data for editing
+            return JsonResponse({
+                'id': str(tree.id),
+                'species_id': str(tree.species.id),
+                'population': tree.population,
+                'hectares': tree.hectares,
+                'year': tree.year,
+                'health_status': tree.health_status,
+                'latitude': tree.location.latitude,
+                'longitude': tree.location.longitude,
+                'notes': tree.notes or '',
+                'image_url': tree.image.url if tree.image and tree.image.name else None
+            })
 
     except Exception as e:
         return JsonResponse({
@@ -1805,6 +1999,25 @@ def edit_seed(request, seed_id):
                     survival_rate = float(survival_rate)
                 else:
                     survival_rate = None
+                # Get hectares (required)
+                hectares_str = request.POST.get('hectares', '').strip()
+                if not hectares_str:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Hectares is required'
+                    }, status=400)
+                try:
+                    hectares = float(hectares_str)
+                    if hectares < 0:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Hectares must be non-negative'
+                        }, status=400)
+                except (ValueError, TypeError):
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Invalid hectares value'
+                    }, status=400)
                 expected_maturity_date = request.POST.get('expected_maturity_date') or None
                 latitude = float(request.POST.get('latitude'))
                 longitude = float(request.POST.get('longitude'))
@@ -1824,6 +2037,7 @@ def edit_seed(request, seed_id):
                 seed.germination_status = germination_status
                 seed.germination_date = germination_date
                 seed.survival_rate = survival_rate
+                seed.hectares = hectares
                 seed.expected_maturity_date = expected_maturity_date
                 seed.notes = notes
                 
@@ -2037,16 +2251,28 @@ def api_layers_detail(request, layer_id):
 
 @login_required(login_url='app:login')
 def api_supabase_data(request):
-    """API endpoint for managing Supabase data."""
+    """API endpoint for managing public tree photo submissions from the public app."""
     try:
-        supabase = get_supabase_client()
+        from public.models import TreePhotoSubmission
         
         if request.method == 'GET':
-            # Fetch all data from Supabase
-            response = supabase.table('tree_sightings').select('*').execute()
+            # Fetch all data from public submissions
+            submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+            data = []
+            for submission in submissions:
+                data.append({
+                    'id': submission.id,
+                    'tree_description': submission.tree_description,
+                    'person_name': submission.person_name,
+                    'latitude': submission.latitude,
+                    'longitude': submission.longitude,
+                    'image_url': f'/public-submission-image/{submission.id}/',
+                    'created_at': submission.created_at.isoformat(),
+                    'image_format': submission.image_format,
+                })
             return JsonResponse({
                 'success': True,
-                'data': response.data if response.data else []
+                'data': data
             })
             
         elif request.method == 'POST':
@@ -2125,8 +2351,69 @@ def api_supabase_data(request):
             bad_count = int(data.get('bad_count', 0))
             deceased_count = int(data.get('deceased_count', 0))
             
-            # Create endemic tree record
-            tree = EndemicTree.objects.create(
+            # Get hectares (required)
+            hectares = data.get('hectares')
+            if hectares is None:
+                return JsonResponse({'success': False, 'error': 'hectares is required'}, status=400)
+            try:
+                hectares = float(hectares)
+                if hectares < 0:
+                    return JsonResponse({'success': False, 'error': 'hectares must be non-negative'}, status=400)
+            except (ValueError, TypeError):
+                return JsonResponse({'success': False, 'error': 'invalid hectares value'}, status=400)
+            
+            # Check if there's an existing tree with same location and species
+            existing_tree = EndemicTree.objects.filter(
+                species=species,
+                location=location
+            ).exclude(image__isnull=True).exclude(image='').first()
+            
+            # Get image from public submission if submission_id is provided
+            from django.core.files.base import ContentFile
+            tree_image = None
+            submission_id = data.get('supabase_id')
+            # Convert to int if it's a string
+            if submission_id:
+                try:
+                    submission_id = int(submission_id)
+                except (ValueError, TypeError):
+                    print(f"Warning: Invalid submission_id format: {submission_id}")
+                    submission_id = None
+            print(f"DEBUG: Import request - submission_id: {submission_id}, data keys: {list(data.keys())}")
+            if submission_id:
+                try:
+                    submission = TreePhotoSubmission.objects.get(id=submission_id)
+                    # Convert binary data to Django ImageField-compatible format
+                    
+                    # Get binary image data
+                    image_data = submission.tree_image
+                    if isinstance(image_data, memoryview):
+                        image_data = bytes(image_data)
+                    elif not isinstance(image_data, bytes):
+                        image_data = bytes(image_data)
+                    
+                    # Validate image data
+                    if not image_data or len(image_data) == 0:
+                        print(f"Warning: Submission {submission_id} has empty image data")
+                    else:
+                        # Create a ContentFile from binary data
+                        extension = 'jpg' if submission.image_format == 'JPEG' else 'png'
+                        image_file = ContentFile(image_data, name=f'submission_{submission_id}.{extension}')
+                        tree_image = image_file
+                        print(f"Created ContentFile for submission {submission_id}: {len(image_data)} bytes, extension: {extension}")
+                except TreePhotoSubmission.DoesNotExist:
+                    print(f"Submission {submission_id} not found")
+                    pass
+                except Exception as e:
+                    print(f"Error copying image from submission {submission_id}: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+            elif existing_tree and existing_tree.image:
+                # Use existing image if available
+                tree_image = existing_tree.image
+            
+            # Create endemic tree record (without image first if we need to handle it separately)
+            tree = EndemicTree(
                 species=species,
                 location=location,
                 population=int(data.get('population')),
@@ -2136,8 +2423,63 @@ def api_supabase_data(request):
                 good_count=good_count,
                 bad_count=bad_count,
                 deceased_count=deceased_count,
-                notes=data.get('notes', f"Imported from Supabase - ID: {data.get('supabase_id', 'Unknown')}")
+                hectares=hectares,
+                notes=data.get('notes', f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}")
             )
+            
+            # Save tree first to get an ID
+            tree.save()
+            
+            # Now assign and save the image if we have one
+            if tree_image:
+                # If tree_image is a ContentFile (from submission), we need to save it properly
+                if isinstance(tree_image, ContentFile):
+                    # Reset file pointer to beginning
+                    tree_image.seek(0)
+                    try:
+                        tree.image.save(
+                            tree_image.name,
+                            tree_image,
+                            save=True
+                        )
+                        # Refresh from database to ensure image is saved
+                        tree.refresh_from_db()
+                        print(f"Successfully saved image for tree {tree.id}: {tree.image.name}")
+                    except Exception as e:
+                        print(f"Error saving image for tree {tree.id}: {str(e)}")
+                else:
+                    # If it's an existing ImageField, just assign it
+                    tree.image = tree_image
+                    tree.save()
+                    print(f"Assigned existing image to tree {tree.id}: {tree.image.name if tree.image else None}")
+                
+                # If we imported a new image, update all trees with same location and species
+                if submission_id:
+                    try:
+                        submission = TreePhotoSubmission.objects.get(id=submission_id)
+                        # Get binary image data from submission
+                        image_data = submission.tree_image
+                        if isinstance(image_data, memoryview):
+                            image_data = bytes(image_data)
+                        elif not isinstance(image_data, bytes):
+                            image_data = bytes(image_data)
+                        
+                        extension = 'jpg' if submission.image_format == 'JPEG' else 'png'
+                        for existing in EndemicTree.objects.filter(species=species, location=location).exclude(id=tree.id):
+                            if not existing.image:
+                                # Create a new ContentFile for each existing tree
+                                new_image_file = ContentFile(image_data, name=f'submission_{submission_id}_{existing.id}.{extension}')
+                                existing.image.save(
+                                    new_image_file.name,
+                                    new_image_file,
+                                    save=True
+                                )
+                    except TreePhotoSubmission.DoesNotExist:
+                        pass
+                    except Exception as e:
+                        print(f"Error copying image to existing trees: {str(e)}")
+            else:
+                print(f"No image to save for tree {tree.id}")
             
             return JsonResponse({
                 'success': True,
@@ -2146,45 +2488,79 @@ def api_supabase_data(request):
             })
             
         elif request.method == 'DELETE':
-            # Delete data from Supabase
+            # Delete data from public submissions
             data = json.loads(request.body)
-            supabase_id = data.get('supabase_id')
+            submission_id = data.get('supabase_id')  # Keep same key for JS compatibility
             
-            if not supabase_id:
+            if not submission_id:
                 return JsonResponse({
                     'success': False,
-                    'error': 'Supabase ID is required'
+                    'error': 'Submission ID is required'
                 }, status=400)
             
             try:
-                # Delete from Supabase
-                response = supabase.table('tree_sightings').delete().eq('id', supabase_id).execute()
+                # Delete from public submissions
+                submission = TreePhotoSubmission.objects.get(id=submission_id)
+                submission.delete()
                 
-                # Check if deletion was successful
-                # Supabase delete returns empty array on success
-                if response.data is not None:
-                    return JsonResponse({
-                        'success': True,
-                        'message': 'Successfully deleted from Supabase'
-                    })
-                else:
-                    return JsonResponse({
-                        'success': True,
-                        'message': 'Successfully deleted from Supabase'
-                    })
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Successfully deleted public submission'
+                })
                     
-            except Exception as e:
-                print(f"Error deleting from Supabase: {str(e)}")
+            except TreePhotoSubmission.DoesNotExist:
                 return JsonResponse({
                     'success': False,
-                    'error': f'Failed to delete from Supabase: {str(e)}'
+                    'error': 'Submission not found'
+                }, status=404)
+            except Exception as e:
+                print(f"Error deleting public submission: {str(e)}")
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Failed to delete submission: {str(e)}'
                 }, status=500)
             
     except Exception as e:
-        print(f"Error in Supabase API: {str(e)}")
+        print(f"Error in public submissions API: {str(e)}")
         return JsonResponse({
             'success': False,
             'error': str(e)
         }, status=500)
-    
-    return JsonResponse({'error': 'Method not allowed'}, status=405)
+
+
+@login_required(login_url='app:login')
+def public_submission_image(request, submission_id):
+    """Serve image from public TreePhotoSubmission as HTTP response."""
+    try:
+        from public.models import TreePhotoSubmission
+        
+        submission = TreePhotoSubmission.objects.get(id=submission_id)
+        
+        # Get binary data - BinaryField returns bytes
+        image_data = submission.tree_image
+        if isinstance(image_data, memoryview):
+            image_data = bytes(image_data)
+        elif not isinstance(image_data, bytes):
+            image_data = bytes(image_data)
+        
+        # Determine content type based on image format
+        if submission.image_format == 'JPEG':
+            content_type = 'image/jpeg'
+        elif submission.image_format == 'PNG':
+            content_type = 'image/png'
+        else:
+            content_type = 'image/jpeg'  # Default
+        
+        # Create response with proper headers
+        response = HttpResponse(image_data, content_type=content_type)
+        response['Content-Length'] = len(image_data)
+        response['Cache-Control'] = 'public, max-age=3600'
+        
+        return response
+        
+    except TreePhotoSubmission.DoesNotExist:
+        return HttpResponseNotFound("Image not found")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HttpResponseServerError(f"Error serving image: {str(e)}")

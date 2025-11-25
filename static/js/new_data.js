@@ -10,6 +10,84 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentDeleteId = null;
     let currentRecord = null;
     
+    // Image Preview Functionality
+    function setupImagePreview() {
+        // Handle view image button clicks
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.view-image-btn')) {
+                e.preventDefault();
+                const btn = e.target.closest('.view-image-btn');
+                const imageUrl = btn.getAttribute('data-image-url');
+                const description = btn.getAttribute('data-description');
+                const personName = btn.getAttribute('data-person-name');
+                const latitude = btn.getAttribute('data-latitude');
+                const longitude = btn.getAttribute('data-longitude');
+                const createdAt = btn.getAttribute('data-created-at');
+                
+                showImagePreview(imageUrl, description, personName, latitude, longitude, createdAt);
+            }
+        });
+    }
+    
+    function showImagePreview(imageUrl, description, personName, latitude, longitude, createdAt) {
+        const container = document.getElementById('imagePreviewContainer');
+        const infoSection = document.getElementById('imagePreviewInfo');
+        
+        if (!container) return;
+        
+        // Clear previous content
+        container.innerHTML = '';
+        
+        // Show loading state
+        container.innerHTML = `
+            <div class="image-preview-placeholder">
+                <i class="fas fa-spinner fa-spin"></i>
+                <p>Loading image...</p>
+            </div>
+        `;
+        
+        // Create and add image
+        const img = document.createElement('img');
+        img.alt = description || 'Tree image';
+        img.style.maxWidth = '100%';
+        img.style.maxHeight = '100%';
+        img.style.objectFit = 'contain';
+        img.style.borderRadius = '4px';
+        
+        // Handle image load error with more details
+        img.onerror = function() {
+            console.error('Image load error:', imageUrl);
+            container.innerHTML = `
+                <div class="image-preview-placeholder">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Failed to load image</p>
+                    <p style="font-size: 0.8rem; margin-top: 10px; color: #888;">URL: ${imageUrl}</p>
+                </div>
+            `;
+        };
+        
+        // Load image
+        img.onload = function() {
+            container.innerHTML = '';
+            container.appendChild(img);
+        };
+        
+        // Set image source after setting up handlers
+        img.src = imageUrl;
+        
+        // Update info section
+        if (infoSection) {
+            document.getElementById('previewDescription').textContent = description || 'N/A';
+            document.getElementById('previewPersonName').textContent = personName || 'N/A';
+            document.getElementById('previewLocation').textContent = 
+                (latitude !== 'N/A' && longitude !== 'N/A') 
+                    ? `${latitude}, ${longitude}` 
+                    : 'N/A';
+            document.getElementById('previewDate').textContent = createdAt || 'N/A';
+            infoSection.style.display = 'block';
+        }
+    }
+    
     // Update stats
     function updateStats() {
         const rows = document.querySelectorAll('#dataTableBody tr:not(.empty-row)');
@@ -101,6 +179,9 @@ document.addEventListener("DOMContentLoaded", () => {
     bindImportHealthListeners();
     // Initialize message once on load
     validateImportHealthCounts();
+    
+    // Initialize image preview
+    setupImagePreview();
 
     // Also re-validate whenever the modal becomes visible
     if (importModalElement) {
@@ -140,11 +221,15 @@ document.addEventListener("DOMContentLoaded", () => {
                 tree_description: this.getAttribute('data-tree-description'),
                 latitude: this.getAttribute('data-latitude'),
                 longitude: this.getAttribute('data-longitude'),
-                person_name: this.getAttribute('data-person-name')
+                person_name: this.getAttribute('data-person-name'),
+                image_url: this.getAttribute('data-image-url')
             };
             
-            // Populate the import form with Supabase data
+            // Populate the import form with public submission data
             populateImportForm(currentRecord);
+            
+            // Show image preview
+            showImportImagePreview(currentRecord.image_url);
             
             importModal.show();
         });
@@ -286,10 +371,11 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('importLatitude').value = record.latitude || '';
         document.getElementById('importLongitude').value = record.longitude || '';
         document.getElementById('importPopulation').value = '1'; // Default population
+        document.getElementById('importHectares').value = '1.0'; // Default hectares
         document.getElementById('importYear').value = new Date().getFullYear();
         document.getElementById('importHealthStatus').value = 'good'; // Default health status
         document.getElementById('importLocationName').value = `Location for ${commonName}`;
-        document.getElementById('importNotes').value = `Imported from Supabase. Original description: ${treeDescription}. Reported by: ${record.person_name || 'Unknown'}`;
+        document.getElementById('importNotes').value = `Imported from public submission. Original description: ${treeDescription}. Reported by: ${record.person_name || 'Unknown'}`;
 
         // Initialize health distribution defaults
         const popInput = document.getElementById('importPopulation');
@@ -304,14 +390,36 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     
+    // Show image preview in import modal
+    function showImportImagePreview(imageUrl) {
+        const imagePreviewSection = document.getElementById('importImagePreviewSection');
+        const imagePreview = document.getElementById('importImagePreview');
+        const imagePlaceholder = document.getElementById('importImagePlaceholder');
+        
+        if (!imagePreviewSection) return;
+        
+        if (imageUrl && imageUrl.trim() !== '') {
+            imagePreview.src = imageUrl;
+            imagePreview.style.display = 'block';
+            imagePlaceholder.style.display = 'none';
+            imagePreviewSection.style.display = 'block';
+        } else {
+            imagePreview.style.display = 'none';
+            imagePlaceholder.style.display = 'block';
+            imagePreviewSection.style.display = 'block';
+        }
+    }
+    
     // Import data with form function
     function importDataWithForm() {
         const form = document.getElementById('importForm');
         const formData = new FormData(form);
         
         // Convert FormData to JSON
+        // Get submission_id from the hidden field (it's named 'submission_id' in the form)
+        const submissionId = formData.get('submission_id') || document.getElementById('importSupabaseId').value;
         const data = {
-            supabase_id: formData.get('supabase_id'),
+            supabase_id: submissionId,  // API expects 'supabase_id' but form field is 'submission_id'
             common_name: formData.get('common_name'),
             scientific_name: formData.get('scientific_name'),
             family: formData.get('family'),
@@ -319,11 +427,15 @@ document.addEventListener("DOMContentLoaded", () => {
             latitude: parseFloat(formData.get('latitude')),
             longitude: parseFloat(formData.get('longitude')),
             population: parseInt(formData.get('population')),
+            hectares: parseFloat(formData.get('hectares')),
             year: parseInt(formData.get('year')),
             health_status: formData.get('health_status'),
             location_name: formData.get('location_name'),
             notes: formData.get('notes')
         };
+        
+        // Debug: log the submission_id being sent
+        console.log('Importing with submission_id:', submissionId);
 
         // Include health distribution counts in payload for server-side validation (even if not stored)
         const healthy = document.getElementById('import_healthy_count');

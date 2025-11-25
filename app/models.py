@@ -98,7 +98,10 @@ class EndemicTree(models.Model):
     good_count = models.IntegerField(default=0, help_text="Number of trees in good condition")
     bad_count = models.IntegerField(default=0, help_text="Number of trees in bad condition (poor/very_poor)")
     deceased_count = models.IntegerField(default=0, help_text="Number of deceased trees")
+    hectares = models.FloatField(help_text="Area covered in hectares")
     notes = models.TextField(blank=True, null=True)
+    # Image shared by all trees with same location, common_name, and scientific_name
+    image = models.ImageField(upload_to='trees/', null=True, blank=True, help_text="Image for this tree species at this location (shared by all trees with same location, common_name, and scientific_name)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -129,6 +132,7 @@ class TreeSeed(models.Model):
     ], default='not_germinated')
     germination_date = models.DateField(null=True, blank=True, help_text="Date when germination was first observed")
     survival_rate = models.FloatField(null=True, blank=True, help_text="Percentage of seeds that survived (0-100)")
+    hectares = models.FloatField(help_text="Area covered in hectares")
     expected_maturity_date = models.DateField(null=True, blank=True)
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
