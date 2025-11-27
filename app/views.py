@@ -33,10 +33,12 @@ from .forms import (
 )
 
 
-def get_setting(key, default=None):
+def get_setting(user, key, default=None):
     """Helper function to get a setting value"""
+    if not user.is_authenticated:
+        return default
     try:
-        return UserSetting.objects.get(key=key).value
+        return UserSetting.objects.get(user=user, key=key).value
     except UserSetting.DoesNotExist:
         return default
 
@@ -62,7 +64,8 @@ def user_login(request):
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
-            login(request, user)
+            # Specify the backend since we have multiple backends
+            login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             messages.success(request, f"Welcome back, {username}!")
 
             # Redirect to the page they were trying to access, or dashboard
@@ -71,11 +74,11 @@ def user_login(request):
         else:
             return render(request, 'app/login.html', {
                 'error_message': 'Invalid username or password',
-                'theme': get_setting('theme', 'dark')
+                'theme': get_setting(request.user, 'theme', 'dark')
             })
 
     return render(request, 'app/login.html', {
-        'theme': get_setting('theme', 'dark')
+        'theme': get_setting(request.user, 'theme', 'dark')
     })
 
 
@@ -105,19 +108,19 @@ def register(request):
         if password1 != password2:
             return render(request, 'app/register.html', {
                 'error_message': 'Passwords do not match',
-                'theme': get_setting('theme', 'dark')
+                'theme': get_setting(request.user, 'theme', 'dark')
             })
 
         if User.objects.filter(username=username).exists():
             return render(request, 'app/register.html', {
                 'error_message': 'Username already exists',
-                'theme': get_setting('theme', 'dark')
+                'theme': get_setting(request.user, 'theme', 'dark')
             })
 
         if User.objects.filter(email=email).exists():
             return render(request, 'app/register.html', {
                 'error_message': 'Email already exists',
-                'theme': get_setting('theme', 'dark')
+                'theme': get_setting(request.user, 'theme', 'dark')
             })
 
         # Create user
@@ -127,13 +130,13 @@ def register(request):
             password=password1
         )
 
-        # Log the user in
-        login(request, user)
+        # Log the user in - specify the backend since we have multiple backends
+        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
         messages.success(request, f"Account created successfully. Welcome, {username}!")
         return redirect('app:dashboard')
 
     return render(request, 'app/register.html', {
-        'theme': get_setting('theme', 'dark')
+        'theme': get_setting(request.user, 'theme', 'dark')
     })
 
 
@@ -144,14 +147,15 @@ def dashboard(request):
     """
     try:
         # Get basic stats for dashboard with proper null checks
-        total_trees = EndemicTree.objects.count()
-        unique_species = TreeSpecies.objects.count()
-        tree_population = EndemicTree.objects.aggregate(total_population=Sum('population'))['total_population'] or 0
+        total_trees = EndemicTree.objects.filter(user=request.user).count()
+        unique_species = TreeSpecies.objects.filter(user=request.user).count()
+        tree_population = EndemicTree.objects.filter(user=request.user).aggregate(total_population=Sum('population'))['total_population'] or 0
 
         # Calculate health percentage (trees in good health or better)
         total_population = tree_population or 0  # Avoid division by zero
         if total_population > 0:
             good_health_population = EndemicTree.objects.filter(
+                user=request.user,
                 health_status__in=['good', 'very_good', 'excellent']
             ).aggregate(total=Sum('population'))['total'] or 0
             health_percentage = round((good_health_population / total_population) * 100)
@@ -159,20 +163,20 @@ def dashboard(request):
             health_percentage = 0
 
         # Get health status distribution for chart
-        health_data = list(EndemicTree.objects.values('health_status').annotate(
+        health_data = list(EndemicTree.objects.filter(user=request.user).values('health_status').annotate(
             count=Sum('population')  # Changed from Count('id') to Sum('population')
         ).order_by('health_status'))
 
         # Get most recent data
-        recent_trees = EndemicTree.objects.select_related('species', 'location').all().order_by('-created_at')[:5]
+        recent_trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all().order_by('-created_at')[:5]
 
         # Get species by family for chart with null checks
-        species_by_family = list(TreeFamily.objects.annotate(
+        species_by_family = list(TreeFamily.objects.filter(user=request.user).annotate(
             total_population=Sum('genera__species__trees__population')
         ).values('name', 'total_population').order_by('-total_population')[:10])
 
         # Get population by year with proper aggregation and null checks
-        population_by_year = list(EndemicTree.objects.values('year')
+        population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year')
             .annotate(total=Sum('population'))
             .order_by('year'))
 
@@ -222,16 +226,17 @@ def gis(request):
     GIS Map view
     """
     # Get all available map layers
-    layers = MapLayer.objects.filter(is_active=True)
+    layers = MapLayer.objects.filter(user=request.user, is_active=True)
 
     # Get only tree species that have associated trees
     tree_species = TreeSpecies.objects.filter(
+        user=request.user,
         trees__isnull=False  # Only species that have trees
     ).distinct().order_by('common_name')  # Remove duplicates and order by common name
 
     # Get default pin style
     try:
-        default_pin = PinStyle.objects.get(is_default=True)
+        default_pin = PinStyle.objects.get(user=request.user, is_default=True)
     except PinStyle.DoesNotExist:
         default_pin = None
 
@@ -251,7 +256,7 @@ def analytics(request):
     """
     try:
         # Check if there's any data in the database
-        if not EndemicTree.objects.exists():
+        if not EndemicTree.objects.filter(user=request.user).exists():
             return render(request, 'app/analytics.html', {
                 'active_page': 'analytics',
                 'population_data': '[]',
@@ -265,31 +270,31 @@ def analytics(request):
             })
 
         # Population by year with proper aggregation
-        population_by_year = list(EndemicTree.objects.values('year')
+        population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year')
             .annotate(total=Sum('population'))
             .order_by('year'))
 
         # Health status distribution with population counts
-        health_status_data = list(EndemicTree.objects.values('health_status')
+        health_status_data = list(EndemicTree.objects.filter(user=request.user).values('health_status')
             .annotate(count=Sum('population'))
             .order_by('health_status'))
 
         # Family distribution data
-        family_data = list(TreeFamily.objects.annotate(
+        family_data = list(TreeFamily.objects.filter(user=request.user).annotate(
             total_population=Sum('genera__species__trees__population'),
             species_count=Count('genera__species', distinct=True)
         ).values('name', 'total_population', 'species_count')
         .order_by('-total_population')[:10])
 
         # Species distribution by genus
-        genus_data = list(TreeGenus.objects.annotate(
+        genus_data = list(TreeGenus.objects.filter(user=request.user).annotate(
             total_population=Sum('species__trees__population'),
             species_count=Count('species', distinct=True)
         ).values('name', 'family__name', 'total_population', 'species_count')
         .order_by('-total_population')[:10])
 
         # Species data with population
-        species_data = list(TreeSpecies.objects.annotate(
+        species_data = list(TreeSpecies.objects.filter(user=request.user).annotate(
             total_population=Sum('trees__population'),
             locations_count=Count('trees__location', distinct=True)
         ).values('common_name', 'scientific_name', 'total_population', 'locations_count')
@@ -313,7 +318,7 @@ def analytics(request):
                 })
 
         # Location-based distribution
-        location_data = list(Location.objects.annotate(
+        location_data = list(Location.objects.filter(user=request.user).annotate(
             total_trees=Sum('trees__population'),
             species_count=Count('trees__species', distinct=True)
         ).values('name', 'latitude', 'longitude', 'total_trees', 'species_count')
@@ -321,7 +326,7 @@ def analytics(request):
         .order_by('-total_trees'))
 
         # Health status by year
-        health_by_year = list(EndemicTree.objects.values('year', 'health_status')
+        health_by_year = list(EndemicTree.objects.filter(user=request.user).values('year', 'health_status')
             .annotate(population=Sum('population'))
             .order_by('year', 'health_status'))
 
@@ -381,7 +386,7 @@ def layers(request):
     """
     Layer control view
     """
-    layers = MapLayer.objects.all()
+    layers = MapLayer.objects.filter(user=request.user)
 
     context = {
         'active_page': 'layers',
@@ -395,9 +400,9 @@ def datasets(request):
     """
     Display and manage datasets
     """
-    trees = EndemicTree.objects.select_related('species', 'location').all()
-    seeds = TreeSeed.objects.select_related('species', 'location').all()
-    species_list = TreeSpecies.objects.all().order_by('common_name')
+    trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
+    seeds = TreeSeed.objects.filter(user=request.user).select_related('species', 'location').all()
+    species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
 
     context = {
         'active_page': 'datasets',
@@ -446,17 +451,22 @@ def upload_data(request):
                     for _, row in df.iterrows():
                         try:
                             # Get or create family
-                            family, _ = TreeFamily.objects.get_or_create(name=row['family'])
+                            family, _ = TreeFamily.objects.get_or_create(
+                                name=row['family'],
+                                user=request.user
+                            )
 
                             # Get or create genus
                             genus, _ = TreeGenus.objects.get_or_create(
                                 name=row['genus'],
+                                user=request.user,
                                 defaults={'family': family}
                             )
 
                             # Get or create species
                             species, _ = TreeSpecies.objects.get_or_create(
                                 scientific_name=row['scientific_name'],
+                                user=request.user,
                                 defaults={
                                     'common_name': row['common_name'],
                                     'genus': genus
@@ -467,6 +477,7 @@ def upload_data(request):
                             location, created = Location.objects.get_or_create(
                                 latitude=row['latitude'],
                                 longitude=row['longitude'],
+                                user=request.user,
                                 defaults={'name': f"{row['common_name']} location"}
                             )
                             
@@ -508,7 +519,8 @@ def upload_data(request):
                                 bad_count=bad_count,
                                 deceased_count=deceased_count,
                                 hectares=hectares,
-                                notes=notes
+                                notes=notes,
+                                user=request.user
                             )
                             tree.save()
                             success_count += 1
@@ -578,17 +590,19 @@ def upload_data(request):
                 notes = request.POST.get('notes', '')
 
                 # Get or create family
-                family, created = TreeFamily.objects.get_or_create(name=family_name)
+                family, created = TreeFamily.objects.get_or_create(name=family_name, user=request.user)
 
                 # Get or create genus
                 genus, created = TreeGenus.objects.get_or_create(
                     name=genus_name,
+                    user=request.user,
                     defaults={'family': family}
                 )
 
                 # Get or create species
                 species, created = TreeSpecies.objects.get_or_create(
                     scientific_name=scientific_name,
+                    user=request.user,
                     defaults={
                         'common_name': common_name,
                         'genus': genus
@@ -599,6 +613,7 @@ def upload_data(request):
                 location, created = Location.objects.get_or_create(
                     latitude=latitude,
                     longitude=longitude,
+                    user=request.user,
                     defaults={'name': f"{common_name} Location"}
                 )
                 
@@ -615,7 +630,8 @@ def upload_data(request):
                 # This ensures all trees with same location, common_name, and scientific_name share the same image
                 existing_tree = EndemicTree.objects.filter(
                     species=species,  # Same common_name + scientific_name
-                    location=location  # Same location (latitude + longitude)
+                    location=location,  # Same location (latitude + longitude)
+                    user=request.user
                 ).exclude(image__isnull=True).exclude(image='').first()
                 
                 # Handle image upload
@@ -641,7 +657,8 @@ def upload_data(request):
                     # Note: Trees with same species but different location will NOT be updated
                     for existing_tree_obj in EndemicTree.objects.filter(
                         species=species,  # Same common_name + scientific_name
-                        location=location  # Same location
+                        location=location,  # Same location
+                        user=request.user
                     ):
                         # Create a new ContentFile for each existing tree
                         existing_image_file = ContentFile(image_data, name=image_file.name)
@@ -666,7 +683,8 @@ def upload_data(request):
                     deceased_count=deceased_count,
                     year=year,
                     hectares=hectares,
-                    notes=notes
+                    notes=notes,
+                    user=request.user
                 )
                 # Save tree first to get an ID
                 tree.save()
@@ -726,15 +744,17 @@ def upload_data(request):
                 notes = request.POST.get('seed_notes', '')
 
                 # Get or create family and genus by name
-                family, _ = TreeFamily.objects.get_or_create(name=family_name)
+                family, _ = TreeFamily.objects.get_or_create(name=family_name, user=request.user)
                 genus, _ = TreeGenus.objects.get_or_create(
                     name=genus_name,
+                    user=request.user,
                     defaults={'family': family}
                 )
 
                 # Get or create species
                 species, created = TreeSpecies.objects.get_or_create(
                     scientific_name=scientific_name,
+                    user=request.user,
                     defaults={
                         'common_name': common_name,
                         'genus': genus
@@ -745,6 +765,7 @@ def upload_data(request):
                 location, created = Location.objects.get_or_create(
                     latitude=latitude,
                     longitude=longitude,
+                    user=request.user,
                     defaults={'name': f"{common_name} Seed Planting Location"}
                 )
                 
@@ -764,7 +785,8 @@ def upload_data(request):
                     survival_rate=survival_rate,
                     hectares=hectares,
                     expected_maturity_date=expected_maturity_date,
-                    notes=notes
+                    notes=notes,
+                    user=request.user
                 )
 
                 messages.success(request, f"Successfully added {common_name} seed planting record.")
@@ -775,8 +797,8 @@ def upload_data(request):
                 print(f"Error in seed entry: {str(e)}")
 
     # Get all families and genera for the form
-    families = TreeFamily.objects.all()
-    genera = TreeGenus.objects.all()
+    families = TreeFamily.objects.filter(user=request.user).all()
+    genera = TreeGenus.objects.filter(user=request.user).all()
 
     context = {
         'active_page': 'upload',
@@ -794,24 +816,24 @@ def settings(request):
     Application settings
     """
     # Get all pin styles
-    pin_styles = PinStyle.objects.all()
+    pin_styles = PinStyle.objects.filter(user=request.user).all()
 
     # Create a new pin style form
     pin_style_form = PinStyleForm()
 
     # Initialize form with current settings
     try:
-        current_theme = UserSetting.objects.get(key='theme').value
+        current_theme = UserSetting.objects.get(user=request.user, key='theme').value
     except UserSetting.DoesNotExist:
         current_theme = 'dark'  # Default
 
     try:
-        current_map_style = UserSetting.objects.get(key='map_style').value
+        current_map_style = UserSetting.objects.get(user=request.user, key='map_style').value
     except UserSetting.DoesNotExist:
         current_map_style = 'dark'  # Default
 
     try:
-        current_pin_style = PinStyle.objects.get(is_default=True)
+        current_pin_style = PinStyle.objects.get(user=request.user, is_default=True)
     except PinStyle.DoesNotExist:
         if pin_styles.exists():
             current_pin_style = pin_styles.first()
@@ -825,15 +847,16 @@ def settings(request):
                 border_color="#ffffff",
                 border_width=2,
                 background_color="rgba(0, 0, 0, 0.6)",
-                is_default=True
+                is_default=True,
+                user=request.user
             )
 
     # Get other settings
-    enable_animations = get_setting('enable_animations', 'true') == 'true'
-    high_contrast = get_setting('high_contrast', 'false') == 'true'
-    font_size = int(get_setting('font_size', '100'))
-    default_zoom = int(get_setting('default_zoom', '9'))
-    show_scientific_names = get_setting('show_scientific_names', 'true') == 'true'
+    enable_animations = get_setting(request.user, 'enable_animations', 'true') == 'true'
+    high_contrast = get_setting(request.user, 'high_contrast', 'false') == 'true'
+    font_size = int(get_setting(request.user, 'font_size', '100'))
+    default_zoom = int(get_setting(request.user, 'default_zoom', '9'))
+    show_scientific_names = get_setting(request.user, 'show_scientific_names', 'true') == 'true'
 
     initial_data = {
         'theme': current_theme,
@@ -846,11 +869,11 @@ def settings(request):
         'show_scientific_names': show_scientific_names,
     }
 
-    form = ThemeSettingsForm(initial=initial_data)
+    form = ThemeSettingsForm(user=request.user, initial=initial_data)
 
     if request.method == 'POST':
         if 'save_settings' in request.POST:
-            form = ThemeSettingsForm(request.POST)
+            form = ThemeSettingsForm(request.POST, user=request.user)
             if form.is_valid():
                 # Save all settings
                 settings_to_save = {
@@ -866,6 +889,7 @@ def settings(request):
                 for key, value in settings_to_save.items():
                     UserSetting.objects.update_or_create(
                         key=key,
+                        user=request.user,
                         defaults={'value': value}
                     )
 
@@ -880,7 +904,9 @@ def settings(request):
         elif 'add_pin_style' in request.POST:
             pin_style_form = PinStyleForm(request.POST)
             if pin_style_form.is_valid():
-                pin_style_form.save()
+                pin_style = pin_style_form.save(commit=False)
+                pin_style.user = request.user
+                pin_style.save()
                 messages.success(request, 'New pin style added successfully!')
                 return redirect('app:settings')
 
@@ -908,8 +934,8 @@ def about(request):
 def reports(request):
     """View for generating reports."""
     # Get all species and locations for the filters - fresh from database
-    species_list = TreeSpecies.objects.all().order_by('common_name')
-    location_list = Location.objects.all().order_by('name')
+    species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
+    location_list = Location.objects.filter(user=request.user).all().order_by('name')
 
     return render(request, 'app/reports.html', {
         'active_page': 'reports',
@@ -923,7 +949,7 @@ def api_species_list(request):
     """API endpoint to get current list of species for dropdown updates."""
     try:
         # Force fresh query from database - no caching
-        species_list = TreeSpecies.objects.all().order_by('common_name')
+        species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
         species_data = [
             {
                 'id': str(species.id),
@@ -1011,8 +1037,8 @@ def new_data(request):
             print("Sample record:", public_data[0])
         
         # Get existing species and locations for reference
-        species_list = TreeSpecies.objects.all().order_by('common_name')
-        location_list = Location.objects.all().order_by('name')
+        species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
+        location_list = Location.objects.filter(user=request.user).all().order_by('name')
         
         context = {
             'active_page': 'new_data',
@@ -1184,7 +1210,7 @@ def tree_data(request):
     API endpoint for tree data in GeoJSON format
     """
     try:
-        trees = EndemicTree.objects.select_related('species', 'location').all()
+        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
 
         # No species-wide aggregation here. For the popup we return per-record distribution
         # derived strictly from the current row's health_status and population.
@@ -1264,7 +1290,7 @@ def seed_data(request):
     API endpoint for seed data in GeoJSON format
     """
     try:
-        seeds = TreeSeed.objects.select_related('species', 'location').all()
+        seeds = TreeSeed.objects.filter(user=request.user).select_related('species', 'location').all()
 
         # Log the count of seeds for debugging
         seed_count = seeds.count()
@@ -1330,16 +1356,16 @@ def filter_trees(request, species_id):
     """
     try:
         # Check if the species exists first
-        species = get_object_or_404(TreeSpecies, id=species_id)
+        species = get_object_or_404(TreeSpecies, id=species_id, user=request.user)
 
         # Get trees for this species
-        trees = EndemicTree.objects.filter(species_id=species_id).select_related('species', 'location')
+        trees = EndemicTree.objects.filter(species_id=species_id, user=request.user).select_related('species', 'location')
 
         # For filtered endpoint, still return per-record distribution (not species aggregate)
 
         # Get pin style
         try:
-            pin_style = PinStyle.objects.get(is_default=True)
+            pin_style = PinStyle.objects.get(user=request.user, is_default=True)
         except PinStyle.DoesNotExist:
             pin_style = None
 
@@ -1405,22 +1431,22 @@ def analytics_data(request):
     API endpoint for analytics data
     """
     # Species count
-    species_count = list(TreeSpecies.objects.annotate(
+    species_count = list(TreeSpecies.objects.filter(user=request.user).annotate(
         count=Count('trees')
     ).values('common_name', 'count').order_by('-count')[:10])
 
     # Population by year
-    population_by_year = list(EndemicTree.objects.values('year').annotate(
+    population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year').annotate(
         total=Sum('population')
     ).order_by('year'))
 
     # Population by family
-    population_by_family = list(TreeFamily.objects.annotate(
+    population_by_family = list(TreeFamily.objects.filter(user=request.user).annotate(
         total=Sum('genera__species__trees__population')
     ).values('name', 'total').order_by('-total')[:10])
 
     # Health status distribution with detailed counts
-    health_status_data = list(EndemicTree.objects.values('health_status').annotate(
+    health_status_data = list(EndemicTree.objects.filter(user=request.user).values('health_status').annotate(
         count=Count('id'),
         total_healthy=Sum('healthy_count'),
         total_good=Sum('good_count'),
@@ -1429,7 +1455,7 @@ def analytics_data(request):
     ).order_by('health_status'))
 
     # Health status by year with detailed counts
-    health_by_year_data = list(EndemicTree.objects.values('year', 'health_status').annotate(
+    health_by_year_data = list(EndemicTree.objects.filter(user=request.user).values('year', 'health_status').annotate(
         count=Count('id'),
         total_healthy=Sum('healthy_count'),
         total_good=Sum('good_count'),
@@ -1438,7 +1464,7 @@ def analytics_data(request):
     ).order_by('year', 'health_status'))
 
     # Calculate overall health metrics
-    total_trees = EndemicTree.objects.aggregate(
+    total_trees = EndemicTree.objects.filter(user=request.user).aggregate(
         total_healthy=Sum('healthy_count'),
         total_good=Sum('good_count'),
         total_bad=Sum('bad_count'),
@@ -1464,13 +1490,13 @@ def analytics_data(request):
 
     # Historical data analytics based on year
     # Get unique years
-    years = EndemicTree.objects.values('year').distinct().order_by('year')
+    years = EndemicTree.objects.filter(user=request.user).values('year').distinct().order_by('year')
     year_list = [item['year'] for item in years]
 
     # Species richness by year
     species_richness_by_year = []
     for year in year_list:
-        species_count = TreeSpecies.objects.filter(trees__year=year).distinct().count()
+        species_count = TreeSpecies.objects.filter(user=request.user, trees__year=year).distinct().count()
         species_richness_by_year.append({
             'year': year,
             'richness': species_count
@@ -1512,7 +1538,7 @@ def analytics_data(request):
         })
 
     # Top species by population (for charts fallback)
-    species_population = list(TreeSpecies.objects.annotate(
+    species_population = list(TreeSpecies.objects.filter(user=request.user).annotate(
         total_population=Sum('trees__population'),
         locations_count=Count('trees__location', distinct=True)
     ).values('common_name', 'scientific_name', 'total_population', 'locations_count')
@@ -1545,6 +1571,7 @@ def set_theme(request):
     if theme in ['dark', 'light', 'nature']:
         UserSetting.objects.update_or_create(
             key='theme',
+            user=request.user,
             defaults={'value': theme}
         )
         return JsonResponse({'status': 'success', 'theme': theme})
@@ -1561,6 +1588,7 @@ def set_map_style(request):
     if style in ['dark', 'normal', 'light', 'satellite', 'topographic']:
         UserSetting.objects.update_or_create(
             key='map_style',
+            user=request.user,
             defaults={'value': style}
         )
         return JsonResponse({'status': 'success', 'style': style})
@@ -1575,7 +1603,7 @@ def set_pin_style(request):
     """
     pin_style_id = request.POST.get('pin_style_id')
     try:
-        pin_style = PinStyle.objects.get(id=pin_style_id)
+        pin_style = PinStyle.objects.get(id=pin_style_id, user=request.user)
         pin_style.is_default = True
         pin_style.save()
         return JsonResponse({'status': 'success', 'pin_style_id': pin_style_id})
@@ -1594,6 +1622,7 @@ def save_setting(request):
     if key and value is not None:
         UserSetting.objects.update_or_create(
             key=key,
+            user=request.user,
             defaults={'value': value}
         )
         return JsonResponse({'status': 'success', 'key': key, 'value': value})
@@ -1605,7 +1634,7 @@ def save_setting(request):
 def edit_tree(request, tree_id):
     """View for editing a tree record."""
     try:
-        tree = get_object_or_404(EndemicTree, id=tree_id)
+        tree = get_object_or_404(EndemicTree, id=tree_id, user=request.user)
         
         if request.method == 'POST':
             try:
@@ -1656,7 +1685,8 @@ def edit_tree(request, tree_id):
                     from .models import Location
                     tree.location = Location.objects.create(
                         latitude=latitude,
-                        longitude=longitude
+                        longitude=longitude,
+                        user=request.user
                     )
                 else:
                     tree.location.latitude = latitude
@@ -1672,7 +1702,8 @@ def edit_tree(request, tree_id):
                     # We need to copy the file for each tree, not just reference it
                     for existing_tree in EndemicTree.objects.filter(
                         species=tree.species,
-                        location=tree.location
+                        location=tree.location,
+                        user=request.user
                     ).exclude(id=tree.id):
                         if not existing_tree.image:
                             # Read the image file and create a copy
@@ -1756,7 +1787,7 @@ def cleanup_orphaned_taxonomy(species):
 def delete_tree(request, tree_id):
     """View for deleting a tree record."""
     try:
-        tree = get_object_or_404(EndemicTree, id=tree_id)
+        tree = get_object_or_404(EndemicTree, id=tree_id, user=request.user)
         location = tree.location
         species = tree.species  # Store species before deleting tree
         
@@ -1797,7 +1828,7 @@ def delete_trees_bulk(request):
             }, status=400)
         
         # Get all trees to delete
-        trees = EndemicTree.objects.filter(id__in=tree_ids)
+        trees = EndemicTree.objects.filter(id__in=tree_ids, user=request.user)
         deleted_count = 0
         locations_to_check = []
         species_to_check = set()  # Use set to avoid duplicates
@@ -1837,14 +1868,14 @@ def delete_all_trees(request):
     """View for deleting all tree records."""
     try:
         # Get count before deletion
-        total_count = EndemicTree.objects.count()
+        total_count = EndemicTree.objects.filter(user=request.user).count()
         
         # Get all locations and species to check after deletion
-        locations_to_check = list(Location.objects.filter(trees__isnull=False).distinct())
-        species_to_check = set(TreeSpecies.objects.filter(trees__isnull=False).distinct())
+        locations_to_check = list(Location.objects.filter(user=request.user, trees__isnull=False).distinct())
+        species_to_check = set(TreeSpecies.objects.filter(user=request.user, trees__isnull=False).distinct())
         
         # Delete all trees
-        EndemicTree.objects.all().delete()
+        EndemicTree.objects.filter(user=request.user).delete()
         
         # Delete locations that are no longer used
         for location in locations_to_check:
@@ -1871,7 +1902,7 @@ def delete_all_trees(request):
 def delete_seed(request, seed_id):
     """View for deleting a seed record."""
     try:
-        seed = get_object_or_404(TreeSeed, id=seed_id)
+        seed = get_object_or_404(TreeSeed, id=seed_id, user=request.user)
         location = seed.location
         species = seed.species
         seed.delete()
@@ -1911,7 +1942,7 @@ def delete_seeds_bulk(request):
             }, status=400)
         
         # Get all seeds to delete
-        seeds = TreeSeed.objects.filter(id__in=seed_ids)
+        seeds = TreeSeed.objects.filter(id__in=seed_ids, user=request.user)
         deleted_count = 0
         locations_to_check = []
         species_to_check = set()
@@ -1951,14 +1982,14 @@ def delete_all_seeds(request):
     """View for deleting all seed records."""
     try:
         # Get count before deletion
-        total_count = TreeSeed.objects.count()
+        total_count = TreeSeed.objects.filter(user=request.user).count()
         
         # Get all locations and species to check after deletion
-        locations_to_check = list(Location.objects.filter(seeds__isnull=False).distinct())
-        species_to_check = set(TreeSpecies.objects.filter(seeds__isnull=False).distinct())
+        locations_to_check = list(Location.objects.filter(user=request.user, seeds__isnull=False).distinct())
+        species_to_check = set(TreeSpecies.objects.filter(user=request.user, seeds__isnull=False).distinct())
         
         # Delete all seeds
-        TreeSeed.objects.all().delete()
+        TreeSeed.objects.filter(user=request.user).delete()
         
         # Delete locations that are no longer used
         for location in locations_to_check:
@@ -1984,7 +2015,7 @@ def delete_all_seeds(request):
 def edit_seed(request, seed_id):
     """View for editing a seed record."""
     try:
-        seed = get_object_or_404(TreeSeed, id=seed_id)
+        seed = get_object_or_404(TreeSeed, id=seed_id, user=request.user)
         
         if request.method == 'POST':
             try:
@@ -2045,7 +2076,8 @@ def edit_seed(request, seed_id):
                 if not seed.location:
                     seed.location = Location.objects.create(
                         latitude=latitude,
-                        longitude=longitude
+                        longitude=longitude,
+                        user=request.user
                     )
                 else:
                     seed.location.latitude = latitude
@@ -2314,12 +2346,13 @@ def api_supabase_data(request):
             
             # Create or get family
             family_name = data.get('family')
-            family, _ = TreeFamily.objects.get_or_create(name=family_name)
+            family, _ = TreeFamily.objects.get_or_create(name=family_name, user=request.user)
             
             # Create or get genus
             genus_name = data.get('genus')
             genus, _ = TreeGenus.objects.get_or_create(
                 name=genus_name,
+                user=request.user,
                 defaults={'family': family}
             )
             
@@ -2328,6 +2361,7 @@ def api_supabase_data(request):
             common_name = data.get('common_name')
             species, _ = TreeSpecies.objects.get_or_create(
                 scientific_name=scientific_name,
+                user=request.user,
                 defaults={
                     'common_name': common_name,
                     'genus': genus
@@ -2342,6 +2376,7 @@ def api_supabase_data(request):
             location, _ = Location.objects.get_or_create(
                 latitude=latitude,
                 longitude=longitude,
+                user=request.user,
                 defaults={'name': location_name}
             )
             
@@ -2365,7 +2400,8 @@ def api_supabase_data(request):
             # Check if there's an existing tree with same location and species
             existing_tree = EndemicTree.objects.filter(
                 species=species,
-                location=location
+                location=location,
+                user=request.user
             ).exclude(image__isnull=True).exclude(image='').first()
             
             # Get image from public submission if submission_id is provided
@@ -2423,8 +2459,10 @@ def api_supabase_data(request):
                 good_count=good_count,
                 bad_count=bad_count,
                 deceased_count=deceased_count,
+
                 hectares=hectares,
-                notes=data.get('notes', f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}")
+                notes=data.get('notes', f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}"),
+                user=request.user
             )
             
             # Save tree first to get an ID
@@ -2465,7 +2503,7 @@ def api_supabase_data(request):
                             image_data = bytes(image_data)
                         
                         extension = 'jpg' if submission.image_format == 'JPEG' else 'png'
-                        for existing in EndemicTree.objects.filter(species=species, location=location).exclude(id=tree.id):
+                        for existing in EndemicTree.objects.filter(species=species, location=location, user=request.user).exclude(id=tree.id):
                             if not existing.image:
                                 # Create a new ContentFile for each existing tree
                                 new_image_file = ContentFile(image_data, name=f'submission_{submission_id}_{existing.id}.{extension}')

@@ -17,13 +17,19 @@ class EndemicTreeForm(forms.Form):
     year = forms.IntegerField(required=True)
     notes = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, user=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if user:
+            self.fields['family'].queryset = TreeFamily.objects.filter(user=user)
+            self.fields['genus'].queryset = TreeGenus.objects.filter(user=user)
+        
         # Add dynamic filtering for genus based on selected family
         if 'family' in self.data:
             try:
                 family_id = int(self.data.get('family'))
                 self.fields['genus'].queryset = TreeGenus.objects.filter(family_id=family_id)
+                if user:
+                    self.fields['genus'].queryset = self.fields['genus'].queryset.filter(user=user)
             except (ValueError, TypeError):
                 pass
 
@@ -66,13 +72,19 @@ class TreeSeedForm(forms.Form):
     longitude = forms.FloatField(required=True, widget=forms.NumberInput(attrs={'step': '0.000001'}))
     notes = forms.CharField(widget=forms.Textarea(attrs={'rows': 3}), required=False)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, user=None, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        if user:
+            self.fields['family'].queryset = TreeFamily.objects.filter(user=user)
+            self.fields['genus'].queryset = TreeGenus.objects.filter(user=user)
+
         # Add dynamic filtering for genus based on selected family
         if 'family' in self.data:
             try:
                 family_id = int(self.data.get('family'))
                 self.fields['genus'].queryset = TreeGenus.objects.filter(family_id=family_id)
+                if user:
+                    self.fields['genus'].queryset = self.fields['genus'].queryset.filter(user=user)
             except (ValueError, TypeError):
                 pass
 
@@ -107,7 +119,10 @@ class ThemeSettingsForm(forms.Form):
     font_size = forms.IntegerField(min_value=80, max_value=120, initial=100)
     default_zoom = forms.IntegerField(min_value=5, max_value=15, initial=9)
     show_scientific_names = forms.BooleanField(required=False, initial=True)
-
+    def __init__(self, user=None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if user:
+            self.fields['pin_style'].queryset = PinStyle.objects.filter(user=user)
 
 class PinStyleForm(forms.ModelForm):
     class Meta:
