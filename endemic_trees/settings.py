@@ -60,6 +60,9 @@ ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
 ACCOUNT_EMAIL_VERIFICATION = 'none'  # Set to 'mandatory' for email verification
 ACCOUNT_UNIQUE_EMAIL = True
 
+# Custom social account adapter to handle multiple SocialApp objects
+SOCIALACCOUNT_ADAPTER = 'endemic_trees.adapters.CustomSocialAccountAdapter'
+
 # Google OAuth settings
 SOCIALACCOUNT_PROVIDERS = {
     'google': {
@@ -78,8 +81,8 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 
-LOGIN_REDIRECT_URL = '/public/'
-LOGOUT_REDIRECT_URL = '/public/'
+LOGIN_REDIRECT_URL = '/dashboard/'
+LOGOUT_REDIRECT_URL = '/login/'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',

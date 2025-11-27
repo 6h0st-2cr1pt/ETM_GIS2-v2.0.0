@@ -1,36 +1,41 @@
 from django.db import models
 from django.utils import timezone
 import uuid
+from django.contrib.auth.models import User
 
 
 class TreeFamily(models.Model):
     """Tree family classification"""
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
     class Meta:
         verbose_name_plural = "Tree Families"
+        unique_together = ['name', 'user']
 
 
 class TreeGenus(models.Model):
     """Tree genus classification"""
-    name = models.CharField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
     family = models.ForeignKey(TreeFamily, on_delete=models.CASCADE, related_name='genera')
     description = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
     class Meta:
         verbose_name_plural = "Tree Genera"
+        unique_together = ['name', 'user']
 
 
 class TreeSpecies(models.Model):
     """Tree species classification"""
-    scientific_name = models.CharField(max_length=100, unique=True)
+    scientific_name = models.CharField(max_length=100)
     common_name = models.CharField(max_length=100)
     genus = models.ForeignKey(TreeGenus, on_delete=models.CASCADE, related_name='species')
     description = models.TextField(blank=True, null=True)
@@ -38,12 +43,14 @@ class TreeSpecies(models.Model):
     conservation_status = models.CharField(max_length=50, blank=True, null=True)
     # Optional image representing the species used across all popups
     image = models.ImageField(upload_to='species/', null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return f"{self.common_name} ({self.scientific_name})"
 
     class Meta:
         verbose_name_plural = "Tree Species"
+        unique_together = ['scientific_name', 'user']
 
 
 class Location(models.Model):
@@ -53,6 +60,7 @@ class Location(models.Model):
     longitude = models.FloatField()
     elevation = models.FloatField(null=True, blank=True)
     description = models.TextField(blank=True, null=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.latitude}, {self.longitude})"
@@ -68,6 +76,7 @@ class PinStyle(models.Model):
     border_width = models.IntegerField(default=2)
     background_color = models.CharField(max_length=20, default="rgba(0, 0, 0, 0.6)")
     is_default = models.BooleanField(default=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -104,6 +113,7 @@ class EndemicTree(models.Model):
     image = models.ImageField(upload_to='trees/', null=True, blank=True, help_text="Image for this tree species at this location (shared by all trees with same location, common_name, and scientific_name)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return f"{self.species.common_name} at {self.location.name} ({self.year})"
@@ -137,6 +147,7 @@ class TreeSeed(models.Model):
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return f"{self.species.common_name} seeds at {self.location.name} ({self.planting_date})"
@@ -167,6 +178,7 @@ class MapLayer(models.Model):
     is_default = models.BooleanField(default=False)
     attribution = models.CharField(max_length=255, blank=True, null=True)
     z_index = models.IntegerField(default=0)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -180,8 +192,12 @@ class MapLayer(models.Model):
 
 class UserSetting(models.Model):
     """User application settings"""
-    key = models.CharField(max_length=50, unique=True)
+    key = models.CharField(max_length=50)
     value = models.TextField()
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
         return self.key
+
+    class Meta:
+        unique_together = ['key', 'user']
