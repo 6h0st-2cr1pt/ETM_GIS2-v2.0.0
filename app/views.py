@@ -1004,8 +1004,26 @@ def new_data(request):
     try:
         from public.models import TreePhotoSubmission
         
-        # Fetch data from public app TreePhotoSubmission
-        public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+        # Fetch all public submissions
+        all_public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+        
+        # Filter out submissions that have been imported by ANY user
+        # Once ANY user imports a submission, it should be removed from the table for all users
+        unimported_submission_ids = []
+        for submission in all_public_submissions:
+            # Check if there's ANY EndemicTree (regardless of user) with notes containing this submission ID
+            # Check for both formats: "Imported from public submission - ID: X" and "[SUBMISSION_ID:X]"
+            imported_trees = EndemicTree.objects.filter(
+                notes__icontains=f"[SUBMISSION_ID:{submission.id}]"
+            ) | EndemicTree.objects.filter(
+                notes__icontains=f"Imported from public submission - ID: {submission.id}"
+            )
+            # Only include if NOT imported by anyone
+            if not imported_trees.exists():
+                unimported_submission_ids.append(submission.id)
+        
+        # Only get unimported submissions
+        public_submissions = all_public_submissions.filter(id__in=unimported_submission_ids)
         
         # Convert to format similar to Supabase data for template compatibility
         public_data = []
@@ -1021,7 +1039,7 @@ def new_data(request):
                 'image_format': submission.image_format,
             })
         
-        print(f"Fetched {len(public_data)} records from public submissions")
+        print(f"Fetched {len(public_data)} unimported records from public submissions (out of {all_public_submissions.count()} total)")
         if public_data:
             print("Sample record:", public_data[0])
         
@@ -1194,6 +1212,7 @@ def generate_report(request):
 
 
 # API Views
+@login_required(login_url='app:login')
 def tree_data(request):
     """
     API endpoint for tree data in GeoJSON format
@@ -1251,10 +1270,31 @@ def tree_data(request):
             }
             features.append(feature)
 
-        # Add public submissions to the map
+        # Add public submissions to the map (only if they have been imported by THIS user)
         try:
             from public.models import TreePhotoSubmission
-            public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+            all_public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+            
+            # Filter to only include submissions that have been imported by the current user
+            # A submission is considered imported if there's an EndemicTree with notes containing its ID
+            # AND the tree belongs to the current user
+            imported_submission_ids = set()
+            for submission in all_public_submissions:
+                # Check if there's an EndemicTree with notes containing this submission ID
+                # AND it belongs to the current user (data isolation)
+                # Check for both formats: "Imported from public submission - ID: X" and "[SUBMISSION_ID:X]"
+                imported_trees = EndemicTree.objects.filter(
+                    user=request.user,  # Only check trees belonging to current user
+                    notes__icontains=f"[SUBMISSION_ID:{submission.id}]"
+                ) | EndemicTree.objects.filter(
+                    user=request.user,
+                    notes__icontains=f"Imported from public submission - ID: {submission.id}"
+                )
+                if imported_trees.exists():
+                    imported_submission_ids.add(submission.id)
+            
+            # Only include submissions imported by the current user
+            public_submissions = all_public_submissions.filter(id__in=imported_submission_ids)
             
             for submission in public_submissions:
                 feature = {
@@ -1278,7 +1318,7 @@ def tree_data(request):
                 }
                 features.append(feature)
             
-            print(f"Added {public_submissions.count()} public submissions to map")
+            print(f"Added {public_submissions.count()} imported public submissions to map (out of {all_public_submissions.count()} total)")
         except Exception as e:
             print(f"Error adding public submissions to map: {str(e)}")
 
@@ -1308,6 +1348,7 @@ def tree_data(request):
         }, status=500)
 
 
+@login_required(login_url='app:login')
 def seed_data(request):
     """
     API endpoint for seed data in GeoJSON format
@@ -1373,6 +1414,7 @@ def seed_data(request):
         }, status=500)
 
 
+@login_required(login_url='app:login')
 def filter_trees(request, species_id):
     """
     API endpoint for filtered tree data
@@ -2313,8 +2355,27 @@ def api_supabase_data(request):
         from public.models import TreePhotoSubmission
         
         if request.method == 'GET':
-            # Fetch all data from public submissions
-            submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+            # Fetch all public submissions
+            all_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+            
+            # Filter out submissions that have been imported by ANY user
+            # Once ANY user imports a submission, it should be removed from the table for all users
+            unimported_submission_ids = []
+            for submission in all_submissions:
+                # Check if there's ANY EndemicTree (regardless of user) with notes containing this submission ID
+                # Check for both formats: "Imported from public submission - ID: X" and "[SUBMISSION_ID:X]"
+                imported_trees = EndemicTree.objects.filter(
+                    notes__icontains=f"[SUBMISSION_ID:{submission.id}]"
+                ) | EndemicTree.objects.filter(
+                    notes__icontains=f"Imported from public submission - ID: {submission.id}"
+                )
+                # Only include if NOT imported by anyone
+                if not imported_trees.exists():
+                    unimported_submission_ids.append(submission.id)
+            
+            # Only get unimported submissions
+            submissions = all_submissions.filter(id__in=unimported_submission_ids)
+            
             data = []
             for submission in submissions:
                 data.append({
@@ -2486,7 +2547,8 @@ def api_supabase_data(request):
                 deceased_count=deceased_count,
 
                 hectares=hectares,
-                notes=data.get('notes', f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}"),
+                # Always include submission ID in notes for tracking, even if user provides custom notes
+                notes=f"{data.get('notes', '')} [SUBMISSION_ID:{data.get('supabase_id', 'Unknown')}]" if data.get('notes') else f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}",
                 user=request.user
             )
             

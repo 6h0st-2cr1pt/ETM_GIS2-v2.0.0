@@ -24,6 +24,8 @@ python manage.py migrate
 
 .venv\Scripts\python.exe manage.py runserver
 
+.venv\Scripts\python.exe -m pip install django-jazzmin
+
 python manage.py runserver
             To Run the Software
 

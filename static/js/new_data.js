@@ -291,15 +291,15 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(data => {
             if (data.success) {
                 alert('Successfully imported data: ' + data.message);
-                // Remove the import button for this row
+                // Remove the entire row since this data has been imported and should not appear for any user
                 const row = document.querySelector(`tr[data-id="${supabaseId}"]`);
                 if (row) {
-                    const importBtn = row.querySelector('.import-btn');
-                    if (importBtn) {
-                        importBtn.remove();
-                    }
+                    row.remove();
                 }
                 updateStats();
+                // Optionally refresh the table to ensure consistency
+                // This will reload data from the server which will exclude imported submissions
+                location.reload();
             } else {
                 alert('Error importing data: ' + data.error);
             }
@@ -463,15 +463,15 @@ document.addEventListener("DOMContentLoaded", () => {
         .then(data => {
             if (data.success) {
                 alert('Successfully imported data: ' + data.message);
-                // Remove the import button for this row
+                // Remove the entire row since this data has been imported and should not appear for any user
                 const row = document.querySelector(`tr[data-id="${currentImportId}"]`);
                 if (row) {
-                    const importBtn = row.querySelector('.import-btn');
-                    if (importBtn) {
-                        importBtn.remove();
-                    }
+                    row.remove();
                 }
                 updateStats();
+                // Optionally refresh the table to ensure consistency
+                // This will reload data from the server which will exclude imported submissions
+                location.reload();
             } else {
                 alert('Error importing data: ' + data.error);
             }
