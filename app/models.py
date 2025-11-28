@@ -2,6 +2,8 @@ from django.db import models
 from django.utils import timezone
 import uuid
 from django.contrib.auth.models import User
+from django.db.models.signals import post_save
+from django.dispatch import receiver
 
 
 class TreeFamily(models.Model):
@@ -188,6 +190,41 @@ class MapLayer(models.Model):
         if self.is_default:
             MapLayer.objects.filter(layer_type=self.layer_type, is_default=True).update(is_default=False)
         super().save(*args, **kwargs)
+
+
+class UserProfile(models.Model):
+    """User profile to track user type/role"""
+    USER_TYPE_CHOICES = [
+        ('app_user', 'App User'),
+        ('head_user', 'Head User'),
+        ('public_user', 'Public User'),
+    ]
+    
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    user_type = models.CharField(max_length=20, choices=USER_TYPE_CHOICES, default='app_user')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.get_user_type_display()}"
+
+    class Meta:
+        verbose_name = "User Profile"
+        verbose_name_plural = "User Profiles"
+
+
+# Signal to automatically create UserProfile when a User is created
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    """Create UserProfile automatically when a User is created"""
+    if created:
+        # Use get_or_create to avoid duplicate key errors
+        # This will be created with default 'app_user' type
+        # Admin inline form will update it if a different type is selected
+        UserProfile.objects.get_or_create(
+            user=instance, 
+            defaults={'user_type': 'app_user'}
+        )
 
 
 class UserSetting(models.Model):
