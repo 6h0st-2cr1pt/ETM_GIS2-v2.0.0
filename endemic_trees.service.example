@@ -1,0 +1,27 @@
+[Unit]
+Description=ETM_GIS2 Django application (Gunicorn)
+After=network.target postgresql.service
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/path/to/your/project/ETM_GIS2-v2.0.0
+Environment="PATH=/path/to/your/venv/bin"
+Environment="DJANGO_SETTINGS_MODULE=endemic_trees.settings"
+ExecStart=/path/to/your/venv/bin/gunicorn \
+    --config gunicorn_config.py \
+    endemic_trees.wsgi:application
+
+Restart=always
+RestartSec=10
+
+# Security settings
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/path/to/your/project/ETM_GIS2-v2.0.0
+
+[Install]
+WantedBy=multi-user.target
+
