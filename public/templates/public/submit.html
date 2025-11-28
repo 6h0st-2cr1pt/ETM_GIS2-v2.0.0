@@ -1,0 +1,224 @@
+{% extends 'public/base.html' %}
+{% load static %}
+
+{% block title %}Upload Tree - TreeKeeper{% endblock %}
+
+{% block content %}
+<!-- Upload Page -->
+<div id="uploadPage" class="page active">
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{% url 'public:home' %}" class="back-btn">
+                <i class="fas fa-arrow-left"></i>
+                Back
+            </a>
+            <a href="{% url 'public:home' %}" class="logo">
+                <i class="fas fa-leaf"></i>
+                <span>TreeKeeper</span>
+            </a>
+            <div></div>
+        </div>
+    </nav>
+
+    <section class="upload-container">
+        <div class="form-wrapper">
+            <h2>Document an Endemic Tree</h2>
+            
+            {% if user.is_authenticated %}
+                <p style="color: rgba(255, 255, 255, 0.9); margin-bottom: 1rem;">
+                    <i class="fas fa-user-check"></i> Logged in as: <strong>{{ user.username }}</strong>
+                </p>
+            {% endif %}
+            
+            {% if messages %}
+                <div style="margin-bottom: 1.5rem;">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <form id="treeForm" method="post" enctype="multipart/form-data" action="{% url 'public:submit' %}">
+                {% csrf_token %}
+                
+                <!-- Your Name -->
+                <div class="form-group">
+                    <label for="userName">Your Name *</label>
+                    <input type="text" id="userName" name="person_name" placeholder="Enter your name" value="{{ form.person_name.value|default:'' }}" required>
+                    <span class="error-msg" id="nameError"></span>
+                    {% if form.person_name.errors %}
+                        <span class="error-msg">{{ form.person_name.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Tree Description -->
+                <div class="form-group">
+                    <label for="treeDescription">Tree Description *</label>
+                    <textarea id="treeDescription" name="tree_description" placeholder="Describe the endemic tree (species, characteristics, location details)..." rows="4" required>{{ form.tree_description.value|default:'' }}</textarea>
+                    <span class="error-msg" id="descError"></span>
+                    {% if form.tree_description.errors %}
+                        <span class="error-msg">{{ form.tree_description.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Tree Image -->
+                <div class="form-group">
+                    <label for="treeImage">Tree Image *</label>
+                    <div class="image-upload-section">
+                        <div class="image-preview" id="imagePreview">
+                            <i class="fas fa-image"></i>
+                            <p>No image selected</p>
+                        </div>
+                        <div class="button-group">
+                            <button type="button" class="btn btn-secondary" onclick="captureImage()">
+                                <i class="fas fa-camera"></i> Capture Photo
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="document.getElementById('imageInput').click()">
+                                <i class="fas fa-upload"></i> Upload Image
+                            </button>
+                        </div>
+                        <input type="file" id="imageInput" name="tree_image" accept="image/jpeg,image/png" style="display:none;" required>
+                        <span class="image-size-info">Max 2MB • JPEG or PNG</span>
+                        <span class="error-msg" id="imageError"></span>
+                        {% if form.tree_image.errors %}
+                            <span class="error-msg">{{ form.tree_image.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Location Coordinates -->
+                <div class="form-group">
+                    <label>Location Coordinates *</label>
+                    
+                    <!-- Latitude -->
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="latitude" style="font-size: 0.85rem; color: rgba(255, 255, 255, 0.9);">Latitude (Decimal Degrees)</label>
+                        <input type="text" id="latitude" name="latitude" placeholder="e.g., 10.2938" value="{{ form.latitude.value|default:'' }}" readonly required>
+                        <span class="error-msg" id="latError"></span>
+                        {% if form.latitude.errors %}
+                            <span class="error-msg">{{ form.latitude.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Longitude -->
+                    <div class="form-group" style="margin-bottom: 1rem;">
+                        <label for="longitude" style="font-size: 0.85rem; color: rgba(255, 255, 255, 0.9);">Longitude (Decimal Degrees)</label>
+                        <input type="text" id="longitude" name="longitude" placeholder="e.g., 123.8854" value="{{ form.longitude.value|default:'' }}" readonly required>
+                        <span class="error-msg" id="longError"></span>
+                        {% if form.longitude.errors %}
+                            <span class="error-msg">{{ form.longitude.errors.0 }}</span>
+                        {% endif %}
+                    </div>
+                    
+                    <!-- Location Buttons -->
+                    <div class="button-group" style="margin-top: 0.5rem;">
+                        <button type="button" class="btn btn-secondary" onclick="getGPSLocation()">
+                            <i class="fas fa-satellite"></i> Get GPS Location
+                        </button>
+                        <button type="button" class="btn btn-secondary" onclick="openMapModal()">
+                            <i class="fas fa-map"></i> Select on Map
+                        </button>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary btn-large" onclick="clearForm()">
+                        <i class="fas fa-times"></i> Clear Form
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-large">Submit Tree Documentation</button>
+                </div>
+            </form>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 TreeKeeper. Dedicated to preserving Negros Island's endemic trees.</p>
+    </footer>
+</div>
+
+<!-- Map Modal -->
+<div id="mapModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Select Location on Negros Island Map</h3>
+            <button class="close-btn" onclick="closeMapModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div id="map" class="map"></div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeMapModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="confirmMapLocation()">Confirm Location</button>
+        </div>
+    </div>
+</div>
+
+<!-- Camera Modal -->
+<div id="cameraModal" class="modal">
+    <div class="modal-content modal-camera">
+        <div class="modal-header">
+            <h3>Capture Tree Photo</h3>
+            <button class="close-btn" onclick="closeCameraModal()">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <video id="cameraVideo" autoplay playsinline></video>
+        <canvas id="cameraCanvas" style="display:none;"></canvas>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeCameraModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="capturePhoto()">
+                <i class="fas fa-camera"></i> Capture
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Success Modal -->
+<div id="successModal" class="modal">
+    <div class="modal-content modal-success">
+        <div class="success-icon">
+            <i class="fas fa-check-circle"></i>
+        </div>
+        <h3>Submission Successful!</h3>
+        <p>Your tree photo submission has been successfully saved to the database.</p>
+        <p style="margin-top: 1rem; font-size: 0.9rem; color: rgba(255, 255, 255, 0.8);">
+            <i class="fas fa-database"></i> Data has been recorded in the system.
+        </p>
+        <div style="margin-top: 2rem; display: flex; gap: 1rem; flex-direction: column;">
+            <a href="{% url 'public:submit' %}" class="btn btn-primary" onclick="resetForm()">
+                <i class="fas fa-plus"></i> Upload Another Tree
+            </a>
+            <a href="{% url 'public:home' %}" class="btn btn-secondary">
+                <i class="fas fa-home"></i> Return to Home
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Handle form submission success - only show for tree submission, not login
+    window.addEventListener('load', function() {
+        {% if messages %}
+            {% for message in messages %}
+                {% if message.tags == 'success' %}
+                    // Check if this is a tree submission success message
+                    const messageText = '{{ message|escapejs }}';
+                    // Only show modal if message is about tree submission
+                    if (messageText.includes('tree photo submission') || 
+                        messageText.includes('Thank you! Your tree photo submission')) {
+                        setTimeout(function() {
+                            showSuccessModal();
+                            // Also show browser alert for additional confirmation
+                            alert('✅ Submission Confirmed!\n\nYour tree photo submission has been successfully saved to the database.');
+                        }, 300);
+                    }
+                {% endif %}
+            {% endfor %}
+        {% endif %}
+    });
+</script>
+{% endblock %}

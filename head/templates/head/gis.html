@@ -1,0 +1,447 @@
+{% extends 'head/base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="gis-container">
+    <div class="floating-search-container">
+        <div class="search-bar">
+            <input type="text" id="locationSearch" placeholder="Search for a location...">
+            <button id="searchButton"><i class="fas fa-search"></i></button>
+        </div>
+    </div>
+    <div id="map" class="gis-map"></div>
+    
+    <div class="floating-controls">
+        <div class="control-group map-type-control">
+            <button class="control-toggle" id="mapTypeToggle">
+                <i class="fas fa-layer-group"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Map Type</h4>
+                <div class="control-options">
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeDark" value="dark" checked>
+                        <label for="mapTypeDark">Dark</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeLight" value="light">
+                        <label for="mapTypeLight">Light</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeSatellite" value="satellite">
+                        <label for="mapTypeSatellite">Satellite</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeStreet" value="street">
+                        <label for="mapTypeStreet">Street</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeTopographic" value="topographic">
+                        <label for="mapTypeTopographic">Topographic</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeStreetsNight" value="streets-night">
+                        <label for="mapTypeStreetsNight">Streets (Night)</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="radio" name="mapType" id="mapTypeImageryHybrid" value="imagery-hybrid">
+                        <label for="mapTypeImageryHybrid">Imagery Hybrid</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group tree-filter-control">
+            <button class="control-toggle" id="treeFilterToggle">
+                <i class="fas fa-filter"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Filter Trees</h4>
+                <div class="control-options tree-filter-list">
+                    <div class="control-option">
+                        <input type="radio" name="treeFilter" id="allTrees" value="all" checked>
+                        <label for="allTrees">All Trees</label>
+                    </div>
+                    
+                    {% if tree_species %}
+                        {% for species in tree_species %}
+                        <div class="control-option">
+                            <input type="radio" name="treeFilter" id="tree{{ species.id }}" value="{{ species.id }}">
+                            <label for="tree{{ species.id }}">{{ species.common_name }}</label>
+                        </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="no-species-message">
+                            <p>No tree species found in the database.</p>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group entity-type-control">
+            <button class="control-toggle" id="entityTypeToggle">
+                <i class="fas fa-seedling"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Entity Type</h4>
+                <div class="control-options">
+                    <div class="control-option">
+                        <input type="checkbox" name="entityType" id="showTrees" value="trees" checked>
+                        <label for="showTrees">Mature Trees</label>
+                    </div>
+                    <div class="control-option">
+                        <input type="checkbox" name="entityType" id="showSeeds" value="seeds" checked>
+                        <label for="showSeeds">Planted Seeds</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="control-group layer-control">
+            <button class="control-toggle" id="layerControlToggle">
+                <i class="fas fa-map-marked-alt"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Map Layers</h4>
+                <div class="control-options layer-controls-list" id="layerControlsList">
+                    <!-- Layer controls will be added dynamically -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="control-group tools-control">
+            <button class="control-toggle" id="toolsToggle">
+                <i class="fas fa-tools"></i>
+            </button>
+            <div class="control-dropdown">
+                <h4>Map Tools</h4>
+                <div class="control-options">
+                    <div class="control-option">
+                        <button id="centerMapBtn" class="tool-button">
+                            <i class="fas fa-crosshairs"></i> Center Map
+                        </button>
+                    </div>
+                    <div class="control-option">
+                        <button id="exportDataBtn" class="tool-button">
+                            <i class="fas fa-file-export"></i> Export Data
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="{% static 'css/gis.css' %}?v=3" />
+<style>
+/* Force scrollbar for tree filter list */
+.tree-filter-list {
+  max-height: 150px !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  padding-right: 15px !important;
+  margin-right: -15px !important;
+  height: 150px !important;
+}
+
+.tree-filter-list::-webkit-scrollbar {
+  width: 15px !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.3) !important;
+  border-radius: 8px !important;
+  margin: 2px 0 !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-radius: 8px !important;
+  border: 2px solid rgba(255, 255, 255, 0.5) !important;
+  min-height: 50px !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 1) !important;
+}
+
+.tree-filter-list::-webkit-scrollbar-corner {
+  background: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Firefox scrollbar */
+.tree-filter-list {
+  scrollbar-width: auto !important;
+  scrollbar-color: rgba(255, 255, 255, 0.8) rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Additional aggressive scrollbar forcing */
+.control-dropdown .tree-filter-list {
+  max-height: 150px !important;
+  height: 150px !important;
+  overflow-y: scroll !important;
+  overflow-x: hidden !important;
+  padding-right: 15px !important;
+  margin-right: -15px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+}
+
+/* Force scrollbar to always be visible */
+.control-dropdown .tree-filter-list::-webkit-scrollbar {
+  width: 15px !important;
+  display: block !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.4) !important;
+  border-radius: 8px !important;
+  margin: 2px 0 !important;
+  border: 2px solid rgba(255, 255, 255, 0.3) !important;
+  display: block !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-radius: 8px !important;
+  border: 3px solid rgba(255, 255, 255, 0.6) !important;
+  min-height: 60px !important;
+  display: block !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 1) !important;
+}
+
+.control-dropdown .tree-filter-list::-webkit-scrollbar-corner {
+  background: rgba(255, 255, 255, 0.4) !important;
+  display: block !important;
+}
+
+/* Force Leaflet popup to dark green glass (inline to beat caching/order) */
+.gis-container .leaflet-container .leaflet-popup .leaflet-popup-content-wrapper {
+  background: linear-gradient(135deg, rgba(6,71,37,0.88), rgba(6,71,37,0.7)) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(46,204,113,0.28) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.06) !important;
+  color: #e9f7ef !important;
+}
+.gis-container .leaflet-container .leaflet-popup .leaflet-popup-tip {
+  background: rgba(6,71,37,0.88) !important;
+  border: 1px solid rgba(46,204,113,0.28) !important;
+}
+.gis-container .leaflet-container .leaflet-popup .leaflet-popup-content {
+  margin: 14px 18px !important;
+  color: #e9f7ef !important;
+}
+.gis-container .leaflet-container .leaflet-popup a.leaflet-popup-close-button {
+  color: #d1fae5 !important;
+  background: rgba(255,255,255,0.06) !important;
+  border-radius: 50% !important;
+  width: 26px !important;
+  height: 26px !important;
+  line-height: 22px !important;
+  border: 1px solid rgba(46,204,113,0.25) !important;
+  right: 8px !important;
+  top: 8px !important;
+}
+.gis-container .leaflet-container .leaflet-popup a.leaflet-popup-close-button:hover {
+  background: rgba(46,204,113,0.18) !important;
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<script src="{% static 'js/gis.js' %}?v=8"></script>
+<script>
+  // Override API endpoints for head app
+  window.HEAD_APP = true;
+  
+  // Safely get URLs with fallbacks
+  try {
+    window.TREE_DATA_URL = "{% url 'head:tree_data' %}";
+  } catch (e) {
+    console.error('Error getting tree_data URL:', e);
+    window.TREE_DATA_URL = '/head/api/tree-data/';
+  }
+  
+  try {
+    window.SEED_DATA_URL = "{% url 'head:seed_data' %}";
+  } catch (e) {
+    console.error('Error getting seed_data URL:', e);
+    window.SEED_DATA_URL = '/head/api/seed-data/';
+  }
+  
+  try {
+    const filterUrl = "{% url 'head:filter_trees' 999 %}";
+    // Remove '999/' (including the slash) to get the base URL
+    window.FILTER_TREES_BASE_URL = filterUrl ? filterUrl.replace('999/', '') : '/head/api/filter-trees/';
+  } catch (e) {
+    console.error('Error getting filter_trees URL:', e);
+    window.FILTER_TREES_BASE_URL = '/head/api/filter-trees/';
+  }
+  
+  console.log('Head app URLs initialized:', {
+    TREE_DATA_URL: window.TREE_DATA_URL,
+    SEED_DATA_URL: window.SEED_DATA_URL,
+    FILTER_TREES_BASE_URL: window.FILTER_TREES_BASE_URL
+  });
+  
+  // Override fetch calls in gis.js to use head URLs
+  const originalFetch = window.fetch;
+  window.fetch = function(url, options) {
+    // Ensure url is a string
+    if (typeof url !== 'string') {
+      return originalFetch.call(this, url, options);
+    }
+    
+    let modifiedUrl = url;
+    
+    // Handle tree data endpoint
+    if (url === '/api/tree-data/' || url.includes('/api/tree-data/')) {
+      if (window.TREE_DATA_URL && typeof window.TREE_DATA_URL === 'string') {
+        modifiedUrl = window.TREE_DATA_URL;
+        console.log('Head app: Redirecting tree-data to', modifiedUrl);
+      } else {
+        console.error('TREE_DATA_URL is undefined or not a string!', window.TREE_DATA_URL);
+        // Fallback to default URL
+        modifiedUrl = '/head/api/tree-data/';
+      }
+    } 
+    // Handle seed data endpoint
+    else if (url === '/api/seed-data/' || url.includes('/api/seed-data/')) {
+      if (window.SEED_DATA_URL && typeof window.SEED_DATA_URL === 'string') {
+        modifiedUrl = window.SEED_DATA_URL;
+        console.log('Head app: Redirecting seed-data to', modifiedUrl);
+      } else {
+        console.error('SEED_DATA_URL is undefined or not a string!', window.SEED_DATA_URL);
+        // Fallback to default URL
+        modifiedUrl = '/head/api/seed-data/';
+      }
+    } 
+    // Handle filter trees endpoint
+    else if (url.includes('/api/filter-trees/')) {
+      const match = url.match(/\/api\/filter-trees\/(\d+)\/?/);
+      if (match && window.FILTER_TREES_BASE_URL && typeof window.FILTER_TREES_BASE_URL === 'string') {
+        // Ensure base URL ends with a single slash, then add species_id and slash
+        const baseUrl = window.FILTER_TREES_BASE_URL.replace(/\/+$/, '');
+        modifiedUrl = baseUrl + '/' + match[1] + '/';
+        console.log('Head app: Redirecting filter-trees to', modifiedUrl);
+      } else {
+        console.error('FILTER_TREES_BASE_URL is undefined or no match found!', {
+          FILTER_TREES_BASE_URL: window.FILTER_TREES_BASE_URL,
+          match: match
+        });
+        // Fallback to default URL
+        if (match) {
+          modifiedUrl = '/head/api/filter-trees/' + match[1] + '/';
+        }
+      }
+    }
+    
+    // Ensure modifiedUrl is always a valid string
+    if (!modifiedUrl || typeof modifiedUrl !== 'string') {
+      console.error('Invalid modifiedUrl, using original:', modifiedUrl, url);
+      modifiedUrl = url;
+    }
+    
+    return originalFetch.call(this, modifiedUrl, options);
+  };
+  
+  // Negros Island, Philippines coordinates (center of the island)
+  const NEGROS_ISLAND_CENTER = [10.3157, 123.8854]; // More precise center coordinates
+  const NEGROS_ISLAND_ZOOM = 9; // Zoom level to show the entire island
+  
+  document.addEventListener("DOMContentLoaded", function() {
+    console.log("Head GIS page loaded, map should be initializing...");
+    
+    // Force scrollbar visibility for tree filter list
+    const treeFilterList = document.querySelector('.tree-filter-list');
+    if (treeFilterList) {
+      console.log("Found tree filter list, applying scrollbar fixes...");
+      treeFilterList.style.maxHeight = '150px';
+      treeFilterList.style.overflowY = 'scroll';
+      treeFilterList.style.height = '150px';
+      treeFilterList.style.paddingRight = '15px';
+      treeFilterList.style.marginRight = '-15px';
+      
+      // Force scrollbar to be visible
+      treeFilterList.style.scrollbarWidth = 'auto';
+      treeFilterList.style.scrollbarColor = 'rgba(255, 255, 255, 0.8) rgba(255, 255, 255, 0.3)';
+      
+      // Add a small delay to ensure styles are applied
+      setTimeout(function() {
+        treeFilterList.style.overflowY = 'scroll';
+        console.log("Scrollbar should now be visible");
+      }, 100);
+    }
+    
+    // Wait for map to be initialized, then center on Negros Island
+    setTimeout(function() {
+      // Check if map exists (from gis.js)
+      if (typeof map !== 'undefined' && map) {
+        // Center map on Negros Island, Philippines
+        map.setView(NEGROS_ISLAND_CENTER, NEGROS_ISLAND_ZOOM);
+        console.log("Head GIS: Map centered on Negros Island, Philippines");
+        
+        // Override the center map button to always center on Negros Island
+        const centerMapBtn = document.getElementById("centerMapBtn");
+        if (centerMapBtn) {
+          // Remove existing event listeners by cloning the button
+          const newCenterBtn = centerMapBtn.cloneNode(true);
+          centerMapBtn.parentNode.replaceChild(newCenterBtn, centerMapBtn);
+          
+          // Add new event listener that centers on Negros Island
+          newCenterBtn.addEventListener("click", function() {
+            map.setView(NEGROS_ISLAND_CENTER, NEGROS_ISLAND_ZOOM);
+            console.log("Head GIS: Map recentered on Negros Island, Philippines");
+          });
+        }
+      } else {
+        console.warn("Head GIS: Map not found, retrying...");
+        // Retry after a longer delay if map isn't ready
+        setTimeout(function() {
+          if (typeof map !== 'undefined' && map) {
+            map.setView(NEGROS_ISLAND_CENTER, NEGROS_ISLAND_ZOOM);
+            console.log("Head GIS: Map centered on Negros Island (retry)");
+          }
+        }, 1000);
+      }
+    }, 600);
+    
+    // Force a resize event after a short delay to ensure the map renders correctly
+    setTimeout(function() {
+      window.dispatchEvent(new Event('resize'));
+    }, 500);
+  });
+  
+  // Override map initialization if we can intercept it
+  // This ensures the map always starts at Negros Island
+  const originalMapInit = window.L && window.L.map;
+  if (originalMapInit) {
+    const originalMap = originalMapInit;
+    window.L.map = function(container, options) {
+      // If this is the main map (id="map") and we're in head app, set default center
+      if (container === 'map' || (typeof container === 'string' && container === 'map')) {
+        if (!options) options = {};
+        if (!options.center) {
+          options.center = NEGROS_ISLAND_CENTER;
+          options.zoom = NEGROS_ISLAND_ZOOM;
+        }
+      }
+      return originalMap.call(this, container, options);
+    };
+  }
+</script>
+{% endblock %}
+

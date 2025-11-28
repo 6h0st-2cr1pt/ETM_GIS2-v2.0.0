@@ -1,0 +1,3 @@
+# Additional requirements for Google OAuth
+django-allauth==0.57.0
+

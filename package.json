@@ -1,0 +1,27 @@
+{
+  "name": "etm_gis2-main-master",
+  "version": "1.0.0",
+  "description": "A comprehensive Django-based Geographic Information System (GIS) for managing, tracking, and visualizing endemic tree species data. This system provides conservationists and researchers with powerful tools for spatial analysis, data visualization, and population monitoring of endemic trees.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "cypress:open": "cypress open",
+    "cypress:run": "cypress run",
+    "cypress:run:chrome": "cypress run --browser chrome",
+    "cypress:run:firefox": "cypress run --browser firefox"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/White-Templar/ETM_GIS2-main-master.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/White-Templar/ETM_GIS2-main-master/issues"
+  },
+  "homepage": "https://github.com/White-Templar/ETM_GIS2-main-master#readme",
+  "devDependencies": {
+    "cypress": "^15.5.0"
+  }
+}

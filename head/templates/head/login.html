@@ -1,0 +1,63 @@
+{% extends 'head/auth_base.html' %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-header">
+            <h2>Head Login</h2>
+        </div>
+
+        <form method="post" action="{% url 'head:login' %}" class="auth-form">
+            {% csrf_token %}
+
+            {% if error_message %}
+            <div class="alert alert-danger">
+                {{ error_message }}
+            </div>
+            {% endif %}
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <div class="input-group">
+                    <span class="input-icon"><i class="fas fa-user"></i></span>
+                    <input type="text" id="username" name="username" class="form-control" required>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <div class="input-group">
+                    <span class="input-icon"><i class="fas fa-lock"></i></span>
+                    <input type="password" id="password" name="password" class="form-control" required>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary auth-btn">
+                <span>Login</span>
+                <i class="fas fa-arrow-right"></i>
+            </button>
+        </form>
+
+        <div style="margin-top: 2rem; padding-top: 2rem; border-top: 1px solid rgba(255, 255, 255, 0.1);">
+            <div style="margin-bottom: 1.5rem;">
+                <p style="font-weight: 600; margin-bottom: 0.5rem; color: rgba(255, 255, 255, 0.9);">
+                    Need an account?
+                </p>
+                <p style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; margin: 0;">
+                    Please contact the system administrator to create one for you.
+                </p>
+            </div>
+
+            <div>
+                <p style="font-weight: 600; margin-bottom: 0.5rem; color: rgba(255, 255, 255, 0.9);">
+                    Forgot your password?
+                </p>
+                <p style="color: rgba(255, 255, 255, 0.7); font-size: 0.9rem; margin: 0;">
+                    Reach out to the system administrator for password recovery or reset assistance.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

@@ -1,0 +1,36 @@
+{
+  "users": {
+    "testUser": {
+      "username": "testuser",
+      "password": "testpass123",
+      "email": "test@example.com"
+    }
+  },
+  "treeData": {
+    "family": "Ebenaceae",
+    "genus": "Diospyros",
+    "species": {
+      "scientific_name": "Diospyros philippinensis",
+      "common_name": "Philippine Ebony"
+    },
+    "location": {
+      "name": "Test Location",
+      "latitude": 10.0,
+      "longitude": 123.0
+    },
+    "population": 100,
+    "year": 2027,
+    "health_status": "good"
+  },
+  "seedData": {
+    "quantity": 100,
+    "planting_date": "2027-01-01",
+    "germination_status": "germinating"
+  },
+  "layerData": {
+    "name": "Test Layer",
+    "layer_type": "custom",
+    "url": "https://example.com/tiles/{z}/{x}/{y}",
+    "attribution": "Test Attribution"
+  }
+}

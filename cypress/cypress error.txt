@@ -1,0 +1,354 @@
+gis.cy.js
+GIS Map Page
+New Test
+should display map interface
+failed
+before each (failed)
+Open in IDE
+1
+visit/login/
+2
+get#username
+3
+typetestuser
+4
+get#password
+5
+typetestpass123
+6
+get.auth-btn
+7
+click
+(form sub)--submitting form--
+(page load)--page loaded--
+(new url)http://localhost:8000/dashboard/
+8
+visit/gis/
+(uncaught exception)TypeError: Cannot read properties of null (reading 'addEventListener')
+(fetch)GET /api/layers/
+(fetch)GET /api/tree-data/
+(fetch)GET /api/seed-data/
+(alert)Error loading seed data. Please check the console for details.
+(alert)Error loading tree data. Please check the console for details.
+TypeError
+The following error originated from your application code, not from Cypress.
+
+> Cannot read properties of null (reading 'addEventListener')
+
+When Cypress detects uncaught errors originating from your application it will automatically fail the current test.
+
+This behavior is configurable, and you can choose to turn this off by listening to the uncaught:exception event.
+
+Because this error occurred during a before each hook we are skipping the remaining tests in the current suite: GIS Map PageLearn more
+Stack trace
+ Print to console
+should have map type controls
+processing
+should have tree filter controls
+processing
+should have entity type controls
+processing
+should have layer controls
+processing
+should have tools controls
+
+navigation.cy.js
+Navigation
+New Test
+should navigate to dashboard
+passed
+should navigate to GIS map
+failed
+before each
+Open in IDE
+1
+visit/login/
+2
+get#username
+3
+typetestuser
+4
+get#password
+5
+typetestpass123
+6
+get.auth-btn
+7
+click
+(form sub)--submitting form--
+(page load)--page loaded--
+(new url)http://localhost:8000/dashboard/
+test body
+Open in IDE
+1
+visit/
+2
+get.sidebar-item
+10
+(page load)--page loaded--
+(new url)http://localhost:8000/dashboard/
+3
+containsGIS
+4
+click
+(page load)
+(new url)http://localhost:8000/gis/
+(uncaught exception)TypeError: Cannot read properties of null (reading 'addEventListener')
+(fetch)GET /api/layers/
+(fetch)GET /api/tree-data/
+(alert)Error loading tree data. Please check the console for details.
+(alert)Error loading seed data. Please check the console for details.
+TypeError
+The following error originated from your application code, not from Cypress.
+
+> Cannot read properties of null (reading 'addEventListener')
+
+When Cypress detects uncaught errors originating from your application it will automatically fail the current test.
+
+This behavior is configurable, and you can choose to turn this off by listening to the uncaught:exception event.Learn more
+Stack trace
+ Print to console
+should navigate to analytics
+passed
+should navigate to layer control
+passed
+should navigate to datasets
+passed
+should navigate to reports
+passed
+should navigate to upload data
+passed
+should navigate to about
+passed
+should logout successfully
+
+
+upload.cy.js
+Upload Data Page
+New Test
+should display upload page
+passed
+should have CSV upload section
+failed
+before each
+Open in IDE
+1
+visit/login/
+2
+get#username
+3
+typetestuser
+4
+get#password
+5
+typetestpass123
+6
+get.auth-btn
+7
+click
+(form sub)--submitting form--
+(page load)--page loaded--
+(new url)http://localhost:8000/dashboard/
+8
+visit/upload/
+test body
+Open in IDE
+1
+get.tab-button
+3
+2
+containsCSV Upload
+3
+click
+CypressError
+Timed out retrying after 4050ms: cy.click() failed because this element:
+
+<button class="tab-button" data-tab="csv-upload">CSV Upload</button>
+
+is being covered by another element:
+
+<a id="djToggleThemeButton" href="#" title="Toggle Theme">...</a>
+
+Fix this problem, or use {force: true} to disable error checking.Learn more
+cypress/e2e/upload.cy.js:18:50
+  16 |   it('should have CSV upload section', () => {
+  17 |     // Click on CSV upload tab first
+> 18 |     cy.get('.tab-button').contains('CSV Upload').click()
+     |                                                  ^
+  19 |     
+  20 |     // Check that CSV upload section is visible
+  21 |     cy.get('.csv-upload-section').should('be.visible') 
+Stack trace
+ Print to console
+should have manual entry form
+passed
+should have seed planting form
+
+workflow.cy.js
+Complete User Workflow
+New Test
+should complete a full workflow from dashboard to GIS map
+failed
+before each
+Open in IDE
+1
+visit/login/
+2
+get#username
+3
+typetestuser
+4
+get#password
+5
+typetestpass123
+6
+get.auth-btn
+7
+click
+(form sub)--submitting form--
+(page load)--page loaded--
+(new url)http://localhost:8000/dashboard/
+test body
+Open in IDE
+1
+visit/dashboard/
+2
+get.page-title
+3
+containsDashboard
+4
+get.stat-card
+4
+5
+assertexpected [ <div.stat-card>, 3 more... ] to have a length at least 4
+4
+6
+get.sidebar-item
+10
+7
+containsGIS
+8
+click
+(page load)
+(new url)http://localhost:8000/gis/
+(uncaught exception)TypeError: Cannot read properties of null (reading 'addEventListener')
+(fetch)GET /api/layers/
+(fetch)GET /api/tree-data/
+(fetch)GET /api/seed-data/
+(alert)Error loading tree data. Please check the console for details.
+(alert)Error loading seed data. Please check the console for details.
+TypeError
+The following error originated from your application code, not from Cypress.
+
+> Cannot read properties of null (reading 'addEventListener')
+
+When Cypress detects uncaught errors originating from your application it will automatically fail the current test.
+
+This behavior is configurable, and you can choose to turn this off by listening to the uncaught:exception event.Learn more
+Stack trace
+ Print to console
+should test data upload and visualization workflow
+failed
+before each
+Open in IDE
+1
+visit/login/
+2
+get#username
+3
+typetestuser
+4
+get#password
+5
+typetestpass123
+6
+get.auth-btn
+7
+click
+(form sub)--submitting form--
+(page load)--page loaded--
+(new url)http://localhost:8000/dashboard/
+test body
+Open in IDE
+1
+get.sidebar-item
+10
+2
+containsUpload Data
+3
+click
+(page load)--page loaded--
+(new url)http://localhost:8000/upload/
+4
+url
+5
+assertexpected http://localhost:8000/upload/ to include /upload/
+6
+get.page-title
+7
+containsUpload Data
+8
+get#csv_file
+9
+assertexpected <input#csv_file.d-none> to exist in the DOM
+10
+get#common_name
+11
+assertexpected <input#common_name.form-control> to be visible
+12
+get.tab-button
+3
+13
+containsSeed Planting
+14
+click
+15
+get#seed_common_name
+16
+assertexpected <input#seed_common_name.form-control> to be visible
+17
+get.sidebar-item
+10
+18
+containsDatasets
+19
+click
+(page load)--page loaded--
+(new url)http://localhost:8000/datasets/
+20
+url
+21
+assertexpected http://localhost:8000/datasets/ to include /datasets/
+22
+get.page-title
+23
+containsDatasets
+24
+gettable
+25
+assertexpected <table#datasetsTable.table.datasets-table> to be visible
+26
+get.sidebar-item
+10
+27
+containsGIS
+28
+click
+(page load)--page loaded--
+(new url)http://localhost:8000/gis/
+(uncaught exception)TypeError: Cannot read properties of null (reading 'addEventListener')
+(fetch)GET 200 /api/layers/
+(fetch)GET 200 /api/tree-data/
+(fetch)GET 200 /api/seed-data/
+(uncaught exception)TypeError: Cannot read properties of undefined (reading 'addTo')
+(fetch)GET 200 /api/seed-data/
+(fetch)GET 200 /__debug__/history_sidebar/?request_id=6956140fc9ed4dc9b84d0ee74fd47e3a
+TypeError
+The following error originated from your application code, not from Cypress.
+
+> Cannot read properties of null (reading 'addEventListener')
+
+When Cypress detects uncaught errors originating from your application it will automatically fail the current test.
+
+This behavior is configurable, and you can choose to turn this off by listening to the uncaught:exception event.Learn more
+Stack trace

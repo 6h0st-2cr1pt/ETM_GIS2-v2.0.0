@@ -1,0 +1,85 @@
+{% extends 'public/base.html' %}
+{% load static %}
+
+{% block title %}Login - TreeKeeper{% endblock %}
+
+{% block content %}
+<div id="loginPage" class="page active">
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{% url 'public:home' %}" class="logo">
+                <i class="fas fa-leaf"></i>
+                <span>TreeKeeper</span>
+            </a>
+            <a href="{% url 'public:signup' %}" class="nav-btn">Sign Up</a>
+        </div>
+    </nav>
+
+    <section class="upload-container">
+        <div class="form-wrapper">
+            <h2>Login to TreeKeeper</h2>
+            
+            {% if messages %}
+                <div style="margin-bottom: 1.5rem;">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <form method="post" id="loginForm">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="id_username">Username or Email *</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                        <span class="error-msg">{{ form.username.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                <div class="form-group">
+                    <label for="id_password">Password *</label>
+                    {{ form.password }}
+                    {% if form.password.errors %}
+                        <span class="error-msg">{{ form.password.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                {% if form.non_field_errors %}
+                    <div class="form-group">
+                        {% for error in form.non_field_errors %}
+                            <span class="error-msg">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="form-actions">
+                    <a href="{% url 'public:home' %}" class="btn btn-secondary btn-large">
+                        <i class="fas fa-arrow-left"></i> Back to Home
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-large">
+                        <i class="fas fa-sign-in-alt"></i> Login
+                    </button>
+                </div>
+            </form>
+
+            <div style="margin-top: 2rem; text-align: center;">
+                <p style="color: rgba(255, 255, 255, 0.9);">
+                    Don't have an account? 
+                    <a href="{% url 'public:signup' %}" style="color: var(--accent-light); text-decoration: underline;">
+                        Sign up here
+                    </a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 TreeKeeper. Dedicated to preserving Negros Island's endemic trees.</p>
+    </footer>
+</div>
+{% endblock %}
+
