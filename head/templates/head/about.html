@@ -1,0 +1,100 @@
+{% extends 'head/base.html' %}
+
+{% block content %}
+<div class="about-container">
+    <h1 class="page-title">About</h1>
+    
+    <div class="about-content">
+        <div class="about-section">
+            <div class="about-card">
+                <div class="about-card-header">
+                    <h2>Endemic Trees Monitoring System - Head Portal</h2>
+                </div>
+                
+                <div class="about-app">
+                    <p class="lead">A Geographic Information System for Monitoring Endemic Trees in the Philippines.</p>
+                    
+                    <h3>Overview</h3>
+                    <p>
+                        The Head Portal provides comprehensive access to all data collected by users of the Endemic Trees Monitoring System.
+                        As a head user, you can view, analyze, and generate reports from all user data, but you cannot upload or modify data.
+                    </p>
+                    
+                    <h3>Features</h3>
+                    <div class="row feature-list">
+                        <div class="col-md-6">
+                            <ul>
+                                <li><i class="fas fa-map-marked-alt"></i> Interactive GIS mapping (all users' data)</li>
+                                <li><i class="fas fa-layer-group"></i> View all map layers</li>
+                                <li><i class="fas fa-chart-pie"></i> Advanced analytics and visualizations</li>
+                                <li><i class="fas fa-file-alt"></i> Generate comprehensive reports</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul>
+                                <li><i class="fas fa-filter"></i> Filter trees by species and attributes</li>
+                                <li><i class="fas fa-eye"></i> View-only access to all data</li>
+                                <li><i class="fas fa-users"></i> See data from all users</li>
+                                <li><i class="fas fa-chart-line"></i> Historical population tracking</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <h3>Access Level</h3>
+                    <p>
+                        <strong>Head users</strong> have read-only access to all data in the system. You can:
+                    </p>
+                    <ul>
+                        <li>View all GIS data from all users</li>
+                        <li>Generate analytics and reports</li>
+                        <li>View layer configurations</li>
+                        <li>Export data for analysis</li>
+                    </ul>
+                    <p>
+                        <strong>Note:</strong> Head users cannot upload data or modify existing records. 
+                        This ensures data integrity and proper access control.
+                    </p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="about-section">
+            <div class="about-card">
+                <div class="about-card-header">
+                    <h2>Version Information</h2>
+                </div>
+                
+                <div class="about-version">
+                    <div class="version-info">
+                        <div class="version-item">
+                            <span class="version-label">Application Version:</span>
+                            <span class="version-value">2.0.0</span>
+                        </div>
+                        <div class="version-item">
+                            <span class="version-label">Release Date:</span>
+                            <span class="version-value">May 2025</span>
+                        </div>
+                        <div class="version-item">
+                            <span class="version-label">Django Version:</span>
+                            <span class="version-value">4.2.7</span>
+                        </div>
+                        <div class="version-item">
+                            <span class="version-label">Python Version:</span>
+                            <span class="version-value">3.10</span>
+                        </div>
+                    </div>
+                    
+                    <div class="license-info">
+                        <h4>License</h4>
+                        <p>
+                            This application is licensed under the MIT License. Feel free to use, modify, and 
+                            distribute the code as needed, while maintaining the original license and attribution.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+

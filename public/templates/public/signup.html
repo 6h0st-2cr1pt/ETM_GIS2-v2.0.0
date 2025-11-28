@@ -1,0 +1,110 @@
+{% extends 'public/base.html' %}
+{% load static %}
+
+{% block title %}Sign Up - TreeKeeper{% endblock %}
+
+{% block content %}
+<div id="signupPage" class="page active">
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{% url 'public:home' %}" class="logo">
+                <i class="fas fa-leaf"></i>
+                <span>TreeKeeper</span>
+            </a>
+            <a href="{% url 'public:login' %}" class="nav-btn">Login</a>
+        </div>
+    </nav>
+
+    <section class="upload-container">
+        <div class="form-wrapper">
+            <h2>Create Your TreeKeeper Account</h2>
+            
+            {% if messages %}
+                <div style="margin-bottom: 1.5rem;">
+                    {% for message in messages %}
+                        <div class="alert alert-{{ message.tags }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+
+            <form method="post" id="signupForm">
+                {% csrf_token %}
+                
+                <div class="form-group">
+                    <label for="id_username">Username *</label>
+                    {{ form.username }}
+                    {% if form.username.errors %}
+                        <span class="error-msg">{{ form.username.errors.0 }}</span>
+                    {% endif %}
+                    <small style="color: rgba(255, 255, 255, 0.7); font-size: 0.85rem;">
+                        Choose a unique username
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="id_email">Email *</label>
+                    {{ form.email }}
+                    {% if form.email.errors %}
+                        <span class="error-msg">{{ form.email.errors.0 }}</span>
+                    {% endif %}
+                    <small style="color: rgba(255, 255, 255, 0.7); font-size: 0.85rem;">
+                        We'll never share your email
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="id_password1">Password *</label>
+                    {{ form.password1 }}
+                    {% if form.password1.errors %}
+                        <span class="error-msg">{{ form.password1.errors.0 }}</span>
+                    {% endif %}
+                    <small style="color: rgba(255, 255, 255, 0.7); font-size: 0.85rem;">
+                        Must be at least 8 characters
+                    </small>
+                </div>
+
+                <div class="form-group">
+                    <label for="id_password2">Confirm Password *</label>
+                    {{ form.password2 }}
+                    {% if form.password2.errors %}
+                        <span class="error-msg">{{ form.password2.errors.0 }}</span>
+                    {% endif %}
+                </div>
+
+                {% if form.non_field_errors %}
+                    <div class="form-group">
+                        {% for error in form.non_field_errors %}
+                            <span class="error-msg">{{ error }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+
+                <div class="form-actions">
+                    <a href="{% url 'public:home' %}" class="btn btn-secondary btn-large">
+                        <i class="fas fa-arrow-left"></i> Back to Home
+                    </a>
+                    <button type="submit" class="btn btn-primary btn-large">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </div>
+            </form>
+
+            <div style="margin-top: 2rem; text-align: center;">
+                <p style="color: rgba(255, 255, 255, 0.9);">
+                    Already have an account? 
+                    <a href="{% url 'public:login' %}" style="color: var(--accent-light); text-decoration: underline;">
+                        Login here
+                    </a>
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 TreeKeeper. Dedicated to preserving Negros Island's endemic trees.</p>
+    </footer>
+</div>
+{% endblock %}
+

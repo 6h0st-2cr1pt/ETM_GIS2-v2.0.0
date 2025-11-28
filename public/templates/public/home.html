@@ -1,0 +1,79 @@
+{% extends 'public/base.html' %}
+{% load static %}
+
+{% block title %}Home - TreeKeeper{% endblock %}
+
+{% block content %}
+<!-- Home Page -->
+<div id="homePage" class="page active">
+    <nav class="navbar">
+        <div class="nav-container">
+            <a href="{% url 'public:home' %}" class="logo">
+                <i class="fas fa-leaf"></i>
+                <span>TreeKeeper</span>
+            </a>
+            <div style="display: flex; gap: 1rem; align-items: center;">
+                {% if user.is_authenticated %}
+                    <span style="color: white; margin-right: 0.5rem;">Welcome, {{ user.username }}!</span>
+                    <a href="{% url 'public:logout' %}" class="nav-btn" style="background: rgba(255, 255, 255, 0.2);">Logout</a>
+                {% else %}
+                    <a href="{% url 'public:login' %}" class="nav-btn" style="background: rgba(255, 255, 255, 0.2);">Login</a>
+                    <a href="{% url 'public:signup' %}" class="nav-btn">Sign Up</a>
+                {% endif %}
+                {% if user.is_authenticated %}
+                    <a href="{% url 'public:submit' %}" class="nav-btn">Upload Tree</a>
+                {% else %}
+                    <a href="{% url 'public:login' %}?next={% url 'public:submit' %}" class="nav-btn">Upload Tree</a>
+                {% endif %}
+            </div>
+        </div>
+    </nav>
+
+    <section class="hero">
+        <div class="hero-content">
+            <h1>Preserve Endemic Trees</h1>
+            <p>Document and protect the unique flora of Negros Island</p>
+            {% if user.is_authenticated %}
+                <a href="{% url 'public:submit' %}" class="btn btn-primary btn-large">Start Contributing</a>
+            {% else %}
+                <a href="{% url 'public:login' %}?next={% url 'public:submit' %}" class="btn btn-primary btn-large">Login to Contribute</a>
+            {% endif %}
+        </div>
+        <div class="hero-image">
+            <div class="tree-illustration">
+                <img src="{% static 'images/tree.PNG' %}" alt="Tree illustration">
+            </div>
+        </div>
+    </section>
+
+    <section class="features">
+        <h2>Why TreeKeeper?</h2>
+        <div class="feature-grid">
+            <div class="feature-card">
+                <i class="fas fa-camera"></i>
+                <h3>Easy Upload</h3>
+                <p>Share photos of endemic trees with precise location data</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-map-location-dot"></i>
+                <h3>GPS Location</h3>
+                <p>Automatic GPS tagging and interactive map selection</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-shield"></i>
+                <h3>Conservation</h3>
+                <p>Help scientists and researchers study endemic species</p>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-users"></i>
+                <h3>Community</h3>
+                <p>Join a community dedicated to biodiversity preservation</p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <p>&copy; 2025 TreeKeeper. Dedicated to preserving Negros Island's endemic trees.</p>
+    </footer>
+</div>
+{% endblock %}
