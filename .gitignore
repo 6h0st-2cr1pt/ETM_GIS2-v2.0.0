@@ -46,6 +46,8 @@ yarn-error.log*
 Thumbs.db
 
 # Cypress
-cypress/screenshots/
-cypress/videos/
-cypress/downloads/
+cypress/
+cypress.config.js
+package.json
+package-lock.json
+node_modules/
