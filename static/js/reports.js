@@ -99,7 +99,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const timeRange = document.getElementById("timeRange")
   const customTimeRange = document.querySelector(".custom-time-range")
   const generateReportBtn = document.getElementById("generateReportBtn")
-  const printReportBtn = document.getElementById("printReportBtn")
   const downloadReportBtn = document.getElementById("downloadReportBtn")
   const reportPreviewContent = document.getElementById("reportPreviewContent")
   const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value
@@ -427,11 +426,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         
         if (formData.get("include_map") === "on") {
-          initReportMap();
+          const speciesFilter = formData.get("species_filter");
+          const locationFilter = formData.get("location_filter");
+          initReportMap(speciesFilter, locationFilter);
         }
 
-        // Enable print and download buttons
-        printReportBtn.disabled = false;
+        // Enable download button
         downloadReportBtn.disabled = false;
 
       } catch (error) {
@@ -445,47 +445,176 @@ document.addEventListener("DOMContentLoaded", () => {
     })
   }
 
-  // Print report button click handler
-  if (printReportBtn) {
-    printReportBtn.addEventListener("click", () => {
-      const content = document.getElementById('reportPreviewContent');
-      const originalContents = document.body.innerHTML;
-      
-      document.body.innerHTML = content.innerHTML;
-      window.print();
-      document.body.innerHTML = originalContents;
-      
-      // Reinitialize the page
-      location.reload();
-    })
-  }
-
   // Download report button click handler
   if (downloadReportBtn) {
     downloadReportBtn.addEventListener("click", async () => {
       try {
         const reportElement = document.querySelector('.report-document');
-        if (!reportElement) return;
+        if (!reportElement) {
+          alert('No report to download. Please generate a report first.');
+          return;
+        }
 
-        // Create canvas from the report content
+        // Show loading indicator
+        downloadReportBtn.disabled = true;
+        const originalText = downloadReportBtn.innerHTML;
+        downloadReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+
+        // Convert canvas charts to images before capturing
+        const canvases = reportElement.querySelectorAll('canvas');
+        const canvasImages = [];
+        for (const canvas of canvases) {
+          try {
+            const imgData = canvas.toDataURL('image/png');
+            const img = document.createElement('img');
+            img.src = imgData;
+            img.style.width = canvas.style.width || '100%';
+            img.style.height = 'auto';
+            img.style.display = 'block';
+            const parent = canvas.parentNode;
+            canvasImages.push({ element: canvas, replacement: img, parent: parent });
+          } catch (error) {
+            console.error('Error converting canvas to image:', error);
+          }
+        }
+
+        // Temporarily replace canvas elements with images
+        canvasImages.forEach(({ element, replacement, parent }) => {
+          parent.replaceChild(replacement, element);
+        });
+
+        // Add CSS to prevent page breaks inside map containers and chart containers
+        const style = document.createElement('style');
+        style.textContent = `
+          .report-map-container,
+          .report-chart-container,
+          .report-section {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+          }
+        `;
+        document.head.appendChild(style);
+
+        // Get positions of map containers to avoid splitting them
+        const mapContainers = reportElement.querySelectorAll('.report-map-container');
+        const mapPositions = [];
+        mapContainers.forEach(mapContainer => {
+          const rect = mapContainer.getBoundingClientRect();
+          const reportRect = reportElement.getBoundingClientRect();
+          const relativeTop = rect.top - reportRect.top;
+          const relativeBottom = rect.bottom - reportRect.top;
+          mapPositions.push({
+            top: relativeTop,
+            bottom: relativeBottom,
+            height: rect.height
+          });
+        });
+
+        // Create canvas from the report content with better options
         const canvas = await html2canvas(reportElement, {
           scale: 2,
           useCORS: true,
-          logging: false
+          logging: false,
+          allowTaint: true,
+          backgroundColor: '#ffffff',
+          height: reportElement.scrollHeight,
+          width: reportElement.scrollWidth,
+          windowWidth: reportElement.scrollWidth,
+          windowHeight: reportElement.scrollHeight
+        });
+
+        // Remove the temporary style
+        document.head.removeChild(style);
+
+        // Restore canvas elements
+        canvasImages.forEach(({ element, replacement, parent }) => {
+          parent.replaceChild(element, replacement);
         });
 
         // Create PDF
         const pdf = new jsPDF('p', 'mm', 'a4');
-        const imgData = canvas.toDataURL('image/jpeg', 1.0);
         const pdfWidth = pdf.internal.pageSize.getWidth();
-        const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+        const pdfHeight = pdf.internal.pageSize.getHeight();
+        const margin = 20; // 20mm margin (top, bottom, left, right)
+        const contentWidth = pdfWidth - (2 * margin);
+        const contentHeight = pdfHeight - (2 * margin);
+        
+        // Calculate image dimensions
+        const imgWidth = contentWidth;
+        const imgHeight = (canvas.height * contentWidth) / canvas.width;
+        const imgData = canvas.toDataURL('image/jpeg', 0.95);
 
-        pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
+        // Calculate how many pages we need
+        // Convert map positions from pixels to PDF image coordinates
+        const pixelToImageRatio = imgHeight / canvas.height;
+        const mapPositionsInImage = mapPositions.map(pos => ({
+          top: pos.top * pixelToImageRatio,
+          bottom: pos.bottom * pixelToImageRatio,
+          height: pos.height * pixelToImageRatio
+        }));
+
+        let heightLeft = imgHeight;
+        let yPosition = margin; // Start position with top margin
+        let currentPageImageTop = 0; // Track position in the source image
+
+        // Add first page
+        pdf.addImage(imgData, 'JPEG', margin, yPosition, imgWidth, imgHeight);
+        heightLeft -= contentHeight;
+        currentPageImageTop += contentHeight;
+
+        // Add additional pages if needed
+        while (heightLeft > 0) {
+          // Check if any map would be split at the current page break
+          let mapSplitDetected = false;
+          let mapToProtect = null;
+          
+          for (const mapPos of mapPositionsInImage) {
+            const mapStartRelative = mapPos.top - (currentPageImageTop - contentHeight);
+            const mapEndRelative = mapPos.bottom - (currentPageImageTop - contentHeight);
+            
+            // If map starts on current page but extends beyond page boundary
+            if (mapStartRelative >= 0 && mapStartRelative < contentHeight && mapEndRelative > contentHeight) {
+              // Map would be split - check if it fits on next page
+              if (mapPos.height <= contentHeight) {
+                mapSplitDetected = true;
+                mapToProtect = mapPos;
+                break;
+              }
+            }
+          }
+
+          pdf.addPage();
+          
+          if (mapSplitDetected && mapToProtect) {
+            // Adjust to start the new page at the map's top position
+            // This ensures the map starts at the top of the new page
+            const mapTopInImage = mapToProtect.top;
+            const offsetFromPageTop = mapTopInImage - (currentPageImageTop - contentHeight);
+            
+            // Position the image so the map starts at the top margin
+            yPosition = margin - offsetFromPageTop;
+            currentPageImageTop = mapToProtect.top;
+          } else {
+            // Normal page break - continue from where we left off
+            yPosition = margin - (imgHeight - heightLeft);
+            currentPageImageTop += contentHeight;
+          }
+          
+          pdf.addImage(imgData, 'JPEG', margin, yPosition, imgWidth, imgHeight);
+          heightLeft -= contentHeight;
+        }
+
         pdf.save('endemic_trees_report.pdf');
+
+        // Restore button
+        downloadReportBtn.disabled = false;
+        downloadReportBtn.innerHTML = originalText;
 
       } catch (error) {
         console.error('Error downloading report:', error);
         alert('Error downloading report. Please try again.');
+        downloadReportBtn.disabled = false;
+        downloadReportBtn.innerHTML = '<i class="fas fa-download"></i> Download';
       }
     })
   }
@@ -540,24 +669,128 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Function to initialize report map
-  function initReportMap() {
+  async function initReportMap(speciesFilter, locationFilter) {
     const mapContainer = document.getElementById('reportMap');
     if (!mapContainer) return;
 
     // Check if Leaflet is available
-    if (typeof L !== 'undefined') {
-      const map = L.map(mapContainer).setView([10.3157, 123.8854], 10);
+    if (typeof L === 'undefined') {
+      mapContainer.innerHTML = '<div class="alert alert-warning">Map functionality is currently unavailable.</div>';
+      return;
+    }
+
+    // Initialize map with default view (will be adjusted based on data)
+    // Use setTimeout to ensure container is fully rendered
+    const map = L.map(mapContainer, {
+      preferCanvas: false
+    }).setView([10.3157, 123.8854], 10);
+    
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Invalidate size to ensure proper rendering in dynamically created container
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
+
+    try {
+      // Fetch tree data from API
+      const response = await fetch('/api/tree-data/');
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const geojson = await response.json();
       
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap contributors'
+      if (!geojson.features || geojson.features.length === 0) {
+        mapContainer.innerHTML = '<div class="alert alert-info">No tree data available to display on the map.</div>';
+        return;
+      }
+
+      // Filter features based on form filters
+      let filteredFeatures = geojson.features;
+      
+      if (speciesFilter && speciesFilter !== 'all') {
+        filteredFeatures = filteredFeatures.filter(feature => 
+          feature.properties.species_id === speciesFilter
+        );
+      }
+      
+      if (locationFilter && locationFilter !== 'all') {
+        filteredFeatures = filteredFeatures.filter(feature => 
+          feature.properties.location_id === locationFilter
+        );
+      }
+
+      // Create filtered GeoJSON
+      const filteredGeoJson = {
+        type: 'FeatureCollection',
+        features: filteredFeatures
+      };
+
+      // Add markers to map
+      const bounds = [];
+      const markers = L.geoJSON(filteredGeoJson, {
+        pointToLayer: (feature, latlng) => {
+          bounds.push([latlng.lat, latlng.lng]);
+          return L.circleMarker(latlng, {
+            radius: 8,
+            fillColor: '#2ecc71',
+            color: '#fff',
+            weight: 1.5,
+            opacity: 1,
+            fillOpacity: 0.8,
+          });
+        },
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties;
+          const imageHtml = p.image_url ? 
+            `<div style="margin:8px 0"><img src="${p.image_url}" alt="${p.common_name}" style="max-width:220px;border-radius:6px"></div>` : '';
+          
+          let hectaresDisplay = 'N/A';
+          if (p.hectares !== null && p.hectares !== undefined && p.hectares !== '') {
+            const hectaresNum = Number(p.hectares);
+            if (!isNaN(hectaresNum) && hectaresNum >= 0) {
+              hectaresDisplay = `${hectaresNum.toFixed(2)} ha`;
+            }
+          }
+
+          const popupContent = `
+            <div class="tree-popup">
+              <h3>${p.common_name}</h3>
+              <p><em>${p.scientific_name}</em></p>
+              ${imageHtml}
+              <table class="popup-table">
+                <tr><td>Family:</td><td>${p.family}</td></tr>
+                <tr><td>Genus:</td><td>${p.genus}</td></tr>
+                <tr><td>Location:</td><td>${p.location}</td></tr>
+                <tr><td>Population:</td><td>${p.population}</td></tr>
+                <tr><td><strong>Hectares:</strong></td><td>${hectaresDisplay}</td></tr>
+                <tr><td>Health Status:</td><td>${p.health_status.replace(/_/g, " ")}</td></tr>
+                <tr><td>Year:</td><td>${p.year}</td></tr>
+              </table>
+            </div>
+          `;
+          layer.bindPopup(popupContent);
+        }
       }).addTo(map);
 
-      // Add sample markers
-      L.marker([10.3157, 123.8854])
-        .bindPopup('Sample Location 1')
-        .addTo(map);
-    } else {
-      mapContainer.innerHTML = '<div class="alert alert-warning">Map functionality is currently unavailable.</div>';
+      // Fit map bounds to show all markers
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [20, 20] });
+        // Invalidate size again after fitting bounds
+        setTimeout(() => {
+          map.invalidateSize();
+        }, 100);
+      } else {
+        // If no markers after filtering, show message
+        mapContainer.innerHTML = '<div class="alert alert-info">No tree data matches the selected filters.</div>';
+      }
+
+    } catch (error) {
+      console.error('Error loading tree data for map:', error);
+      mapContainer.innerHTML = '<div class="alert alert-danger">Error loading tree data. Please try again.</div>';
     }
   }
 })

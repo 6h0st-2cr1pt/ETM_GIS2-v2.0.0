@@ -1238,6 +1238,7 @@ def tree_data(request):
                 'properties': {
                     'id': str(tree.id),
                     'species_id': str(tree.species.id),  # Add species_id for filtering
+                    'location_id': str(tree.location.id),  # Add location_id for filtering
                     'common_name': tree.species.common_name,
                     'scientific_name': tree.species.scientific_name,
                     'family': tree.species.genus.family.name,
@@ -1381,6 +1382,7 @@ def filter_trees(request, species_id):
                 'properties': {
                     'id': str(tree.id),
                     'species_id': str(tree.species.id),
+                    'location_id': str(tree.location.id),  # Add location_id for filtering
                     'common_name': tree.species.common_name,
                     'scientific_name': tree.species.scientific_name,
                     'family': tree.species.genus.family.name,
