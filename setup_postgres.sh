@@ -15,8 +15,10 @@ NC='\033[0m'
 
 # Check if running as root
 if [ "$EUID" -eq 0 ]; then 
-   echo -e "${RED}Please do not run as root. Use a regular user with sudo privileges.${NC}"
-   exit 1
+   echo -e "${YELLOW}Warning: Running as root. This is OK for Hostinger VPS, but consider using a non-root user for better security.${NC}"
+   echo -e "${YELLOW}Continuing with root user...${NC}"
+   echo ""
+   # Don't exit, just warn
 fi
 
 # Get database details
@@ -39,7 +41,37 @@ echo ""
 echo -e "${GREEN}Creating PostgreSQL database and user...${NC}"
 
 # Create database and user
-sudo -u postgres psql <<EOF
+# Use sudo if not root, otherwise run directly
+if [ "$EUID" -eq 0 ]; then
+    # Running as root
+    su - postgres <<PSQL_EOF
+psql <<SQL_EOF
+-- Create user
+CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
+
+-- Create database
+CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};
+
+-- Set encoding
+ALTER DATABASE ${DB_NAME} SET client_encoding TO 'utf8';
+ALTER DATABASE ${DB_NAME} SET default_transaction_isolation TO 'read committed';
+ALTER DATABASE ${DB_NAME} SET timezone TO 'UTC';
+
+-- Grant privileges
+GRANT ALL PRIVILEGES ON DATABASE ${DB_NAME} TO ${DB_USER};
+
+-- Connect to database and grant schema privileges
+\c ${DB_NAME}
+GRANT ALL ON SCHEMA public TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO ${DB_USER};
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${DB_USER};
+
+\q
+SQL_EOF
+PSQL_EOF
+else
+    # Running as regular user
+    sudo -u postgres psql <<EOF
 -- Create user
 CREATE USER ${DB_USER} WITH PASSWORD '${DB_PASSWORD}';
 
@@ -62,6 +94,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO ${DB_USER};
 
 \q
 EOF
+fi
 
 echo ""
 echo -e "${GREEN}Database and user created successfully!${NC}"
