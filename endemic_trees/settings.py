@@ -13,12 +13,13 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-9oi!e+)fwq51*q3%=u_vga9k#7%o(hx7)5*q6f^rsk0xw3j@n3'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-9oi!e+)fwq51*q3%=u_vga9k#7%o(hx7)5*q6f^rsk0xw3j@n3')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+# Get allowed hosts from environment variable, default to localhost for development
+ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
 
 # Application definition
@@ -101,8 +102,16 @@ DATABASES = {
         'OPTIONS': {
             'connect_timeout': 10,
         },
+        # Connection pool settings
+        'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '600')),  # 10 minutes default
+        'ATOMIC_REQUESTS': False,  # Set to True if you want transactions per request
     }
 }
+
+# Database connection pooling (optional - for high traffic)
+# If using PgBouncer or similar, you may want to set CONN_MAX_AGE to 0
+if os.getenv('DB_USE_POOLING', 'False').lower() == 'true':
+    DATABASES['default']['CONN_MAX_AGE'] = 0
 
 
 # Password validation
@@ -183,3 +192,15 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2 * 1024 * 1024  # 2 MB
 
 # Increase number of allowed form fields for very large JSON/form payloads
 DATA_UPLOAD_MAX_NUMBER_FIELDS = 10000
+
+# Security settings for production
+if not DEBUG:
+    SECURE_SSL_REDIRECT = os.getenv('SECURE_SSL_REDIRECT', 'False').lower() == 'true'
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_BROWSER_XSS_FILTER = True
+    SECURE_CONTENT_TYPE_NOSNIFF = True
+    X_FRAME_OPTIONS = 'DENY'
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
