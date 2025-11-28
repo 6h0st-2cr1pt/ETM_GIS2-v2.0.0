@@ -24,6 +24,7 @@ ALLOWED_HOSTS = ['localhost', '127.0.0.1']
 # Application definition
 
 INSTALLED_APPS = [
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -36,10 +37,6 @@ INSTALLED_APPS = [
     'crispy_forms',
     'crispy_bootstrap5',
     'rest_framework',
-    'allauth',
-    'allauth.account',
-    'allauth.socialaccount',
-    'allauth.socialaccount.providers.google',
     
     # Local apps
     'app',
@@ -52,35 +49,7 @@ SITE_ID = 1
 # Authentication settings
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
-    'allauth.account.auth_backends.AuthenticationBackend',
 ]
-
-# Allauth settings
-ACCOUNT_LOGIN_METHODS = {'username', 'email'}
-ACCOUNT_SIGNUP_FIELDS = ['email*', 'username*', 'password1*', 'password2*']
-ACCOUNT_EMAIL_VERIFICATION = 'none'  # Set to 'mandatory' for email verification
-ACCOUNT_UNIQUE_EMAIL = True
-
-# Custom social account adapter to handle multiple SocialApp objects
-SOCIALACCOUNT_ADAPTER = 'endemic_trees.adapters.CustomSocialAccountAdapter'
-
-# Google OAuth settings
-SOCIALACCOUNT_PROVIDERS = {
-    'google': {
-        'SCOPE': [
-            'profile',
-            'email',
-        ],
-        'AUTH_PARAMS': {
-            'access_type': 'online',
-        },
-        'APP': {
-            'client_id': os.getenv('GOOGLE_OAUTH_CLIENT_ID', ''),
-            'secret': os.getenv('GOOGLE_OAUTH_CLIENT_SECRET', ''),
-            'key': ''
-        }
-    }
-}
 
 LOGIN_REDIRECT_URL = '/dashboard/'
 LOGOUT_REDIRECT_URL = '/login/'
@@ -92,7 +61,6 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'allauth.account.middleware.AccountMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
@@ -188,6 +156,14 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # Crispy Forms
 CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
+
+# Jazzmin Settings
+JAZZMIN_SETTINGS = {
+    "site_header": "Administrator",
+    "site_title": "Administrator",
+    "site_brand": "Administrator",
+    "welcome_sign": "Welcome to Administrator",
+}
 
 # Django Debug Toolbar
 INTERNAL_IPS = [

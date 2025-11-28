@@ -205,7 +205,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load custom layers from database
   fetch('/api/layers/', {
-    cache: 'no-store' // Prevent caching to always get latest layer settings
+    cache: 'no-store', // Prevent caching to always get latest layer settings
+    credentials: 'same-origin' // Include session cookies for authentication
   })
     .then(response => {
       console.log('API response status:', response.status);
@@ -234,7 +235,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
           // Convert ArcGIS URLs if needed
           let layerUrl = layer.url;
-          if (layerUrl && layerUrl.includes('MapServer') && !layerUrl.includes('{z}')) {
+          if (layerUrl && typeof layerUrl === 'string' && layerUrl.includes('MapServer') && !layerUrl.includes('{z}')) {
             layerUrl = layerUrl.replace(/\/MapServer.*$/, '/MapServer/tile/{z}/{y}/{x}');
           }
 
@@ -343,7 +344,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Handle predefined layers  
         else if (layer.id === 'heatmap') {
           // Load tree data and create heatmap
-          fetch("/api/tree-data/")
+          fetch("/api/tree-data/", {
+            credentials: 'same-origin' // Include session cookies for authentication
+          })
             .then((response) => response.json())
             .then((data) => {
               updateHeatmap(data)
@@ -373,7 +376,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (layer.id === 'heatmap') {
         // Load tree data and create heatmap for initially active heatmap
-        fetch("/api/tree-data/")
+        fetch("/api/tree-data/", {
+          credentials: 'same-origin' // Include session cookies for authentication
+        })
           .then((response) => response.json())
           .then((data) => {
             updateHeatmap(data)
@@ -441,7 +446,9 @@ document.addEventListener("DOMContentLoaded", () => {
       // Test seed data loading
       setTimeout(() => {
         console.log("Testing seed data...")
-        fetch("/api/seed-data/")
+        fetch("/api/seed-data/", {
+          credentials: 'same-origin' // Include session cookies for authentication
+        })
           .then(response => response.json())
           .then(data => {
             console.log("Test: Seed data loaded successfully", {
@@ -627,7 +634,9 @@ document.addEventListener("DOMContentLoaded", () => {
   // Export data tool
   document.getElementById("exportDataBtn").addEventListener("click", () => {
     // Get visible trees
-    fetch("/api/tree-data/")
+    fetch("/api/tree-data/", {
+      credentials: 'same-origin' // Include session cookies for authentication
+    })
       .then((response) => response.json())
       .then((data) => {
         // Convert to CSV
@@ -661,15 +670,46 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Loading all trees...")
 
     // Use the correct API endpoint
-    fetch("/api/tree-data/")
-      .then((response) => {
-        if (!response.ok) {
-          throw new Error(`HTTP error! Status: ${response.status}`)
+    fetch("/api/tree-data/", {
+      credentials: 'same-origin' // Include session cookies for authentication
+    })
+      .then(async (response) => {
+        // Check if redirected (likely to login page)
+        if (response.redirected) {
+          const redirectUrl = response.url || 'login page';
+          throw new Error(`Redirected to ${redirectUrl}. You may need to log in again.`)
         }
+        
+        // Check response status
+        if (!response.ok) {
+          // Try to get error message from response
+          let errorMessage = `HTTP error! Status: ${response.status}`
+          try {
+            const contentType = response.headers.get('content-type') || ''
+            if (contentType.includes('application/json')) {
+              const errorData = await response.json()
+              errorMessage = errorData.error || errorData.message || errorMessage
+            } else {
+              const text = await response.text()
+              errorMessage = text || errorMessage
+            }
+          } catch (e) {
+            console.error("Error parsing error response:", e)
+          }
+          throw new Error(errorMessage)
+        }
+        
         return response.json()
       })
       .then((data) => {
         console.log("Tree data received:", data)
+        
+        // Check if response contains an error
+        if (data.error) {
+          console.error("API returned error:", data.error)
+          throw new Error(data.error)
+        }
+        
         addTreesToMap(data)
 
         // Also update heatmap if active
@@ -679,7 +719,12 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .catch((error) => {
         console.error("Error loading trees:", error)
-        alert("Error loading tree data. Please check the console for details.")
+        console.error("Error details:", {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        })
+        alert(`Error loading tree data: ${error.message}\n\nPlease check the console for more details.`)
       })
   }
 
@@ -692,7 +737,9 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Loading all seeds...")
 
     // Use the correct API endpoint
-    fetch("/api/seed-data/")
+    fetch("/api/seed-data/", {
+      credentials: 'same-origin' // Include session cookies for authentication
+    })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`)
@@ -793,7 +840,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const marker = L.marker(latlng, { icon: icon })
         
         // Format germination status for display
-        const germinationStatus = properties.germination_status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+        const germinationStatus = properties.germination_status 
+          ? properties.germination_status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+          : 'Unknown'
         
         // Format survival rate
         const survivalRate = properties.survival_rate !== null ? `${properties.survival_rate}%` : 'Not recorded'
@@ -872,7 +921,9 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log(`Loading filtered trees for species ID: ${speciesId}`)
 
     // Use the correct API endpoint
-    fetch(`/api/filter-trees/${speciesId}/`)
+    fetch(`/api/filter-trees/${speciesId}/`, {
+      credentials: 'same-origin' // Include session cookies for authentication
+    })
       .then((response) => {
         if (!response.ok) {
           throw new Error(`HTTP error! Status: ${response.status}`)
@@ -1125,7 +1176,7 @@ document.addEventListener("DOMContentLoaded", () => {
               <tr><td>Genus:</td><td>${p.genus}</td></tr>
               <tr><td>Population:</td><td>${p.population}</td></tr>
               <tr><td><strong>Hectares:</strong></td><td>${hectaresDisplay}</td></tr>
-              <tr><td>Health Status:</td><td>${p.health_status.replace(/_/g, " ")}</td></tr>
+              <tr><td>Health Status:</td><td>${p.health_status ? p.health_status.replace(/_/g, " ") : 'Unknown'}</td></tr>
               <tr><td>Health Distribution:</td><td>
                 <div class="health-distribution">
                   <div class="health-count">Healthy: ${p.healthy_count ?? 0}</div>
