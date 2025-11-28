@@ -25,7 +25,7 @@ from django.utils import timezone
 
 from .models import (
     EndemicTree, MapLayer, UserSetting, TreeFamily,
-    TreeGenus, TreeSpecies, Location, PinStyle, TreeSeed
+    TreeGenus, TreeSpecies, Location, PinStyle, TreeSeed, UserProfile
 )
 from .forms import (
     EndemicTreeForm, CSVUploadForm, ThemeSettingsForm,
@@ -50,9 +50,18 @@ def splash_screen(request):
     return render(request, 'app/splash.html')
 
 
+def get_user_type(user):
+    """Helper function to get user type from profile"""
+    try:
+        return user.profile.user_type
+    except (AttributeError, UserProfile.DoesNotExist):
+        # Default to app_user if no profile exists
+        return 'app_user'
+
+
 def user_login(request):
     """
-    Handle user login
+    Handle user login - only for app users
     """
     if request.user.is_authenticated:
         return redirect('app:dashboard')
@@ -64,6 +73,14 @@ def user_login(request):
         user = authenticate(request, username=username, password=password)
 
         if user is not None:
+            # Check user type - only allow app_user
+            user_type = get_user_type(user)
+            if user_type != 'app_user':
+                return render(request, 'app/login.html', {
+                    'error_message': 'This account is not authorized to access the app. Please use the correct login portal.',
+                    'theme': get_setting(request.user, 'theme', 'dark')
+                })
+            
             # Specify the backend since we have multiple backends
             login(request, user, backend='django.contrib.auth.backends.ModelBackend')
             messages.success(request, f"Welcome back, {username}!")
@@ -96,6 +113,17 @@ def dashboard(request):
     """
     Main dashboard view
     """
+    # Check user type
+    user_type = get_user_type(request.user)
+    if user_type != 'app_user':
+        messages.error(request, 'You do not have permission to access this page.')
+        if user_type == 'head_user':
+            return redirect('head:gis')
+        elif user_type == 'public_user':
+            return redirect('public:home')
+        else:
+            return redirect('app:login')
+    
     try:
         # Get basic stats for dashboard with proper null checks
         total_trees = EndemicTree.objects.filter(user=request.user).count()
@@ -350,16 +378,26 @@ def layers(request):
 def datasets(request):
     """
     Display and manage datasets
+    Includes user's data and all public submissions
     """
     trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
     seeds = TreeSeed.objects.filter(user=request.user).select_related('species', 'location').all()
     species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
+    
+    # Get all public submissions (available to all app users)
+    try:
+        from public.models import TreePhotoSubmission
+        public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+    except Exception as e:
+        print(f"Error fetching public submissions: {str(e)}")
+        public_submissions = []
 
     context = {
         'active_page': 'datasets',
         'trees': trees,
         'seeds': seeds,
         'species_list': species_list,
+        'public_submissions': public_submissions,  # Add public submissions
     }
     return render(request, 'app/datasets.html', context)
 
@@ -931,8 +969,8 @@ def api_species_list(request):
 def api_locations_list(request):
     """API endpoint to get current list of locations for dropdown updates."""
     try:
-        # Force fresh query from database - no caching
-        location_list = Location.objects.all().order_by('name')
+        # Force fresh query from database - no caching (only user's locations)
+        location_list = Location.objects.filter(user=request.user).order_by('name')
         location_data = [
             {
                 'id': str(location.id),
@@ -1085,8 +1123,8 @@ def generate_report(request):
 
         # Add data table if included
         if include_table:
-            # Query the database for tree data
-            trees = EndemicTree.objects.all()
+            # Query the database for tree data (only current user's data)
+            trees = EndemicTree.objects.filter(user=request.user)
             
             # Apply filters
             if species_filter and species_filter != 'all':
@@ -1159,6 +1197,7 @@ def generate_report(request):
 def tree_data(request):
     """
     API endpoint for tree data in GeoJSON format
+    Includes both user's trees and public submissions
     """
     try:
         trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
@@ -1207,9 +1246,41 @@ def tree_data(request):
                     'hectares': tree.hectares,
                     # Include tree image URL if available (shared by trees with same location, common_name, scientific_name)
                     'image_url': tree.image.url if tree.image and tree.image.name else None,
+                    'data_source': 'app',  # Mark as app data
                 }
             }
             features.append(feature)
+
+        # Add public submissions to the map
+        try:
+            from public.models import TreePhotoSubmission
+            public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
+            
+            for submission in public_submissions:
+                feature = {
+                    'type': 'Feature',
+                    'geometry': {
+                        'type': 'Point',
+                        'coordinates': [submission.longitude, submission.latitude]
+                    },
+                    'properties': {
+                        'id': f'public_{submission.id}',
+                        'common_name': 'Public Submission',
+                        'scientific_name': 'Unknown',
+                        'description': submission.tree_description,
+                        'person_name': submission.person_name,
+                        'location': f"({submission.latitude:.4f}, {submission.longitude:.4f})",
+                        'image_url': f'/public-submission-image/{submission.id}/',
+                        'created_at': submission.created_at.isoformat(),
+                        'data_source': 'public',  # Mark as public data
+                        'entity_type': 'public_submission',
+                    }
+                }
+                features.append(feature)
+            
+            print(f"Added {public_submissions.count()} public submissions to map")
+        except Exception as e:
+            print(f"Error adding public submissions to map: {str(e)}")
 
         geojson = {
             'type': 'FeatureCollection',
@@ -2068,8 +2139,9 @@ def api_layers(request):
         
     if request.method == 'GET':
         print("[DEBUG] API layers GET request received")
-        layers = MapLayer.objects.all().order_by('-id')
-        print(f"[DEBUG] Found {layers.count()} layers in database")
+        # Only show current user's layers
+        layers = MapLayer.objects.filter(user=request.user).order_by('-id')
+        print(f"[DEBUG] Found {layers.count()} layers for user {request.user.username}")
         layers_data = []
         for layer in layers:
             layer_data = {
