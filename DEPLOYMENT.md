@@ -4,7 +4,7 @@ This guide will help you deploy the ETM_GIS2 Django application on a Hostinger K
 
 ## Prerequisites
 
-- Hostinger KVM 2 VPS (Ubuntu 20.04/22.04 recommended)
+- Hostinger KVM 2 VPS (Ubuntu 20.04/22.04/24.04 LTS)
 - Domain name pointing to your VPS IP
 - SSH access to your VPS
 - Basic knowledge of Linux commands
@@ -259,15 +259,25 @@ sudo systemctl restart endemic_trees
 
 ### Update Application
 
+**Easy Way (Recommended):**
+```bash
+cd /var/www/ETM_GIS2-v2.0.0
+chmod +x update.sh  # First time only
+./update.sh
+```
+
+**Manual Way:**
 ```bash
 cd /var/www/ETM_GIS2-v2.0.0
 source venv/bin/activate
-git pull
+git pull origin main
 pip install -r requirements.txt
 python manage.py migrate
 python manage.py collectstatic --noinput
 sudo systemctl restart endemic_trees
 ```
+
+**📖 For detailed update instructions, see [UPDATE_GUIDE.md](UPDATE_GUIDE.md)**
 
 ### View Application Logs
 
