@@ -91,55 +91,6 @@ def user_logout(request):
     return redirect('app:login')
 
 
-def register(request):
-    """
-    Handle user registration
-    """
-    if request.user.is_authenticated:
-        return redirect('app:dashboard')
-
-    if request.method == 'POST':
-        username = request.POST.get('username')
-        email = request.POST.get('email')
-        password1 = request.POST.get('password1')
-        password2 = request.POST.get('password2')
-
-        # Validate form data
-        if password1 != password2:
-            return render(request, 'app/register.html', {
-                'error_message': 'Passwords do not match',
-                'theme': get_setting(request.user, 'theme', 'dark')
-            })
-
-        if User.objects.filter(username=username).exists():
-            return render(request, 'app/register.html', {
-                'error_message': 'Username already exists',
-                'theme': get_setting(request.user, 'theme', 'dark')
-            })
-
-        if User.objects.filter(email=email).exists():
-            return render(request, 'app/register.html', {
-                'error_message': 'Email already exists',
-                'theme': get_setting(request.user, 'theme', 'dark')
-            })
-
-        # Create user
-        user = User.objects.create_user(
-            username=username,
-            email=email,
-            password=password1
-        )
-
-        # Log the user in - specify the backend since we have multiple backends
-        login(request, user, backend='django.contrib.auth.backends.ModelBackend')
-        messages.success(request, f"Account created successfully. Welcome, {username}!")
-        return redirect('app:dashboard')
-
-    return render(request, 'app/register.html', {
-        'theme': get_setting(request.user, 'theme', 'dark')
-    })
-
-
 @login_required(login_url='app:login')
 def dashboard(request):
     """
