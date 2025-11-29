@@ -18,6 +18,10 @@ pip install -r requirements.txt
 echo "Running database migrations..."
 python manage.py migrate --noinput
 
+# Create superuser from environment variables (if provided)
+echo "Creating superuser from environment variables (if set)..."
+python manage.py create_superuser_from_env
+
 # Collect static files
 echo "Collecting static files..."
 python manage.py collectstatic --noinput
