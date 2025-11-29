@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: etm-gis2
+    env: python
+    plan: starter  # Change to 'standard' or 'pro' for production
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    startCommand: gunicorn endemic_trees.wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
+      - key: DEBUG
+        value: False
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: etm-gis2.onrender.com,your-custom-domain.com
+      - key: DATABASE_URL
+        fromDatabase:
+          name: etm-gis2-db
+          property: connectionString
+    healthCheckPath: /
+
+databases:
+  - name: etm-gis2-db
+    plan: starter  # Change to 'standard' or 'pro' for production
+    databaseName: endemic_trees
+    user: etm_user
+

@@ -194,7 +194,7 @@ You'll see a text editor. Use arrow keys to navigate. Update these lines:
 ```env
 DEBUG=False
 SECRET_KEY=your-secret-key-here
-ALLOWED_HOSTS=72.60.192.148,your-domain.com
+ALLOWED_HOSTS=72.60.192.148
 
 DB_NAME=endemic_trees
 DB_USER=etm_user
@@ -202,7 +202,7 @@ DB_PASSWORD=ChooseASecurePassword123!
 DB_HOST=localhost
 DB_PORT=5432
 ```
-
+T
 **To generate a SECRET_KEY, open a NEW terminal window, SSH again, and run:**
 ```bash
 cd /var/www/ETM_GIS2-v2.0.0
