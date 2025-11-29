@@ -1,9 +1,16 @@
+# Core Django Framework
 Django>=4.2,<5.0
+
+# Data Processing & Analysis
 pandas>=2.0.0
 numpy>=1.24.0
 matplotlib>=3.7.0
 seaborn>=0.12.0
+
+# Image Processing
 Pillow>=10.0.0
+
+# Django Extensions
 django-crispy-forms>=2.0
 crispy-bootstrap5>=0.7
 django-leaflet>=0.28.0
@@ -11,21 +18,21 @@ django-filter>=23.0
 django-tables2>=2.6.0
 django-import-export>=3.3.0
 djangorestframework>=3.14.0
-openpyxl>=3.1.0
-whitenoise>=6.5.0
-requests>=2.31.0
-psycopg2-binary>=2.9.0
-python-dotenv>=1.0.0
 django-jazzmin>=3.0.0
-dj-database-url>=2.1.0
 
-# Production server
+# File Processing
+openpyxl>=3.1.0
+
+# Static Files & Server
+whitenoise>=6.5.0
 gunicorn>=21.2.0
 
-# Testing dependencies
-pytest>=7.4.0
-pytest-django>=4.5.0
-pytest-cov>=4.1.0
-pytest-xdist>=3.3.0
-faker>=19.0.0
-factory-boy>=3.3.0
+# Database
+psycopg2-binary>=2.9.0
+dj-database-url>=2.1.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# Environment Variables
+python-dotenv>=1.0.0
