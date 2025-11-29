@@ -71,17 +71,26 @@ Fill in the following:
 **Environment Variables:**
 Click **"Add Environment Variable"** and add these:
 
+**Required:**
 ```
 DEBUG=False
 SECRET_KEY=your-very-long-random-secret-key-here
-ALLOWED_HOSTS=etm-gis2.onrender.com
+ALLOWED_HOSTS=etm-gis2-v2-0-0.onrender.com
 DATABASE_URL=<paste-your-database-internal-url-here>
+```
+
+**Optional (for automatic superuser creation):**
+```
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_EMAIL=your-email@example.com
+DJANGO_SUPERUSER_PASSWORD=your-secure-password-here
 ```
 
 **Important:**
 - Generate SECRET_KEY: Run this locally: `python -c 'from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())'`
 - For DATABASE_URL: Use the **Internal Database URL** from Step 2 (starts with `postgresql://`)
-- ALLOWED_HOSTS: Replace `etm-gis2` with your actual service name
+- ALLOWED_HOSTS: Use your actual Render URL (e.g., `etm-gis2-v2-0-0.onrender.com`)
+- Superuser variables: Only needed for first-time setup, can be removed after
 
 **Advanced Settings:**
 - **Plan**: Start with **Free** (512 MB RAM)
@@ -94,28 +103,45 @@ DATABASE_URL=<paste-your-database-internal-url-here>
 3. Wait 5-10 minutes for the first deployment
 4. You'll see build logs in real-time
 
-### Step 6: Database Migrations (Automatic!)
+### Step 6: Create Django Admin Superuser (Automatic!)
 
-**Good news!** Migrations run automatically during the build process (no shell needed, even on free tier!)
+**Great news!** You can create a superuser automatically using environment variables - no shell needed!
 
-The build script automatically:
-- ✅ Runs `python manage.py migrate --noinput`
-- ✅ Collects static files
-- ✅ Sets up everything
+**Option 1: Automatic Superuser Creation (Recommended for Free Tier)**
 
-**However, you still need to create a superuser.** After deployment:
+Add these environment variables in Render dashboard:
+
+1. Go to your web service → **"Environment"** tab
+2. Click **"Add Environment Variable"** and add:
+
+```
+DJANGO_SUPERUSER_USERNAME=admin
+DJANGO_SUPERUSER_EMAIL=your-email@example.com
+DJANGO_SUPERUSER_PASSWORD=your-secure-password-here
+```
+
+3. **Save Changes** - Render will automatically redeploy
+4. The build script will create the superuser automatically!
+
+**Important:**
+- Use a **strong password** for production
+- The superuser is only created if it doesn't already exist
+- After first creation, you can remove these variables (optional, for security)
+
+**Option 2: Manual Creation (If you have shell access)**
+
+If you upgrade to a paid plan with shell access:
 
 1. Go to your web service dashboard
-2. Click **"Shell"** tab (if available) OR use Render's one-click shell
+2. Click **"Shell"** tab
 3. Run:
    ```bash
    python manage.py createsuperuser
    ```
 
-**Note:** If you're on free tier and don't have shell access, you can:
-- Temporarily upgrade to Starter plan ($7/month) to create superuser, then downgrade
-- Or use Django admin to create users through the web interface (if you have another way to access)
-- Or create superuser locally and import the user data
+**Option 3: Using Management Command (Alternative)**
+
+You can also trigger superuser creation manually by setting the environment variables and triggering a manual deploy.
 
 ### Step 7: Access Your Application!
 
@@ -142,11 +168,18 @@ Here are all the environment variables you can set in Render:
 
 | Variable | Description | Example | Required |
 |----------|-------------|---------|----------|
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
 | `DEBUG` | Django debug mode | `False` | Yes |
 | `SECRET_KEY` | Django secret key | `django-insecure-...` | Yes |
-| `ALLOWED_HOSTS` | Allowed hostnames | `etm-gis2.onrender.com` | Yes |
+| `ALLOWED_HOSTS` | Allowed hostnames | `etm-gis2-v2-0-0.onrender.com` | Yes |
 | `DATABASE_URL` | Database connection (auto-set if linked) | `postgresql://...` | Yes (auto) |
 | `PYTHON_VERSION` | Python version | `3.12.0` | Optional |
+| `DJANGO_SUPERUSER_USERNAME` | Admin username | `admin` | Optional* |
+| `DJANGO_SUPERUSER_EMAIL` | Admin email | `admin@example.com` | Optional* |
+| `DJANGO_SUPERUSER_PASSWORD` | Admin password | `secure-password` | Optional* |
+
+*Required only if you want automatic superuser creation (recommended for free tier)
 
 **Important Notes:**
 - `DATABASE_URL` is automatically set when you link a database to your web service
