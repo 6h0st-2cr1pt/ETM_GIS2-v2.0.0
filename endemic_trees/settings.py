@@ -91,22 +91,42 @@ WSGI_APPLICATION = 'endemic_trees.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.postgresql',
-        'NAME': os.getenv('DB_NAME', 'endemic_trees'),
-        'USER': os.getenv('DB_USER', 'postgres'),
-        'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
-        'HOST': os.getenv('DB_HOST', 'localhost'),
-        'PORT': os.getenv('DB_PORT', '5432'),
-        'OPTIONS': {
-            'connect_timeout': 10,
-        },
-        # Connection pool settings
-        'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '600')),  # 10 minutes default
-        'ATOMIC_REQUESTS': False,  # Set to True if you want transactions per request
+# Support for Render's DATABASE_URL (for Render deployment)
+# Also supports individual DB_* environment variables (for VPS deployment)
+try:
+    import dj_database_url
+except ImportError:
+    dj_database_url = None
+
+DATABASE_URL = os.getenv('DATABASE_URL')
+
+if DATABASE_URL and dj_database_url:
+    # Render provides DATABASE_URL automatically
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    # Fallback to individual environment variables (for VPS)
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('DB_NAME', 'endemic_trees'),
+            'USER': os.getenv('DB_USER', 'postgres'),
+            'PASSWORD': os.getenv('DB_PASSWORD', 'postgres'),
+            'HOST': os.getenv('DB_HOST', 'localhost'),
+            'PORT': os.getenv('DB_PORT', '5432'),
+            'OPTIONS': {
+                'connect_timeout': 10,
+            },
+            # Connection pool settings
+            'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '600')),  # 10 minutes default
+            'ATOMIC_REQUESTS': False,  # Set to True if you want transactions per request
+        }
+    }
 
 # Database connection pooling (optional - for high traffic)
 # If using PgBouncer or similar, you may want to set CONN_MAX_AGE to 0
