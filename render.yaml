@@ -3,7 +3,7 @@ services:
     name: etm-gis2
     env: python
     plan: starter  # Change to 'standard' or 'pro' for production
-    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    buildCommand: chmod +x build.sh && ./build.sh
     startCommand: gunicorn endemic_trees.wsgi:application
     envVars:
       - key: PYTHON_VERSION
