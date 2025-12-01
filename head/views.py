@@ -712,10 +712,9 @@ def api_layers_detail(request, layer_id):
     try:
         # Only allow access to layers created by head users
         head_user_ids = User.objects.filter(profile__user_type='head_user').values_list('id', flat=True)
-        layer = MapLayer.objects.get(
-            id=layer_id,
-            Q(user__in=head_user_ids) | Q(user__isnull=True)
-        )
+        layer = MapLayer.objects.filter(
+            Q(id=layer_id) & (Q(user__in=head_user_ids) | Q(user__isnull=True))
+        ).get()
     except MapLayer.DoesNotExist:
         return JsonResponse({'error': 'Layer not found'}, status=404)
     
