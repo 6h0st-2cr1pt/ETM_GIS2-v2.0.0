@@ -1,0 +1,437 @@
+{% extends 'app/base.html' %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/css/datasets.css">
+<style>
+    .species-image-upload-container {
+        padding: 1rem 0;
+        max-width: 100%;
+    }
+    
+    .species-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: all 0.3s ease;
+    }
+    
+    .species-card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+    
+    .species-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .species-info h3 {
+        margin: 0;
+        color: var(--text-primary);
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+    
+    .species-info p {
+        margin: 0.25rem 0 0 0;
+        color: var(--text-secondary);
+        font-style: italic;
+    }
+    
+    .tree-count-badge {
+        background: var(--color-primary);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 20px;
+        font-size: 0.875rem;
+        font-weight: 500;
+        white-space: nowrap;
+    }
+    
+    .upload-section {
+        border-top: 1px solid var(--border-color);
+        padding-top: 1rem;
+        margin-top: 1rem;
+    }
+    
+    .upload-form {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+    
+    .file-input-wrapper {
+        flex: 1;
+        min-width: 200px;
+    }
+    
+    .file-input-wrapper label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+    
+    .file-input-wrapper input[type="file"] {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius-sm);
+        background: var(--bg-card);
+        color: var(--text-primary);
+    }
+    
+    .file-input-wrapper small {
+        display: block;
+        margin-top: 0.25rem;
+        color: var(--text-secondary);
+    }
+    
+    .upload-btn {
+        padding: 0.5rem 1.5rem;
+        background: var(--color-success, #28a745);
+        color: white;
+        border: none;
+        border-radius: var(--border-radius-sm);
+        cursor: pointer;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: background 0.3s ease;
+    }
+    
+    .upload-btn:hover:not(:disabled) {
+        background: var(--color-success-dark, #218838);
+    }
+    
+    .upload-btn:disabled {
+        background: var(--text-secondary);
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+    
+    .upload-status {
+        margin-top: 0.75rem;
+        padding: 0.75rem;
+        border-radius: var(--border-radius-sm);
+        display: none;
+    }
+    
+    .upload-status.success {
+        background: #d4edda;
+        color: #155724;
+        border: 1px solid #c3e6cb;
+    }
+    
+    .upload-status.error {
+        background: #f8d7da;
+        color: #721c24;
+        border: 1px solid #f5c6cb;
+    }
+    
+    .no-species-message {
+        text-align: center;
+        padding: 3rem;
+        background: var(--bg-card);
+        border-radius: var(--border-radius);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+    }
+    
+    .no-species-message i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: var(--text-secondary);
+        opacity: 0.5;
+    }
+    
+    .no-species-message h3 {
+        color: var(--text-primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .back-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 1.5rem;
+        color: var(--color-primary);
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.3s ease;
+    }
+    
+    .back-link:hover {
+        color: var(--color-primary-dark);
+        text-decoration: none;
+    }
+    
+    .filter-section {
+        margin-bottom: 1.5rem;
+        padding: 1rem;
+        background: var(--bg-card);
+        border-radius: var(--border-radius);
+        border: 1px solid var(--border-color);
+    }
+    
+    .filter-controls {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-end;
+        flex-wrap: wrap;
+    }
+    
+    .filter-controls > div {
+        flex: 1;
+        min-width: 200px;
+    }
+    
+    .filter-controls label {
+        display: block;
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+    
+    .filter-controls input {
+        width: 100%;
+        padding: 0.5rem;
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius-sm);
+        background: var(--bg-card);
+        color: var(--text-primary);
+    }
+    
+    .filter-controls input:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 0.2rem rgba(78, 115, 223, 0.25);
+    }
+    
+    .no-results-message {
+        text-align: center;
+        padding: 3rem;
+        background: var(--bg-card);
+        border-radius: var(--border-radius);
+        color: var(--text-secondary);
+        border: 1px solid var(--border-color);
+    }
+    
+    .no-results-message i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        color: var(--text-secondary);
+        opacity: 0.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% csrf_token %}
+<div class="datasets-container species-image-upload-container">
+    <div class="datasets-actions" style="margin-bottom: 1.5rem;">
+        <a href="{% url 'app:datasets' %}" class="btn btn-outline-secondary">
+            <i class="fas fa-arrow-left"></i> Back to Datasets
+        </a>
+    </div>
+    
+    <h1 class="page-title">
+        <i class="fas fa-image"></i> Upload Images for Species
+    </h1>
+    <p class="text-muted mb-4">Upload images for tree species that don't have images yet. Images will be shared by all trees with the same common name and scientific name.</p>
+    
+    <div class="filter-section">
+        <h5 style="margin-bottom: 1rem; color: var(--text-primary);">
+            <i class="fas fa-filter"></i> Filter Species
+        </h5>
+        <div class="filter-controls">
+            <div>
+                <label for="filterCommonName">Filter by Common Name:</label>
+                <input type="text" id="filterCommonName" class="form-control" placeholder="Search common name...">
+            </div>
+            <div>
+                <label for="filterScientificName">Filter by Scientific Name:</label>
+                <input type="text" id="filterScientificName" class="form-control" placeholder="Search scientific name...">
+            </div>
+            <div style="align-self: flex-end;">
+                <button id="clearFilters" class="btn btn-outline-secondary">
+                    <i class="fas fa-times"></i> Clear Filters
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    {% if species_data %}
+        <div id="speciesList">
+            {% for item in species_data %}
+            <div class="species-card" data-common-name="{{ item.common_name|lower }}" data-scientific-name="{{ item.scientific_name|lower }}">
+                <div class="species-header">
+                    <div class="species-info">
+                        <h3>{{ item.common_name }}</h3>
+                        <p><em>{{ item.scientific_name }}</em></p>
+                    </div>
+                    <div class="tree-count-badge">
+                        <i class="fas fa-tree"></i> {{ item.tree_count }} tree{{ item.tree_count|pluralize }}
+                    </div>
+                </div>
+                
+                <div class="upload-section">
+                    <form class="upload-form" data-species-id="{{ item.species.id }}" data-common-name="{{ item.common_name }}" data-scientific-name="{{ item.scientific_name }}">
+                        <div class="file-input-wrapper">
+                            <label for="image_{{ item.species.id }}">Select Image:</label>
+                            <input type="file" id="image_{{ item.species.id }}" name="image" accept="image/jpeg,image/png,image/jpg" required>
+                            <small class="form-text text-muted">Only JPEG and PNG images are supported.</small>
+                        </div>
+                        <button type="submit" class="upload-btn">
+                            <i class="fas fa-upload"></i> Upload
+                        </button>
+                    </form>
+                    <div class="upload-status" id="status_{{ item.species.id }}"></div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="no-results-message" id="noResults" style="display: none;">
+            <i class="fas fa-search"></i>
+            <p>No species found matching your filters.</p>
+        </div>
+    {% else %}
+        <div class="no-species-message">
+            <i class="fas fa-check-circle"></i>
+            <h3>All species have images!</h3>
+            <p>There are no species without images. All your tree species already have images uploaded.</p>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    const filterCommonName = document.getElementById('filterCommonName');
+    const filterScientificName = document.getElementById('filterScientificName');
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    const speciesCards = document.querySelectorAll('.species-card');
+    const noResults = document.getElementById('noResults');
+    
+    // Filter function
+    function filterSpecies() {
+        const commonNameFilter = filterCommonName.value.toLowerCase().trim();
+        const scientificNameFilter = filterScientificName.value.toLowerCase().trim();
+        let visibleCount = 0;
+        
+        speciesCards.forEach(card => {
+            const commonName = card.dataset.commonName || '';
+            const scientificName = card.dataset.scientificName || '';
+            
+            const matchesCommon = !commonNameFilter || commonName.includes(commonNameFilter);
+            const matchesScientific = !scientificNameFilter || scientificName.includes(scientificNameFilter);
+            
+            if (matchesCommon && matchesScientific) {
+                card.style.display = 'block';
+                visibleCount++;
+            } else {
+                card.style.display = 'none';
+            }
+        });
+        
+        // Show/hide no results message
+        if (visibleCount === 0 && (commonNameFilter || scientificNameFilter)) {
+            noResults.style.display = 'block';
+        } else {
+            noResults.style.display = 'none';
+        }
+    }
+    
+    // Event listeners for filters
+    filterCommonName.addEventListener('input', filterSpecies);
+    filterScientificName.addEventListener('input', filterSpecies);
+    
+    clearFiltersBtn.addEventListener('click', function() {
+        filterCommonName.value = '';
+        filterScientificName.value = '';
+        filterSpecies();
+    });
+    
+    // Handle form submissions
+    document.querySelectorAll('.upload-form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData();
+            const speciesId = this.dataset.speciesId;
+            const commonName = this.dataset.commonName;
+            const scientificName = this.dataset.scientificName;
+            const fileInput = this.querySelector('input[type="file"]');
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const statusDiv = document.getElementById(`status_${speciesId}`);
+            
+            if (!fileInput.files[0]) {
+                statusDiv.textContent = 'Please select an image file.';
+                statusDiv.className = 'upload-status error';
+                statusDiv.style.display = 'block';
+                return;
+            }
+            
+            formData.append('species_id', speciesId);
+            formData.append('image', fileInput.files[0]);
+            
+            // Disable submit button
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Uploading...';
+            statusDiv.style.display = 'none';
+            
+            fetch('{% url "app:upload_species_image_api" %}', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': csrfToken
+                },
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    statusDiv.textContent = data.message || 'Image uploaded successfully!';
+                    statusDiv.className = 'upload-status success';
+                    statusDiv.style.display = 'block';
+                    
+                    // Remove the card after successful upload
+                    setTimeout(() => {
+                        const card = form.closest('.species-card');
+                        card.style.transition = 'opacity 0.3s';
+                        card.style.opacity = '0';
+                        setTimeout(() => {
+                            card.remove();
+                            // Check if no more cards
+                            if (document.querySelectorAll('.species-card').length === 0) {
+                                location.reload();
+                            }
+                        }, 300);
+                    }, 1500);
+                } else {
+                    statusDiv.textContent = data.error || 'Error uploading image.';
+                    statusDiv.className = 'upload-status error';
+                    statusDiv.style.display = 'block';
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+                }
+            })
+            .catch(error => {
+                statusDiv.textContent = 'Error uploading image: ' + error.message;
+                statusDiv.className = 'upload-status error';
+                statusDiv.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-upload"></i> Upload';
+            });
+        });
+    });
+});
+</script>
+{% endblock %}
+
