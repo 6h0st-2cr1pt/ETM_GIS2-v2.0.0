@@ -43,8 +43,15 @@ class TreeSpecies(models.Model):
     description = models.TextField(blank=True, null=True)
     is_endemic = models.BooleanField(default=True)
     conservation_status = models.CharField(max_length=50, blank=True, null=True)
-    # Optional image representing the species used across all popups
-    image = models.ImageField(upload_to='species/', null=True, blank=True)
+    # Image stored as BYTEA in PostgreSQL, shared by all trees with same common_name and scientific_name
+    image = models.BinaryField(null=True, blank=True, help_text="Tree image stored as binary data (BYTEA)")
+    image_format = models.CharField(
+        max_length=10,
+        choices=[('JPEG', 'JPEG'), ('PNG', 'PNG')],
+        blank=True,
+        null=True,
+        help_text="Format of the uploaded image"
+    )
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
     def __str__(self):
@@ -111,8 +118,6 @@ class EndemicTree(models.Model):
     deceased_count = models.IntegerField(default=0, help_text="Number of deceased trees")
     hectares = models.FloatField(help_text="Area covered in hectares")
     notes = models.TextField(blank=True, null=True)
-    # Image shared by all trees with same location, common_name, and scientific_name
-    image = models.ImageField(upload_to='trees/', null=True, blank=True, help_text="Image for this tree species at this location (shared by all trees with same location, common_name, and scientific_name)")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)

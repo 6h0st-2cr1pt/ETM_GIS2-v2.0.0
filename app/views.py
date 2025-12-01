@@ -403,6 +403,126 @@ def datasets(request):
 
 
 @login_required(login_url='app:login')
+def upload_species_images(request):
+    """
+    Display species without images and allow uploading images for them
+    """
+    # Get all species for the user
+    all_species = TreeSpecies.objects.filter(user=request.user)
+    
+    # Get unique combinations of common_name and scientific_name that don't have images
+    # We need to check if ANY species with the same common_name and scientific_name has an image
+    species_with_images = set()
+    for species in all_species.filter(image__isnull=False):
+        key = (species.common_name.lower(), species.scientific_name.lower())
+        species_with_images.add(key)
+    
+    # Get species without images (unique by common_name and scientific_name)
+    species_data = []
+    seen_combinations = set()
+    
+    for species in all_species.filter(image__isnull=True).order_by('common_name', 'scientific_name'):
+        key = (species.common_name.lower(), species.scientific_name.lower())
+        
+        # Skip if we've already seen this combination or if it has an image
+        if key in seen_combinations or key in species_with_images:
+            continue
+        
+        seen_combinations.add(key)
+        
+        # Get count of trees for this species combination
+        tree_count = EndemicTree.objects.filter(
+            species__common_name=species.common_name,
+            species__scientific_name=species.scientific_name,
+            user=request.user
+        ).count()
+        
+        if tree_count > 0:  # Only show if there are trees
+            species_data.append({
+                'species': species,
+                'tree_count': tree_count,
+                'common_name': species.common_name,
+                'scientific_name': species.scientific_name,
+            })
+    
+    context = {
+        'active_page': 'datasets',  # Show as part of datasets section
+        'species_data': species_data,
+    }
+    return render(request, 'app/upload_species_images.html', context)
+
+
+@login_required(login_url='app:login')
+def upload_species_image_api(request):
+    """
+    API endpoint to upload image for a species
+    """
+    if request.method != 'POST':
+        return JsonResponse({'success': False, 'error': 'Only POST method allowed'}, status=405)
+    
+    try:
+        species_id = request.POST.get('species_id')
+        if not species_id:
+            return JsonResponse({'success': False, 'error': 'species_id is required'}, status=400)
+        
+        # Get species
+        try:
+            species = TreeSpecies.objects.get(id=species_id, user=request.user)
+        except TreeSpecies.DoesNotExist:
+            return JsonResponse({'success': False, 'error': 'Species not found'}, status=404)
+        
+        # Check if species already has an image
+        if species.image:
+            return JsonResponse({
+                'success': False,
+                'error': f'Image already exists for {species.common_name} ({species.scientific_name})'
+            }, status=400)
+        
+        # Check if image file is provided
+        if 'image' not in request.FILES:
+            return JsonResponse({'success': False, 'error': 'No image file provided'}, status=400)
+        
+        image_file = request.FILES['image']
+        
+        # Read image as binary
+        image_file.seek(0)
+        image_data = image_file.read()
+        
+        # Store binary data in species
+        species.image = image_data
+        
+        # Determine and store image format
+        content_type = image_file.content_type
+        if 'jpeg' in content_type or 'jpg' in content_type:
+            species.image_format = 'JPEG'
+        elif 'png' in content_type:
+            species.image_format = 'PNG'
+        else:
+            return JsonResponse({'success': False, 'error': 'Unsupported image format. Only JPEG and PNG are allowed.'}, status=400)
+        
+        # Save species with image
+        species.save()
+        
+        # Update all species with same common_name and scientific_name to have the same image
+        TreeSpecies.objects.filter(
+            common_name=species.common_name,
+            scientific_name=species.scientific_name,
+            user=request.user,
+            image__isnull=True
+        ).update(image=image_data, image_format=species.image_format)
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'Image uploaded successfully for {species.common_name} ({species.scientific_name})'
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'error': str(e)}, status=500)
+
+
+@login_required(login_url='app:login')
 def upload_data(request):
     """
     Handle file uploads and manual data entry
@@ -616,49 +736,41 @@ def upload_data(request):
                 # If same location but different species = different images
                 
                 # Check if there's an existing tree with same location AND species
-                # This ensures all trees with same location, common_name, and scientific_name share the same image
+                # Images are now stored at species level, so we check if species has an image
                 existing_tree = EndemicTree.objects.filter(
                     species=species,  # Same common_name + scientific_name
                     location=location,  # Same location (latitude + longitude)
                     user=request.user
-                ).exclude(image__isnull=True).exclude(image='').first()
+                ).first()
                 
                 # Handle image upload
                 image_file = None
                 if 'location_image' in request.FILES:
                     image_file = request.FILES['location_image']
                 
-                # Determine which image to use:
-                # 1. If new image uploaded, use it and update all existing trees with same location+species
-                # 2. If existing tree has image and no new image, use existing image
-                # 3. Otherwise, no image
-                tree_image = None
+                # Handle image upload - save to species level (shared by all trees with same common_name and scientific_name)
                 if image_file:
-                    # New image uploaded - use it and update ONLY trees with same location AND species
-                    # We need to copy the file for each tree, not just reference it
-                    image_file.seek(0)  # Reset file pointer
-                    from django.core.files.base import ContentFile
-                    image_data = image_file.read()
-                    # Create a ContentFile for the new tree
-                    new_image_file = ContentFile(image_data, name=image_file.name)
-                    tree_image = new_image_file
-                    # Update all existing trees with same location AND species to use this image
-                    # Note: Trees with same species but different location will NOT be updated
-                    for existing_tree_obj in EndemicTree.objects.filter(
-                        species=species,  # Same common_name + scientific_name
-                        location=location,  # Same location
-                        user=request.user
-                    ):
-                        # Create a new ContentFile for each existing tree
-                        existing_image_file = ContentFile(image_data, name=image_file.name)
-                        existing_tree_obj.image.save(
-                            existing_image_file.name,
-                            existing_image_file,
-                            save=True
-                        )
-                elif existing_tree and existing_tree.image:
-                    # Use existing image from another tree with same location AND species
-                    tree_image = existing_tree.image
+                    # Check if species already has an image
+                    if species.image:
+                        messages.warning(request, f"Image already exists for {common_name} ({scientific_name}). The existing image will be used. To update the image, please edit the species in the admin panel.")
+                    else:
+                        # Read image as binary
+                        image_file.seek(0)  # Reset file pointer
+                        image_data = image_file.read()
+                        
+                        # Store binary data in species
+                        species.image = image_data
+                        
+                        # Determine and store image format
+                        content_type = image_file.content_type
+                        if 'jpeg' in content_type or 'jpg' in content_type:
+                            species.image_format = 'JPEG'
+                        elif 'png' in content_type:
+                            species.image_format = 'PNG'
+                        
+                        # Save species with image
+                        species.save()
+                        messages.success(request, f"Image uploaded successfully for {common_name} ({scientific_name}).")
 
                 # Create endemic tree record
                 tree = EndemicTree(
@@ -675,22 +787,8 @@ def upload_data(request):
                     notes=notes,
                     user=request.user
                 )
-                # Save tree first to get an ID
+                # Save tree
                 tree.save()
-                
-                # Now assign and save the image if we have one
-                if tree_image:
-                    from django.core.files.base import ContentFile
-                    if isinstance(tree_image, ContentFile):
-                        tree.image.save(
-                            tree_image.name,
-                            tree_image,
-                            save=True
-                        )
-                    else:
-                        # If it's an existing ImageField, just assign it
-                        tree.image = tree_image
-                        tree.save()
 
                 messages.success(request, f"Successfully added {common_name} record.")
                 # Redirect to GIS page to see the newly added data
@@ -1069,6 +1167,7 @@ def new_data(request):
         return render(request, 'app/new_data.html', context)
 
 
+@login_required(login_url='app:login')
 @csrf_protect
 def generate_report(request):
     """View for generating reports based on form data."""
@@ -1100,19 +1199,112 @@ def generate_report(request):
         }
         report_title = report_titles.get(report_type, 'Endemic Trees Report')
 
-        # Build the report HTML
+        # Get actual data statistics (only current user's data)
+        try:
+            trees_query = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+            
+            # Apply filters for statistics
+            if species_filter and species_filter != 'all':
+                try:
+                    trees_query = trees_query.filter(species_id=int(species_filter))
+                except (ValueError, TypeError):
+                    pass
+            if location_filter and location_filter != 'all':
+                try:
+                    trees_query = trees_query.filter(location_id=int(location_filter))
+                except (ValueError, TypeError):
+                    pass
+            
+            # Calculate actual statistics with error handling
+            total_trees = trees_query.count()
+            total_population = trees_query.aggregate(total=Sum('population'))['total'] or 0
+            
+            # Get unique counts safely
+            try:
+                unique_species = trees_query.exclude(species__isnull=True).values('species').distinct().count()
+            except:
+                unique_species = 0
+            
+            try:
+                unique_locations = trees_query.exclude(location__isnull=True).values('location').distinct().count()
+            except:
+                unique_locations = 0
+            
+            # Health status distribution
+            try:
+                health_distribution = list(trees_query.exclude(health_status__isnull=True).values('health_status').annotate(
+                    count=Count('id'),
+                    population=Sum('population')
+                ).order_by('health_status'))
+            except:
+                health_distribution = []
+            
+            # Species distribution
+            try:
+                species_dist = list(trees_query.exclude(species__isnull=True).values('species__common_name', 'species__scientific_name').annotate(
+                    count=Count('id'),
+                    total_population=Sum('population')
+                ).order_by('-total_population')[:10])
+            except:
+                species_dist = []
+            
+            # Year distribution
+            try:
+                year_dist = list(trees_query.exclude(year__isnull=True).values('year').annotate(
+                    count=Count('id'),
+                    population=Sum('population')
+                ).order_by('year'))
+            except:
+                year_dist = []
+        except Exception as e:
+            # If statistics fail, use defaults
+            import traceback
+            traceback.print_exc()
+            total_trees = 0
+            total_population = 0
+            unique_species = 0
+            unique_locations = 0
+            health_distribution = []
+            species_dist = []
+            year_dist = []
+
+        # Build the report HTML - ensure all values are safe for f-string
+        total_trees = int(total_trees) if total_trees else 0
+        total_population = int(total_population) if total_population else 0
+        unique_species = int(unique_species) if unique_species else 0
+        unique_locations = int(unique_locations) if unique_locations else 0
+        
         html = f'''
         <div class="report-document">
             <div class="report-header">
                 <h1 class="report-title">{report_title}</h1>
-                <p class="report-subtitle">Endemic Trees Monitoring System</p>
+                <p class="report-subtitle">Endemic Trees Monitoring System - User Account Report</p>
                 <p class="report-date">Generated on {date_str} at {time_str}</p>
+                <p class="report-note"><strong>Note:</strong> This report includes data from your account only.</p>
             </div>
 
             <div class="report-section">
                 <h2 class="report-section-title">Executive Summary</h2>
-                <p>This report provides an analysis of endemic tree data collected by the Endemic Trees Monitoring System. 
-                   The report includes information on tree species, population trends, health status, and spatial distribution.</p>
+                <div class="report-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Total Tree Records</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #007bff;">{total_trees}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Total Population</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #28a745;">{total_population:,}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Unique Species</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #ffc107;">{unique_species}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Unique Locations</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #dc3545;">{unique_locations}</p>
+                    </div>
+                </div>
+                <p style="margin-top: 1.5rem;">This report provides an analysis of endemic tree data from your account. 
+                   The data includes {total_trees} tree records with a total population of {total_population:,} trees across {unique_species} unique species and {unique_locations} locations.</p>
             </div>
         '''
 
@@ -1142,13 +1334,20 @@ def generate_report(request):
         # Add data table if included
         if include_table:
             # Query the database for tree data (only current user's data)
-            trees = EndemicTree.objects.filter(user=request.user)
+            # Use select_related to avoid N+1 queries and handle potential None values
+            trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family')
             
             # Apply filters
             if species_filter and species_filter != 'all':
-                trees = trees.filter(species_id=species_filter)
+                try:
+                    trees = trees.filter(species_id=int(species_filter))
+                except (ValueError, TypeError):
+                    pass  # Invalid filter, ignore
             if location_filter and location_filter != 'all':
-                trees = trees.filter(location_id=location_filter)
+                try:
+                    trees = trees.filter(location_id=int(location_filter))
+                except (ValueError, TypeError):
+                    pass  # Invalid filter, ignore
             
             # Generate table HTML
             html += '''
@@ -1167,15 +1366,36 @@ def generate_report(request):
                         <tbody>
             '''
             
-            # Add table rows
+            # Add table rows with proper error handling
+            tree_count = 0
             for tree in trees[:10]:  # Limit to 10 rows for performance
-                html += f'''
-                <tr>
-                    <td>{tree.species.common_name} ({tree.species.scientific_name})</td>
-                    <td>{tree.location.name}</td>
-                    <td>{tree.population}</td>
-                    <td>{tree.health_status}</td>
-                </tr>
+                try:
+                    common_name = tree.species.common_name if tree.species else 'Unknown'
+                    scientific_name = tree.species.scientific_name if tree.species else 'Unknown'
+                    location_name = tree.location.name if tree.location else 'Unknown'
+                    health_status = tree.health_status or 'Unknown'
+                    population = tree.population or 0
+                    
+                    html += f'''
+                    <tr>
+                        <td>{common_name} ({scientific_name})</td>
+                        <td>{location_name}</td>
+                        <td>{population}</td>
+                        <td>{health_status}</td>
+                    </tr>
+                    '''
+                    tree_count += 1
+                except Exception as e:
+                    # Skip trees with errors, log but continue
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            if tree_count == 0:
+                html += '''
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 20px;">No tree data available for the selected filters.</td>
+                    </tr>
                 '''
             
             html += '''
@@ -1185,28 +1405,192 @@ def generate_report(request):
             </div>
             '''
 
-        # Add conclusions
-        html += '''
+        # Add data analysis sections
+        if health_distribution:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Health Status Distribution</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Health Status</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Number of Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for health in health_distribution:
+                try:
+                    status_display = health.get('health_status', 'Unknown')
+                    if status_display:
+                        status_display = str(status_display).replace('_', ' ').title()
+                    else:
+                        status_display = 'Unknown'
+                    count = health.get('count', 0) or 0
+                    population = health.get('population', 0) or 0
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{status_display}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population:,}</td>
+                        </tr>
+                    '''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+        
+        if species_dist:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Top Species by Population</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Common Name</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Scientific Name</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for species in species_dist:
+                try:
+                    common_name = species.get('species__common_name') or 'Unknown'
+                    scientific_name = species.get('species__scientific_name') or 'Unknown'
+                    count = species.get('count', 0) or 0
+                    total_pop = species.get('total_population', 0) or 0
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{common_name}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;"><em>{scientific_name}</em></td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{total_pop:,}</td>
+                        </tr>
+                    '''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+        
+        if year_dist:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Population Trends by Year</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Year</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for year_data in year_dist:
+                try:
+                    year = year_data.get('year', 'Unknown') or 'Unknown'
+                    count = year_data.get('count', 0) or 0
+                    population = year_data.get('population', 0) or 0
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{year}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population:,}</td>
+                        </tr>
+                    '''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+
+        # Add conclusions based on actual data
+        conclusions = []
+        if total_trees == 0:
+            conclusions.append("No tree data is available in your account. Please add tree records to generate meaningful reports.")
+        else:
+            if unique_species > 0:
+                conclusions.append(f"Your account contains data for {unique_species} unique species, indicating good species diversity.")
+            if unique_locations > 0:
+                conclusions.append(f"Trees are distributed across {unique_locations} different locations, showing geographic diversity.")
+            if health_distribution:
+                try:
+                    excellent_count = next((h.get('count', 0) for h in health_distribution if h.get('health_status') == 'excellent'), 0)
+                    poor_count = next((h.get('count', 0) for h in health_distribution if h.get('health_status') in ['poor', 'very_poor']), 0)
+                    if excellent_count > poor_count:
+                        conclusions.append("The majority of trees are in good to excellent health, indicating successful conservation efforts.")
+                    elif poor_count > excellent_count:
+                        conclusions.append("A significant number of trees require attention due to poor health status.")
+                except:
+                    pass
+        
+        html += f'''
             <div class="report-section">
                 <h2 class="report-section-title">Conclusions and Recommendations</h2>
-                <p>Based on the data collected and analyzed in this report, the following conclusions can be drawn:</p>
+                <p>Based on the actual data analysis from your account, the following conclusions can be drawn:</p>
                 <ul>
-                    <li>The overall population of endemic trees shows varying distributions across different locations.</li>
-                    <li>Conservation efforts should be focused on areas with lower tree density.</li>
-                    <li>Regular monitoring and assessment of tree health status is essential.</li>
+        '''
+        for conclusion in conclusions:
+            # Escape HTML to prevent issues
+            from django.utils.html import escape
+            escaped_conclusion = escape(str(conclusion))
+            html += f'<li>{escaped_conclusion}</li>'
+        
+        if not conclusions:
+            html += '<li>Continue monitoring and collecting data to build a comprehensive dataset.</li>'
+        
+        html += '''
                 </ul>
             </div>
         </div>
         '''
 
-        return JsonResponse({
-            'reportContent': html,
-            'success': True
-        })
+        try:
+            return JsonResponse({
+                'reportContent': html,
+                'success': True,
+                'yearData': year_dist,  # Include year distribution data for charts
+                'healthData': health_distribution,  # Include health distribution data
+                'speciesData': species_dist  # Include species distribution data
+            })
+        except Exception as json_error:
+            # If JSON encoding fails, try to return a simpler error
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Error encoding JSON response: {error_trace}")
+            print(f"HTML length: {len(html)}")
+            return JsonResponse({
+                'error': f'Error encoding report: {str(json_error)}. Report HTML length: {len(html)} characters.',
+                'success': False
+            }, status=500)
 
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error generating report: {error_trace}")
+        # Return more detailed error in development, generic message in production
+        error_message = str(e)
+        if hasattr(request, 'user') and request.user.is_superuser:
+            error_message = f"{str(e)}\n\nTraceback:\n{error_trace}"
         return JsonResponse({
-            'error': str(e),
+            'error': error_message,
             'success': False
         }, status=500)
 
@@ -1263,8 +1647,8 @@ def tree_data(request):
                     'bad_count': tree.bad_count,
                     'deceased_count': tree.deceased_count,
                     'hectares': tree.hectares,
-                    # Include tree image URL if available (shared by trees with same location, common_name, scientific_name)
-                    'image_url': tree.image.url if tree.image and tree.image.name else None,
+                    # Include species image URL if available (shared by all trees with same common_name and scientific_name)
+                    'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None,
                     'data_source': 'app',  # Mark as app data
                 }
             }
@@ -1462,6 +1846,8 @@ def filter_trees(request, species_id):
                     'bad_count': tree.bad_count,
                     'deceased_count': tree.deceased_count,
                     'hectares': tree.hectares,
+                    # Include species image URL if available (shared by all trees with same common_name and scientific_name)
+                    'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None,
                 }
             }
             features.append(feature)
@@ -1759,29 +2145,33 @@ def edit_tree(request, tree_id):
                     tree.location.longitude = longitude
                     tree.location.save()
                 
-                # Handle image upload
+                # Handle image upload - save to species level (shared by all trees with same common_name and scientific_name)
                 if 'tree_image' in request.FILES:
                     image_file = request.FILES['tree_image']
-                    tree.image = image_file
-                    tree.save()
-                    # Update all trees with same location and species to use this image
-                    # We need to copy the file for each tree, not just reference it
-                    for existing_tree in EndemicTree.objects.filter(
-                        species=tree.species,
-                        location=tree.location,
-                        user=request.user
-                    ).exclude(id=tree.id):
-                        if not existing_tree.image:
-                            # Read the image file and create a copy
-                            image_file.seek(0)  # Reset file pointer
-                            from django.core.files.base import ContentFile
-                            image_data = image_file.read()
-                            new_image_file = ContentFile(image_data, name=image_file.name)
-                            existing_tree.image.save(
-                                new_image_file.name,
-                                new_image_file,
-                                save=True
-                            )
+                    
+                    # Check if species already has an image
+                    if tree.species.image:
+                        return JsonResponse({
+                            'success': False,
+                            'error': f"Image already exists for {tree.species.common_name} ({tree.species.scientific_name}). To update the image, please edit the species in the admin panel."
+                        }, status=400)
+                    
+                    # Read image as binary
+                    image_file.seek(0)  # Reset file pointer
+                    image_data = image_file.read()
+                    
+                    # Store binary data in species
+                    tree.species.image = image_data
+                    
+                    # Determine and store image format
+                    content_type = image_file.content_type
+                    if 'jpeg' in content_type or 'jpg' in content_type:
+                        tree.species.image_format = 'JPEG'
+                    elif 'png' in content_type:
+                        tree.species.image_format = 'PNG'
+                    
+                    # Save species with image
+                    tree.species.save()
 
                 tree.save()
 
@@ -1809,7 +2199,7 @@ def edit_tree(request, tree_id):
                 'latitude': tree.location.latitude,
                 'longitude': tree.location.longitude,
                 'notes': tree.notes or '',
-                'image_url': tree.image.url if tree.image and tree.image.name else None
+                'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None
             })
 
     except Exception as e:
@@ -2240,6 +2630,7 @@ def api_layers(request):
             
             # Create the layer
             layer = MapLayer.objects.create(
+                user=request.user,
                 name=data.get('name'),
                 description=data.get('description', ''),
                 layer_type=data.get('layer_type'),
@@ -2275,7 +2666,7 @@ def api_layers(request):
 def api_layers_detail(request, layer_id):
     """API endpoint for managing individual map layers."""
     try:
-        layer = MapLayer.objects.get(id=layer_id)
+        layer = MapLayer.objects.get(id=layer_id, user=request.user)
     except MapLayer.DoesNotExist:
         return JsonResponse({
             'success': False,
@@ -2484,15 +2875,7 @@ def api_supabase_data(request):
                 return JsonResponse({'success': False, 'error': 'invalid hectares value'}, status=400)
             
             # Check if there's an existing tree with same location and species
-            existing_tree = EndemicTree.objects.filter(
-                species=species,
-                location=location,
-                user=request.user
-            ).exclude(image__isnull=True).exclude(image='').first()
-            
             # Get image from public submission if submission_id is provided
-            from django.core.files.base import ContentFile
-            tree_image = None
             submission_id = data.get('supabase_id')
             # Convert to int if it's a string
             if submission_id:
@@ -2505,8 +2888,6 @@ def api_supabase_data(request):
             if submission_id:
                 try:
                     submission = TreePhotoSubmission.objects.get(id=submission_id)
-                    # Convert binary data to Django ImageField-compatible format
-                    
                     # Get binary image data
                     image_data = submission.tree_image
                     if isinstance(image_data, memoryview):
@@ -2518,11 +2899,15 @@ def api_supabase_data(request):
                     if not image_data or len(image_data) == 0:
                         print(f"Warning: Submission {submission_id} has empty image data")
                     else:
-                        # Create a ContentFile from binary data
-                        extension = 'jpg' if submission.image_format == 'JPEG' else 'png'
-                        image_file = ContentFile(image_data, name=f'submission_{submission_id}.{extension}')
-                        tree_image = image_file
-                        print(f"Created ContentFile for submission {submission_id}: {len(image_data)} bytes, extension: {extension}")
+                        # Check if species already has an image
+                        if species.image:
+                            print(f"Warning: Species {species.id} ({species.common_name}) already has an image. Skipping image import from submission {submission_id}.")
+                        else:
+                            # Store binary data in species (shared by all trees with same common_name and scientific_name)
+                            species.image = image_data
+                            species.image_format = submission.image_format
+                            species.save()
+                            print(f"Saved image from submission {submission_id} to species {species.id}: {len(image_data)} bytes")
                 except TreePhotoSubmission.DoesNotExist:
                     print(f"Submission {submission_id} not found")
                     pass
@@ -2530,11 +2915,8 @@ def api_supabase_data(request):
                     print(f"Error copying image from submission {submission_id}: {str(e)}")
                     import traceback
                     traceback.print_exc()
-            elif existing_tree and existing_tree.image:
-                # Use existing image if available
-                tree_image = existing_tree.image
             
-            # Create endemic tree record (without image first if we need to handle it separately)
+            # Create endemic tree record
             tree = EndemicTree(
                 species=species,
                 location=location,
@@ -2552,59 +2934,8 @@ def api_supabase_data(request):
                 user=request.user
             )
             
-            # Save tree first to get an ID
+            # Save tree
             tree.save()
-            
-            # Now assign and save the image if we have one
-            if tree_image:
-                # If tree_image is a ContentFile (from submission), we need to save it properly
-                if isinstance(tree_image, ContentFile):
-                    # Reset file pointer to beginning
-                    tree_image.seek(0)
-                    try:
-                        tree.image.save(
-                            tree_image.name,
-                            tree_image,
-                            save=True
-                        )
-                        # Refresh from database to ensure image is saved
-                        tree.refresh_from_db()
-                        print(f"Successfully saved image for tree {tree.id}: {tree.image.name}")
-                    except Exception as e:
-                        print(f"Error saving image for tree {tree.id}: {str(e)}")
-                else:
-                    # If it's an existing ImageField, just assign it
-                    tree.image = tree_image
-                    tree.save()
-                    print(f"Assigned existing image to tree {tree.id}: {tree.image.name if tree.image else None}")
-                
-                # If we imported a new image, update all trees with same location and species
-                if submission_id:
-                    try:
-                        submission = TreePhotoSubmission.objects.get(id=submission_id)
-                        # Get binary image data from submission
-                        image_data = submission.tree_image
-                        if isinstance(image_data, memoryview):
-                            image_data = bytes(image_data)
-                        elif not isinstance(image_data, bytes):
-                            image_data = bytes(image_data)
-                        
-                        extension = 'jpg' if submission.image_format == 'JPEG' else 'png'
-                        for existing in EndemicTree.objects.filter(species=species, location=location, user=request.user).exclude(id=tree.id):
-                            if not existing.image:
-                                # Create a new ContentFile for each existing tree
-                                new_image_file = ContentFile(image_data, name=f'submission_{submission_id}_{existing.id}.{extension}')
-                                existing.image.save(
-                                    new_image_file.name,
-                                    new_image_file,
-                                    save=True
-                                )
-                    except TreePhotoSubmission.DoesNotExist:
-                        pass
-                    except Exception as e:
-                        print(f"Error copying image to existing trees: {str(e)}")
-            else:
-                print(f"No image to save for tree {tree.id}")
             
             return JsonResponse({
                 'success': True,
@@ -2685,6 +3016,46 @@ def public_submission_image(request, submission_id):
         
     except TreePhotoSubmission.DoesNotExist:
         return HttpResponseNotFound("Image not found")
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return HttpResponseServerError(f"Error serving image: {str(e)}")
+
+
+@login_required(login_url='app:login')
+def species_image(request, species_id):
+    """Serve image from TreeSpecies as HTTP response."""
+    try:
+        species = TreeSpecies.objects.get(id=species_id, user=request.user)
+        
+        # Check if image exists
+        if not species.image:
+            return HttpResponseNotFound("Image not found")
+        
+        # Get binary data - BinaryField returns bytes
+        image_data = species.image
+        if isinstance(image_data, memoryview):
+            image_data = bytes(image_data)
+        elif not isinstance(image_data, bytes):
+            image_data = bytes(image_data)
+        
+        # Determine content type based on image format
+        if species.image_format == 'JPEG':
+            content_type = 'image/jpeg'
+        elif species.image_format == 'PNG':
+            content_type = 'image/png'
+        else:
+            content_type = 'image/jpeg'  # Default
+        
+        # Create response with proper headers
+        response = HttpResponse(image_data, content_type=content_type)
+        response['Content-Length'] = len(image_data)
+        response['Cache-Control'] = 'public, max-age=3600'
+        
+        return response
+        
+    except TreeSpecies.DoesNotExist:
+        return HttpResponseNotFound("Species not found")
     except Exception as e:
         import traceback
         traceback.print_exc()

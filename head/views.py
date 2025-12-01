@@ -7,6 +7,7 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_protect
 from django.db.models import Count, Sum
 from django.utils import timezone
+from django.urls import reverse
 
 from app.models import (
     EndemicTree, MapLayer, UserSetting, TreeFamily,
@@ -348,12 +349,10 @@ def tree_data(request):
         # Convert to GeoJSON format
         features = []
         for tree in trees:
-            # Get image URL - prefer tree image, fallback to species image
+            # Get image URL from species (shared by all trees with same common_name and scientific_name)
             image_url = None
-            if tree.image and tree.image.name:
-                image_url = request.build_absolute_uri(tree.image.url)
-            elif tree.species.image and tree.species.image.name:
-                image_url = request.build_absolute_uri(tree.species.image.url)
+            if tree.species.image:
+                image_url = request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id]))
             
             feature = {
                 'type': 'Feature',
@@ -363,6 +362,8 @@ def tree_data(request):
                 },
                 'properties': {
                     'id': str(tree.id),
+                    'species_id': str(tree.species.id),  # Add species_id for filtering
+                    'location_id': str(tree.location.id),  # Add location_id for filtering
                     'common_name': tree.species.common_name,
                     'scientific_name': tree.species.scientific_name,
                     'family': tree.species.genus.family.name if tree.species.genus and tree.species.genus.family else 'Unknown',
@@ -459,12 +460,10 @@ def filter_trees(request, species_id):
         # Convert to GeoJSON format
         features = []
         for tree in trees:
-            # Get image URL - prefer tree image, fallback to species image
+            # Get image URL from species (shared by all trees with same common_name and scientific_name)
             image_url = None
-            if tree.image and tree.image.name:
-                image_url = request.build_absolute_uri(tree.image.url)
-            elif tree.species.image and tree.species.image.name:
-                image_url = request.build_absolute_uri(tree.species.image.url)
+            if tree.species.image:
+                image_url = request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id]))
             
             feature = {
                 'type': 'Feature',
@@ -802,20 +801,134 @@ def generate_report(request):
         }
         report_title = report_titles.get(report_type, 'Endemic Trees Report')
 
-        # Build the report HTML
+        # Get actual data statistics (ALL USERS DATA)
+        try:
+            trees_query = EndemicTree.objects.all().select_related('species', 'location', 'user')
+            
+            # Apply filters for statistics
+            if species_filter and species_filter != 'all':
+                try:
+                    trees_query = trees_query.filter(species_id=int(species_filter))
+                except (ValueError, TypeError):
+                    pass
+            if location_filter and location_filter != 'all':
+                try:
+                    trees_query = trees_query.filter(location_id=int(location_filter))
+                except (ValueError, TypeError):
+                    pass
+            
+            # Calculate actual statistics with error handling
+            total_trees = trees_query.count()
+            total_population = trees_query.aggregate(total=Sum('population'))['total'] or 0
+            
+            # Get unique counts safely
+            try:
+                unique_species = trees_query.exclude(species__isnull=True).values('species').distinct().count()
+            except:
+                unique_species = 0
+            
+            try:
+                unique_locations = trees_query.exclude(location__isnull=True).values('location').distinct().count()
+            except:
+                unique_locations = 0
+            
+            try:
+                unique_users = trees_query.exclude(user__isnull=True).values('user').distinct().count()
+            except:
+                unique_users = 0
+            
+            # Health status distribution
+            try:
+                health_distribution = list(trees_query.exclude(health_status__isnull=True).values('health_status').annotate(
+                    count=Count('id'),
+                    population=Sum('population')
+                ).order_by('health_status'))
+            except:
+                health_distribution = []
+            
+            # Species distribution
+            try:
+                species_dist = list(trees_query.exclude(species__isnull=True).values('species__common_name', 'species__scientific_name').annotate(
+                    count=Count('id'),
+                    total_population=Sum('population')
+                ).order_by('-total_population')[:10])
+            except:
+                species_dist = []
+            
+            # Year distribution
+            try:
+                year_dist = list(trees_query.exclude(year__isnull=True).values('year').annotate(
+                    count=Count('id'),
+                    population=Sum('population')
+                ).order_by('year'))
+            except:
+                year_dist = []
+            
+            # User contribution
+            try:
+                user_contrib = list(trees_query.exclude(user__isnull=True).values('user__username').annotate(
+                    count=Count('id'),
+                    population=Sum('population')
+                ).order_by('-population')[:10])
+            except:
+                user_contrib = []
+        except Exception as e:
+            # If statistics fail, use defaults
+            import traceback
+            traceback.print_exc()
+            total_trees = 0
+            total_population = 0
+            unique_species = 0
+            unique_locations = 0
+            unique_users = 0
+            health_distribution = []
+            species_dist = []
+            year_dist = []
+            user_contrib = []
+
+        # Build the report HTML - ensure all values are safe for f-string
+        total_trees = int(total_trees) if total_trees else 0
+        total_population = int(total_population) if total_population else 0
+        unique_species = int(unique_species) if unique_species else 0
+        unique_locations = int(unique_locations) if unique_locations else 0
+        unique_users = int(unique_users) if unique_users else 0
+        
         html = f'''
         <div class="report-document">
             <div class="report-header">
                 <h1 class="report-title">{report_title}</h1>
                 <p class="report-subtitle">Endemic Trees Monitoring System - Head Portal</p>
                 <p class="report-date">Generated on {date_str} at {time_str}</p>
-                <p class="report-note"><strong>Note:</strong> This report includes data from all users.</p>
+                <p class="report-note"><strong>Note:</strong> This report includes data from all users ({unique_users} active users).</p>
             </div>
 
             <div class="report-section">
                 <h2 class="report-section-title">Executive Summary</h2>
-                <p>This report provides a comprehensive analysis of endemic tree data collected by all users of the Endemic Trees Monitoring System. 
-                   The report includes information on tree species, population trends, health status, and spatial distribution across all user contributions.</p>
+                <div class="report-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Total Tree Records</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #007bff;">{total_trees}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Total Population</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #28a745;">{total_population:,}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Unique Species</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #ffc107;">{unique_species}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Unique Locations</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #dc3545;">{unique_locations}</p>
+                    </div>
+                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
+                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Active Users</h3>
+                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #6f42c1;">{unique_users}</p>
+                    </div>
+                </div>
+                <p style="margin-top: 1.5rem;">This comprehensive report provides an analysis of endemic tree data collected by all users of the Endemic Trees Monitoring System. 
+                   The data includes {total_trees} tree records with a total population of {total_population:,} trees across {unique_species} unique species, 
+                   {unique_locations} locations, and contributions from {unique_users} active users.</p>
             </div>
         '''
 
@@ -842,46 +955,201 @@ def generate_report(request):
             </div>
             '''
 
+        # Add data analysis sections
+        if health_distribution:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Health Status Distribution</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Health Status</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Number of Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for health in health_distribution:
+                status_display = health['health_status'].replace('_', ' ').title() if health['health_status'] else 'Unknown'
+                html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{status_display}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{health['count']}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{health['population']:,}</td>
+                        </tr>
+                '''
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+        
+        if species_dist:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Top Species by Population</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Common Name</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Scientific Name</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for species in species_dist:
+                try:
+                    common_name = species.get('species__common_name') or 'Unknown'
+                    scientific_name = species.get('species__scientific_name') or 'Unknown'
+                    count = species.get('count', 0) or 0
+                    total_pop = species.get('total_population', 0) or 0
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{common_name}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;"><em>{scientific_name}</em></td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{total_pop:,}</td>
+                        </tr>
+                    '''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+        
+        if year_dist:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Population Trends by Year</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Year</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for year_data in year_dist:
+                try:
+                    year = year_data.get('year', 'Unknown') or 'Unknown'
+                    count = year_data.get('count', 0) or 0
+                    population = year_data.get('population', 0) or 0
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{year}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population:,}</td>
+                        </tr>
+                    '''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+        
+        if user_contrib:
+            html += '''
+            <div class="report-section">
+                <h2 class="report-section-title">Top Contributors by Population</h2>
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">User</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            '''
+            for user in user_contrib:
+                try:
+                    username = user.get('user__username') or 'Unknown'
+                    count = user.get('count', 0) or 0
+                    population = user.get('population', 0) or 0
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{username}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population:,}</td>
+                        </tr>
+                    '''
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            html += '''
+                    </tbody>
+                </table>
+            </div>
+            '''
+
         # Add data table if included
         if include_table:
             # Query the database for tree data - ALL USERS
-            trees = EndemicTree.objects.all()
-            
-            # Apply filters
-            if species_filter and species_filter != 'all':
-                trees = trees.filter(species_id=species_filter)
-            if location_filter and location_filter != 'all':
-                trees = trees.filter(location_id=location_filter)
+            trees = trees_query.select_related('species', 'location', 'user')
             
             # Generate table HTML
             html += '''
             <div class="report-section">
                 <h2 class="report-section-title">Data Table</h2>
                 <div class="report-table-container">
-                    <table class="report-table">
+                    <table class="report-table" style="width: 100%; border-collapse: collapse;">
                         <thead>
-                            <tr>
-                                <th>Species</th>
-                                <th>Location</th>
-                                <th>Population</th>
-                                <th>Health Status</th>
-                                <th>User</th>
+                            <tr style="background: #f8f9fa;">
+                                <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Species</th>
+                                <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Location</th>
+                                <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Population</th>
+                                <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Health Status</th>
+                                <th style="padding: 0.75rem; border: 1px solid #dee2e6;">User</th>
                             </tr>
                         </thead>
                         <tbody>
             '''
             
-            # Add table rows
+            # Add table rows with proper error handling
+            tree_count = 0
             for tree in trees[:100]:  # Limit to 100 rows for performance
-                user_name = tree.user.username if tree.user else 'Unknown'
-                html += f'''
-                <tr>
-                    <td>{tree.species.common_name} ({tree.species.scientific_name})</td>
-                    <td>{tree.location.name}</td>
-                    <td>{tree.population}</td>
-                    <td>{tree.health_status}</td>
-                    <td>{user_name}</td>
-                </tr>
+                try:
+                    common_name = tree.species.common_name if tree.species else 'Unknown'
+                    scientific_name = tree.species.scientific_name if tree.species else 'Unknown'
+                    location_name = tree.location.name if tree.location else 'Unknown'
+                    health_status = tree.health_status or 'Unknown'
+                    population = tree.population or 0
+                    user_name = tree.user.username if tree.user else 'Unknown'
+                    
+                    html += f'''
+                        <tr>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{common_name} ({scientific_name})</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{location_name}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{health_status.replace('_', ' ').title()}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{user_name}</td>
+                        </tr>
+                    '''
+                    tree_count += 1
+                except Exception as e:
+                    import traceback
+                    traceback.print_exc()
+                    continue
+            
+            if tree_count == 0:
+                html += '''
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 20px;">No tree data available for the selected filters.</td>
+                    </tr>
                 '''
             
             html += '''
@@ -891,14 +1159,44 @@ def generate_report(request):
             </div>
             '''
 
-        # Add conclusions
-        html += '''
+        # Add conclusions based on actual data
+        conclusions = []
+        if total_trees == 0:
+            conclusions.append("No tree data is available in the system. Encourage users to add tree records.")
+        else:
+            if unique_users > 0:
+                conclusions.append(f"Data is contributed by {unique_users} active users, demonstrating collaborative data collection efforts.")
+            if unique_species > 0:
+                conclusions.append(f"The system contains data for {unique_species} unique species, indicating good species diversity across all contributions.")
+            if unique_locations > 0:
+                conclusions.append(f"Trees are distributed across {unique_locations} different locations, showing comprehensive geographic coverage.")
+            if health_distribution:
+                try:
+                    excellent_count = next((h.get('count', 0) for h in health_distribution if h.get('health_status') == 'excellent'), 0)
+                    poor_count = next((h.get('count', 0) for h in health_distribution if h.get('health_status') in ['poor', 'very_poor']), 0)
+                    if excellent_count > poor_count:
+                        conclusions.append("The majority of trees across all users are in good to excellent health, indicating successful collaborative conservation efforts.")
+                    elif poor_count > excellent_count:
+                        conclusions.append("A significant number of trees require attention due to poor health status. Coordinate conservation efforts across users.")
+                except:
+                    pass
+        
+        html += f'''
             <div class="report-section">
                 <h2 class="report-section-title">Conclusions and Recommendations</h2>
-                <p>Based on the comprehensive data collected and analyzed from all users in this report, the following conclusions can be drawn:</p>
+                <p>Based on the comprehensive data analysis from all users, the following conclusions can be drawn:</p>
                 <ul>
-                    <li>The overall population of endemic trees shows varying distributions across different locations and users.</li>
-                    <li>Conservation efforts should be focused on areas with lower tree density.</li>
+        '''
+        for conclusion in conclusions:
+            # Escape HTML to prevent issues
+            from django.utils.html import escape
+            escaped_conclusion = escape(str(conclusion))
+            html += f'<li>{escaped_conclusion}</li>'
+        
+        if not conclusions:
+            html += '<li>Continue encouraging collaborative data collection to build a comprehensive dataset.</li>'
+        
+        html += '''
                     <li>Regular monitoring and assessment of tree health status is essential across all user contributions.</li>
                     <li>Collaborative data collection provides a more comprehensive view of endemic tree distribution.</li>
                 </ul>
@@ -906,13 +1204,34 @@ def generate_report(request):
         </div>
         '''
 
-        return JsonResponse({
-            'reportContent': html,
-            'success': True
-        })
+        try:
+            return JsonResponse({
+                'reportContent': html,
+                'success': True,
+                'yearData': year_dist,  # Include year distribution data for charts
+                'healthData': health_distribution,  # Include health distribution data
+                'speciesData': species_dist  # Include species distribution data
+            })
+        except Exception as json_error:
+            # If JSON encoding fails, try to return a simpler error
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"Error encoding JSON response: {error_trace}")
+            print(f"HTML length: {len(html)}")
+            return JsonResponse({
+                'error': f'Error encoding report: {str(json_error)}. Report HTML length: {len(html)} characters.',
+                'success': False
+            }, status=500)
 
     except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        print(f"Error generating report (head): {error_trace}")
+        # Return more detailed error in development, generic message in production
+        error_message = str(e)
+        if hasattr(request, 'user') and request.user.is_superuser:
+            error_message = f"{str(e)}\n\nTraceback:\n{error_trace}"
         return JsonResponse({
-            'error': str(e),
+            'error': error_message,
             'success': False
         }, status=500)

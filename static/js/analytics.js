@@ -487,8 +487,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const distributionMapDiv = document.getElementById("distributionMap")
   if (distributionMapDiv && window.L) {
     try {
+      // Try to use location data from template first
       const locationData = JSON.parse(distributionMapDiv.getAttribute("data-locations") || "[]")
-      if (locationData && locationData.length > 0) {
+      
+      // If location data is available and has coordinates, use it
+      if (locationData && locationData.length > 0 && locationData.some(loc => loc.latitude && loc.longitude)) {
         const map = L.map(distributionMapDiv).setView([0, 0], 2)
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
           attribution: '© OpenStreetMap contributors'
@@ -498,18 +501,18 @@ document.addEventListener("DOMContentLoaded", () => {
         locationData.forEach(location => {
           if (location.latitude && location.longitude) {
             L.circleMarker([location.latitude, location.longitude], {
-              radius: Math.min(Math.sqrt(location.total_trees) * 2, 20),
+              radius: Math.min(Math.sqrt(location.total_trees || 1) * 2, 20),
               fillColor: "#2ecc71",
               color: "#fff",
-            weight: 1,
-            opacity: 1,
+              weight: 1,
+              opacity: 1,
               fillOpacity: 0.7
             })
             .bindPopup(`
-              <strong>${location.name}</strong><br>
-              Total Trees: ${location.total_trees}<br>
-              Species Count: ${location.species_count}
-                    `)
+              <strong>${location.name || 'Unknown Location'}</strong><br>
+              Total Trees: ${location.total_trees || 0}<br>
+              Species Count: ${location.species_count || 0}
+            `)
             .addTo(map)
             bounds.push([location.latitude, location.longitude])
           }
@@ -517,13 +520,89 @@ document.addEventListener("DOMContentLoaded", () => {
 
         if (bounds.length > 0) {
           map.fitBounds(bounds)
+        } else {
+          // Fallback: fetch tree data from API
+          loadTreeDataForMap(distributionMapDiv)
         }
       } else {
-        distributionMapDiv.innerHTML = '<div class="no-data-message">No location data available</div>'
+        // Fallback: fetch tree data from API
+        loadTreeDataForMap(distributionMapDiv)
       }
     } catch (error) {
       console.error("Error creating Distribution Map:", error)
-      distributionMapDiv.innerHTML = '<div class="no-data-message">Error loading map</div>'
+      // Fallback: fetch tree data from API
+      loadTreeDataForMap(distributionMapDiv)
+    }
+  }
+
+  // Function to load tree data from API for the map
+  async function loadTreeDataForMap(mapDiv) {
+    try {
+      // Determine if we're in head portal or app portal
+      const isHeadPortal = window.location.pathname.includes('/head/')
+      const apiUrl = isHeadPortal ? '/head/api/tree-data/' : '/api/tree-data/'
+      
+      const response = await fetch(apiUrl)
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`)
+      }
+
+      const geojson = await response.json()
+      
+      if (!geojson.features || geojson.features.length === 0) {
+        mapDiv.innerHTML = '<div class="no-data-message">No tree data available to display on the map.</div>'
+        return
+      }
+
+      // Initialize map
+      const map = L.map(mapDiv).setView([10.3157, 123.8854], 10)
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+      }).addTo(map)
+
+      // Add markers for each tree
+      const bounds = []
+      const markers = L.geoJSON(geojson, {
+        pointToLayer: (feature, latlng) => {
+          const p = feature.properties
+          return L.circleMarker(latlng, {
+            radius: Math.min(Math.sqrt(p.population || 1) * 2, 15),
+            fillColor: "#2ecc71",
+            color: "#fff",
+            weight: 1,
+            opacity: 1,
+            fillOpacity: 0.7
+          })
+        },
+        onEachFeature: (feature, layer) => {
+          const p = feature.properties
+          const popupContent = `
+            <div class="tree-popup">
+              <h4>${p.common_name || 'Unknown'}</h4>
+              <p><em>${p.scientific_name || 'Unknown'}</em></p>
+              <p><strong>Location:</strong> ${p.location || 'Unknown'}</p>
+              <p><strong>Population:</strong> ${p.population || 0}</p>
+              <p><strong>Health Status:</strong> ${(p.health_status || 'Unknown').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
+              ${p.user ? `<p><strong>User:</strong> ${p.user}</p>` : ''}
+            </div>
+          `
+          layer.bindPopup(popupContent)
+          bounds.push(feature.geometry.coordinates.reverse()) // Leaflet uses [lat, lng]
+        }
+      }).addTo(map)
+
+      // Fit map bounds to show all markers
+      if (bounds.length > 0) {
+        map.fitBounds(bounds, { padding: [20, 20] })
+      }
+
+      // Invalidate size to ensure proper rendering
+      setTimeout(() => {
+        map.invalidateSize()
+      }, 100)
+    } catch (error) {
+      console.error("Error loading tree data for map:", error)
+      mapDiv.innerHTML = '<div class="no-data-message">Error loading tree data. Please try again.</div>'
     }
   }
 })

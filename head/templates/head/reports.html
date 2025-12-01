@@ -203,10 +203,14 @@ html * option {
       else if (url.includes('/api/locations-list/') && !url.includes('/head/')) {
         url = "{% url 'head:api_locations_list' %}";
       }
+      // Override tree data URL
+      else if (url.includes('/api/tree-data/') && !url.includes('/head/')) {
+        url = "{% url 'head:tree_data' %}";
+      }
     }
     return originalFetch.call(this, url, ...args);
   };
 </script>
-<script src="/static/js/reports.js"></script>
+<script src="/static/js/reports.js?v=3.1.0"></script>
 {% endblock %}
 

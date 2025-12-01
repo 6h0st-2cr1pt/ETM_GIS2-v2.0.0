@@ -101,9 +101,19 @@ document.addEventListener("DOMContentLoaded", () => {
   const generateReportBtn = document.getElementById("generateReportBtn")
   const downloadReportBtn = document.getElementById("downloadReportBtn")
   const reportPreviewContent = document.getElementById("reportPreviewContent")
-  const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value
+  const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]')
+  const csrfToken = csrfTokenElement ? csrfTokenElement.value : ''
   const speciesFilter = document.getElementById("speciesFilter")
   const locationFilter = document.getElementById("locationFilter")
+  
+  // Debug: Log element availability
+  console.log('Reports.js loaded. Elements found:', {
+    reportForm: !!reportForm,
+    generateReportBtn: !!generateReportBtn,
+    reportPreviewContent: !!reportPreviewContent,
+    csrfToken: !!csrfToken,
+    csrfTokenLength: csrfToken ? csrfToken.length : 0
+  });
   
   // Function to update species dropdown
   async function updateSpeciesDropdown() {
@@ -303,9 +313,12 @@ document.addEventListener("DOMContentLoaded", () => {
   
   if (refreshSpeciesBtn) {
     refreshSpeciesBtn.addEventListener("click", async () => {
+      const btn = document.getElementById("refreshSpeciesBtn");
+      if (!btn) return; // Button no longer exists
+      
       console.log('Refresh species button clicked');
-      refreshSpeciesBtn.disabled = true;
-      const icon = refreshSpeciesBtn.querySelector('i');
+      btn.disabled = true;
+      const icon = btn.querySelector('i');
       if (icon) {
         icon.classList.add('fa-spin');
         icon.style.opacity = '0.6';
@@ -314,19 +327,29 @@ document.addEventListener("DOMContentLoaded", () => {
         await updateSpeciesDropdown();
         console.log('Species dropdown refreshed successfully');
         // Show brief success feedback
-        const originalTitle = refreshSpeciesBtn.title;
-        refreshSpeciesBtn.title = 'Refreshed!';
-        setTimeout(() => {
-          refreshSpeciesBtn.title = originalTitle;
-        }, 2000);
+        const currentBtn = document.getElementById("refreshSpeciesBtn");
+        if (currentBtn) {
+          const originalTitle = currentBtn.title;
+          currentBtn.title = 'Refreshed!';
+          setTimeout(() => {
+            const btnCheck = document.getElementById("refreshSpeciesBtn");
+            if (btnCheck) {
+              btnCheck.title = originalTitle;
+            }
+          }, 2000);
+        }
       } catch (error) {
         console.error('Error refreshing species dropdown:', error);
         alert('Failed to refresh species list. Check console for details.');
       } finally {
-        refreshSpeciesBtn.disabled = false;
-        if (icon) {
-          icon.classList.remove('fa-spin');
-          icon.style.opacity = '1';
+        const finalBtn = document.getElementById("refreshSpeciesBtn");
+        if (finalBtn) {
+          finalBtn.disabled = false;
+          const finalIcon = finalBtn.querySelector('i');
+          if (finalIcon) {
+            finalIcon.classList.remove('fa-spin');
+            finalIcon.style.opacity = '1';
+          }
         }
       }
     });
@@ -334,9 +357,12 @@ document.addEventListener("DOMContentLoaded", () => {
   
   if (refreshLocationBtn) {
     refreshLocationBtn.addEventListener("click", async () => {
+      const btn = document.getElementById("refreshLocationBtn");
+      if (!btn) return; // Button no longer exists
+      
       console.log('Refresh location button clicked');
-      refreshLocationBtn.disabled = true;
-      const icon = refreshLocationBtn.querySelector('i');
+      btn.disabled = true;
+      const icon = btn.querySelector('i');
       if (icon) {
         icon.classList.add('fa-spin');
         icon.style.opacity = '0.6';
@@ -345,19 +371,29 @@ document.addEventListener("DOMContentLoaded", () => {
         await updateLocationDropdown();
         console.log('Location dropdown refreshed successfully');
         // Show brief success feedback
-        const originalTitle = refreshLocationBtn.title;
-        refreshLocationBtn.title = 'Refreshed!';
-        setTimeout(() => {
-          refreshLocationBtn.title = originalTitle;
-        }, 2000);
+        const currentBtn = document.getElementById("refreshLocationBtn");
+        if (currentBtn) {
+          const originalTitle = currentBtn.title;
+          currentBtn.title = 'Refreshed!';
+          setTimeout(() => {
+            const btnCheck = document.getElementById("refreshLocationBtn");
+            if (btnCheck) {
+              btnCheck.title = originalTitle;
+            }
+          }, 2000);
+        }
       } catch (error) {
         console.error('Error refreshing location dropdown:', error);
         alert('Failed to refresh location list. Check console for details.');
       } finally {
-        refreshLocationBtn.disabled = false;
-        if (icon) {
-          icon.classList.remove('fa-spin');
-          icon.style.opacity = '1';
+        const finalBtn = document.getElementById("refreshLocationBtn");
+        if (finalBtn) {
+          finalBtn.disabled = false;
+          const finalIcon = finalBtn.querySelector('i');
+          if (finalIcon) {
+            finalIcon.classList.remove('fa-spin');
+            finalIcon.style.opacity = '1';
+          }
         }
       }
     });
@@ -378,51 +414,118 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Generate report button click handler
   if (generateReportBtn) {
-    generateReportBtn.addEventListener("click", async () => {
+    console.log('Attaching click handler to generate report button');
+    generateReportBtn.addEventListener("click", async function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log('Generate report button clicked!');
+      
+      // Get form element - try multiple ways
+      const form = document.getElementById("reportForm");
+      if (!form) {
+        console.error('Report form not found!');
+        alert('Error: Report form not found. Please refresh the page.');
+        return;
+      }
+      
       // Get form data
-      const formData = new FormData(reportForm)
-      const reportType = formData.get("report_type")
+      const formData = new FormData(form);
+      const reportType = formData.get("report_type");
+      console.log('Report type selected:', reportType);
 
       if (!reportType) {
-        alert("Please select a report type.")
-        return
+        alert("Please select a report type.");
+        return;
       }
 
+      // Get CSRF token - try multiple ways
+      let token = csrfToken;
+      if (!token) {
+        const tokenElement = document.querySelector('[name=csrfmiddlewaretoken]');
+        if (tokenElement) {
+          token = tokenElement.value;
+        } else {
+          // Try to get from cookie
+          const cookies = document.cookie.split(';');
+          for (let cookie of cookies) {
+            const [name, value] = cookie.trim().split('=');
+            if (name === 'csrftoken') {
+              token = value;
+              break;
+            }
+          }
+        }
+      }
+      
+      console.log('CSRF Token available:', !!token);
+
       // Show loading state
-      reportPreviewContent.innerHTML = `
-        <div class="d-flex justify-content-center align-items-center h-100">
-          <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Loading...</span>
+      const previewContent = document.getElementById("reportPreviewContent");
+      if (previewContent) {
+        previewContent.innerHTML = `
+          <div class="d-flex justify-content-center align-items-center h-100">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
           </div>
-        </div>
-      `
+        `;
+      }
 
       try {
+        console.log('Sending request to /generate-report/');
+        
         // Send form data to server
         const response = await fetch('/generate-report/', {
           method: 'POST',
           headers: {
-            'X-CSRFToken': csrfToken,
+            'X-CSRFToken': token || '',
           },
-          body: formData
+          body: formData,
+          credentials: 'same-origin'
         });
+        
+        console.log('Response received:', response.status);
 
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
+        let data;
+        try {
+          const responseText = await response.text();
+          console.log('Response status:', response.status);
+          console.log('Response text (first 500 chars):', responseText.substring(0, 500));
+          
+          if (!response.ok) {
+            console.error('Response not OK:', response.status, responseText);
+            throw new Error(`Server error (${response.status}): ${responseText.substring(0, 200)}`);
+          }
+          
+          try {
+            data = JSON.parse(responseText);
+          } catch (jsonError) {
+            console.error('JSON parse error:', jsonError, 'Response:', responseText.substring(0, 500));
+            throw new Error(`Invalid JSON response from server. Response: ${responseText.substring(0, 200)}`);
+          }
+        } catch (parseError) {
+          if (parseError.message.includes('Server error') || parseError.message.includes('Invalid JSON')) {
+            throw parseError;
+          }
+          throw new Error(`Error reading response: ${parseError.message}`);
         }
-
-        const data = await response.json();
         
         if (!data.success) {
+          console.error('Report generation failed:', data.error);
           throw new Error(data.error || 'Failed to generate report');
         }
 
         // Update preview with server response
-        reportPreviewContent.innerHTML = data.reportContent;
+        const previewContent = document.getElementById("reportPreviewContent");
+        if (previewContent) {
+          previewContent.innerHTML = data.reportContent;
+        } else {
+          console.error('Report preview content element not found!');
+        }
 
         // Initialize charts and map if needed
         if (formData.get("include_charts") === "on") {
-          initReportCharts(reportType);
+          initReportCharts(reportType, data.yearData, data.healthData, data.speciesData);
         }
         
         if (formData.get("include_map") === "on") {
@@ -432,22 +535,49 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Enable download button
-        downloadReportBtn.disabled = false;
+        if (downloadReportBtn) {
+          downloadReportBtn.disabled = false;
+        }
 
       } catch (error) {
         console.error('Error:', error);
-        reportPreviewContent.innerHTML = `
-          <div class="alert alert-danger" role="alert">
-            An error occurred while generating the report. Please try again.
-          </div>
-        `;
+        let errorMessage = 'An error occurred while generating the report. Please try again.';
+        if (error.message) {
+          errorMessage = error.message;
+        }
+        const previewContent = document.getElementById("reportPreviewContent");
+        if (previewContent) {
+          previewContent.innerHTML = `
+            <div class="alert alert-danger" role="alert">
+              <strong>Error:</strong> ${errorMessage}
+              <br><small>Check the browser console for more details.</small>
+            </div>
+          `;
+        } else {
+          alert('Error generating report: ' + errorMessage);
+        }
       }
     })
+  } else {
+    console.error('Generate report button not found!');
+    // Try to attach handler after a delay in case DOM isn't ready
+    setTimeout(() => {
+      const btn = document.getElementById("generateReportBtn");
+      if (btn) {
+        console.log('Found button after delay, attaching handler');
+        btn.addEventListener("click", function() {
+          alert('Please refresh the page to enable report generation.');
+        });
+      }
+    }, 1000);
   }
 
   // Download report button click handler
   if (downloadReportBtn) {
     downloadReportBtn.addEventListener("click", async () => {
+      let btn = document.getElementById("downloadReportBtn");
+      if (!btn) return; // Button no longer exists
+      
       try {
         const reportElement = document.querySelector('.report-document');
         if (!reportElement) {
@@ -456,9 +586,9 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         // Show loading indicator
-        downloadReportBtn.disabled = true;
-        const originalText = downloadReportBtn.innerHTML;
-        downloadReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+        btn.disabled = true;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
 
         // Convert canvas charts to images before capturing
         const canvases = reportElement.querySelectorAll('canvas');
@@ -586,7 +716,7 @@ document.addEventListener("DOMContentLoaded", () => {
           pdf.addPage();
           
           if (mapSplitDetected && mapToProtect) {
-            // Adjust to start the new page at the map's top position
+            // Adjust to start the new page at the map top position
             // This ensures the map starts at the top of the new page
             const mapTopInImage = mapToProtect.top;
             const offsetFromPageTop = mapTopInImage - (currentPageImageTop - contentHeight);
@@ -607,31 +737,53 @@ document.addEventListener("DOMContentLoaded", () => {
         pdf.save('endemic_trees_report.pdf');
 
         // Restore button
-        downloadReportBtn.disabled = false;
-        downloadReportBtn.innerHTML = originalText;
+        const restoreBtn = document.getElementById("downloadReportBtn");
+        if (restoreBtn) {
+          restoreBtn.disabled = false;
+          restoreBtn.innerHTML = originalText;
+        }
 
       } catch (error) {
         console.error('Error downloading report:', error);
         alert('Error downloading report. Please try again.');
-        downloadReportBtn.disabled = false;
-        downloadReportBtn.innerHTML = '<i class="fas fa-download"></i> Download';
+        const errorBtn = document.getElementById("downloadReportBtn");
+        if (errorBtn) {
+          errorBtn.disabled = false;
+          errorBtn.innerHTML = '<i class="fas fa-download"></i> Download';
+        }
       }
     })
   }
 
   // Function to initialize report charts
-  function initReportCharts(reportType) {
+  function initReportCharts(reportType, yearData, healthData, speciesData) {
     const ctx1 = document.getElementById('reportChart1')?.getContext('2d');
     const ctx2 = document.getElementById('reportChart2')?.getContext('2d');
+
+    // Process year data for charts
+    let yearLabels = [];
+    let yearPopulations = [];
+    let yearCounts = [];
+    
+    if (yearData && yearData.length > 0) {
+      yearLabels = yearData.map(item => String(item.year || 'Unknown'));
+      yearPopulations = yearData.map(item => item.population || 0);
+      yearCounts = yearData.map(item => item.count || 0);
+    } else {
+      // Fallback if no data
+      yearLabels = ['No Data'];
+      yearPopulations = [0];
+      yearCounts = [0];
+    }
 
     if (ctx1) {
       new Chart(ctx1, {
         type: 'bar',
         data: {
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+          labels: yearLabels,
           datasets: [{
-            label: 'Sample Data',
-            data: [12, 19, 3, 5, 2, 3],
+            label: 'Total Population by Year',
+            data: yearPopulations,
             backgroundColor: 'rgba(54, 162, 235, 0.2)',
             borderColor: 'rgba(54, 162, 235, 1)',
             borderWidth: 1
@@ -639,9 +791,28 @@ document.addEventListener("DOMContentLoaded", () => {
         },
         options: {
           responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Population Trends by Year'
+            },
+            legend: {
+              display: true
+            }
+          },
           scales: {
             y: {
-              beginAtZero: true
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Population'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Year'
+              }
             }
           }
         }
@@ -652,17 +823,44 @@ document.addEventListener("DOMContentLoaded", () => {
       new Chart(ctx2, {
         type: 'line',
         data: {
-          labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+          labels: yearLabels,
           datasets: [{
-            label: 'Trend',
-            data: [65, 59, 80, 81, 56, 55],
+            label: 'Number of Records by Year',
+            data: yearCounts,
             fill: false,
             borderColor: 'rgb(75, 192, 192)',
-            tension: 0.1
+            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+            tension: 0.1,
+            pointRadius: 5,
+            pointHoverRadius: 7
           }]
         },
         options: {
-          responsive: true
+          responsive: true,
+          plugins: {
+            title: {
+              display: true,
+              text: 'Record Count Trends by Year'
+            },
+            legend: {
+              display: true
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              title: {
+                display: true,
+                text: 'Number of Records'
+              }
+            },
+            x: {
+              title: {
+                display: true,
+                text: 'Year'
+              }
+            }
+          }
         }
       });
     }
@@ -793,4 +991,5 @@ document.addEventListener("DOMContentLoaded", () => {
       mapContainer.innerHTML = '<div class="alert alert-danger">Error loading tree data. Please try again.</div>';
     }
   }
-})
+});
+
