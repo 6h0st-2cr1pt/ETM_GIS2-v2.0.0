@@ -5,9 +5,10 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_protect
-from django.db.models import Count, Sum
+from django.db.models import Count, Sum, Q
 from django.utils import timezone
 from django.urls import reverse
+from django.contrib.auth.models import User
 
 from app.models import (
     EndemicTree, MapLayer, UserSetting, TreeFamily,
@@ -125,8 +126,12 @@ def gis(request):
     """
     GIS Map view - shows all data from all users
     """
-    # Get all available map layers (from all users or shared layers)
-    layers = MapLayer.objects.filter(is_active=True)
+    # Get only layers created by head users (not app users)
+    head_user_ids = User.objects.filter(profile__user_type='head_user').values_list('id', flat=True)
+    layers = MapLayer.objects.filter(
+        Q(user__in=head_user_ids) | Q(user__isnull=True),
+        is_active=True
+    )
 
     # Get all tree species that have associated trees (from all users)
     tree_species = TreeSpecies.objects.filter(
@@ -286,9 +291,15 @@ def analytics(request):
 @require_user_type('head_user')
 def layers(request):
     """
-    Layer control view - shows all layers from all users, head can add/edit layers
+    Layer control view - shows only layers created by head users, not app users
     """
-    layers = MapLayer.objects.all().order_by('-id')
+    # Get head user IDs
+    head_user_ids = User.objects.filter(profile__user_type='head_user').values_list('id', flat=True)
+    
+    # Only show layers created by head users or system layers (no user)
+    layers = MapLayer.objects.filter(
+        Q(user__in=head_user_ids) | Q(user__isnull=True)
+    ).order_by('-id')
 
     context = {
         'active_page': 'layers',
@@ -532,7 +543,11 @@ def api_layers(request):
     """
     if request.method == 'GET':
         try:
-            layers = MapLayer.objects.all().order_by('-id')
+            # Only show layers created by head users (not app users)
+            head_user_ids = User.objects.filter(profile__user_type='head_user').values_list('id', flat=True)
+            layers = MapLayer.objects.filter(
+                Q(user__in=head_user_ids) | Q(user__isnull=True)
+            ).order_by('-id')
             layers_data = [{
                 'id': layer.id,
                 'name': layer.name,
@@ -692,10 +707,15 @@ def api_locations_list(request):
 @require_user_type('head_user')
 def api_layers_detail(request, layer_id):
     """
-    API endpoint for managing individual map layers - Head can edit/delete
+    API endpoint for managing individual map layers - Head can edit/delete only head user layers
     """
     try:
-        layer = MapLayer.objects.get(id=layer_id)
+        # Only allow access to layers created by head users
+        head_user_ids = User.objects.filter(profile__user_type='head_user').values_list('id', flat=True)
+        layer = MapLayer.objects.get(
+            id=layer_id,
+            Q(user__in=head_user_ids) | Q(user__isnull=True)
+        )
     except MapLayer.DoesNotExist:
         return JsonResponse({'error': 'Layer not found'}, status=404)
     
