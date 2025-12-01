@@ -120,85 +120,7 @@ document.addEventListener("DOMContentLoaded", () => {
       })
     }
   
-    // Source type toggle (URL vs File)
-    const sourceUrlRadio = document.getElementById("sourceUrl")
-    const sourceFileRadio = document.getElementById("sourceFile")
-    const urlSourceGroup = document.getElementById("urlSourceGroup")
-    const fileSourceGroup = document.getElementById("fileSourceGroup")
-    const layerUrlInput = document.getElementById("layerUrl")
-
-    function updateSourceVisibility() {
-      if (sourceFileRadio && sourceFileRadio.checked) {
-        if (urlSourceGroup) urlSourceGroup.style.display = 'none'
-        if (fileSourceGroup) fileSourceGroup.style.display = ''
-        if (layerUrlInput) layerUrlInput.removeAttribute('required')
-      } else {
-        if (urlSourceGroup) urlSourceGroup.style.display = ''
-        if (fileSourceGroup) fileSourceGroup.style.display = 'none'
-        if (layerUrlInput) layerUrlInput.setAttribute('required', 'required')
-      }
-    }
-    if (sourceUrlRadio) sourceUrlRadio.addEventListener('change', updateSourceVisibility)
-    if (sourceFileRadio) sourceFileRadio.addEventListener('change', updateSourceVisibility)
-    updateSourceVisibility()
-
-    // Local file preview handlers (GeoJSON/Shapefile)
-    const previewGeoJsonBtn = document.getElementById('previewGeoJsonBtn')
-    const localGeoJsonFile = document.getElementById('localGeoJsonFile')
-    const previewShapefileBtn = document.getElementById('previewShapefileBtn')
-    const localShapefileZip = document.getElementById('localShapefileZip')
-    let localPreviewLayer = null
-
-    function clearLocalPreview() {
-      if (localPreviewLayer) {
-        try { previewMap.removeLayer(localPreviewLayer) } catch(e) {}
-        localPreviewLayer = null
-      }
-    }
-
-    if (previewGeoJsonBtn && localGeoJsonFile) {
-      previewGeoJsonBtn.addEventListener('click', function() {
-        const file = localGeoJsonFile.files && localGeoJsonFile.files[0]
-        if (!file) { alert('Please choose a GeoJSON file'); return }
-        const reader = new FileReader()
-        reader.onload = function(e) {
-          try {
-            const geojson = JSON.parse(e.target.result)
-            clearLocalPreview()
-            localPreviewLayer = L.geoJSON(geojson, {
-              style: { color: "#22c55e", weight: 2, opacity: 0.8 }
-            }).addTo(previewMap)
-            try { previewMap.fitBounds(localPreviewLayer.getBounds()) } catch(_) {}
-          } catch(err) {
-            console.error('Invalid GeoJSON:', err)
-            alert('Invalid GeoJSON file')
-          }
-        }
-        reader.readAsText(file)
-      })
-    }
-
-    if (previewShapefileBtn && localShapefileZip && typeof window.shp !== 'undefined') {
-      previewShapefileBtn.addEventListener('click', function() {
-        const file = localShapefileZip.files && localShapefileZip.files[0]
-        if (!file) { alert('Please choose a .zip Shapefile'); return }
-        const reader = new FileReader()
-        reader.onload = function(e) {
-          const arrayBuffer = e.target.result
-          window.shp(arrayBuffer).then(function(geojson){
-            clearLocalPreview()
-            localPreviewLayer = L.geoJSON(geojson, {
-              style: { color: "#0ea5e9", weight: 2, opacity: 0.8 }
-            }).addTo(previewMap)
-            try { previewMap.fitBounds(localPreviewLayer.getBounds()) } catch(_) {}
-          }).catch(function(err){
-            console.error('Error reading shapefile:', err)
-            alert('Could not read shapefile. Ensure it\'s a zipped Shapefile (.shp, .shx, .dbf).')
-          })
-        }
-        reader.readAsArrayBuffer(file)
-      })
-    }
+    // Source type - URL only (local file upload removed)
 
     // Add Layer button functionality
     const addLayerBtn = document.getElementById("addLayerBtn")
@@ -212,17 +134,14 @@ document.addEventListener("DOMContentLoaded", () => {
         layerForm.reset()
         document.getElementById("layerId").value = ""
         document.getElementById("layerFormModalLabel").textContent = "Add New Layer"
-          // Default to URL source on add
-          const srcUrl = document.getElementById('sourceUrl')
-          const srcFile = document.getElementById('sourceFile')
-          if (srcUrl) srcUrl.checked = true
-          if (typeof updateSourceVisibility === 'function') updateSourceVisibility()
         layerFormModal.show()
       })
     }
   
     // Edit Layer button functionality (using event delegation)
-    document.querySelector('.layers-list').addEventListener('click', function(e) {
+    const layersList = document.querySelector('.layers-list');
+    if (layersList) {
+      layersList.addEventListener('click', function(e) {
       const editBtn = e.target.closest('.edit-layer-btn');
       if (editBtn) {
         e.preventDefault();
@@ -255,10 +174,6 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("layerAttribution").value = layer.layer.attribution || "";
             document.getElementById("layerIsActive").checked = layer.layer.is_active;
             document.getElementById("layerIsDefault").checked = layer.layer.is_default;
-            // Force URL source on edit to avoid accidental local file overwrite
-            const srcUrl = document.getElementById('sourceUrl')
-            if (srcUrl) srcUrl.checked = true
-            if (typeof updateSourceVisibility === 'function') updateSourceVisibility()
   
             document.getElementById("layerFormModalLabel").textContent = "Edit Layer";
             layerFormModal.show();
@@ -269,6 +184,7 @@ document.addEventListener("DOMContentLoaded", () => {
           });
       }
     });
+    }
   
     // Save Layer functionality
     function getCookie(name) {
@@ -282,9 +198,6 @@ document.addEventListener("DOMContentLoaded", () => {
       saveLayerBtn.addEventListener("click", function(e) {
         e.preventDefault();
         e.stopPropagation();
-        
-        alert("Button clicked! Check console now.");
-        console.log("=== SAVE BUTTON CLICKED ===");
         
         // Get all form inputs
         const inputs = document.querySelectorAll('#layerForm input, #layerForm select, #layerForm textarea');
@@ -326,8 +239,8 @@ document.addEventListener("DOMContentLoaded", () => {
         console.log("URL length:", data.url ? data.url.length : 0);
         
         // Validate
-        // Validate URL when URL source selected
-        if (sourceUrlRadio && sourceUrlRadio.checked && !data.url) {
+        // Validate URL
+        if (!data.url) {
           alert("ERROR: URL is empty!\n\nPlease type a URL in the Layer URL field.");
           console.error("URL field is empty");
           return false;
@@ -381,7 +294,9 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             })
             .then((resp) => {
-              if (resp.success) {
+              console.log("Response received:", resp);
+              // Check for success in response
+              if (resp.success || resp.layer) {
                 alert("Layer saved successfully!")
                 window.location.reload()
               } else {
@@ -394,64 +309,7 @@ document.addEventListener("DOMContentLoaded", () => {
             })
         }
 
-        // If local file selected, convert to embedded data URL GeoJSON and save
-        if (sourceFileRadio && sourceFileRadio.checked) {
-          const fileGeo = document.getElementById('localGeoJsonFile')
-          const fileShp = document.getElementById('localShapefileZip')
-          const selectedGeo = fileGeo && fileGeo.files && fileGeo.files[0]
-          const selectedZip = fileShp && fileShp.files && fileShp.files[0]
-
-          if (!selectedGeo && !selectedZip) {
-            alert('Please choose a GeoJSON or Shapefile (.zip) file.')
-            return false
-          }
-
-          // Encode JSON string as base64 data URL
-          function jsonToDataUrl(obj) {
-            const jsonStr = JSON.stringify(obj)
-            const base64 = btoa(unescape(encodeURIComponent(jsonStr)))
-            return `data:application/json;base64,${base64}`
-          }
-
-          if (selectedGeo) {
-            const reader = new FileReader()
-            reader.onload = function(e) {
-              try {
-                const geojson = JSON.parse(e.target.result)
-                data.url = jsonToDataUrl(geojson)
-                // Treat as custom/geojson type
-                data.layer_type = data.layer_type || 'custom'
-                doSave(data)
-              } catch(err) {
-                console.error('Invalid GeoJSON:', err)
-                alert('Invalid GeoJSON file')
-              }
-            }
-            reader.readAsText(selectedGeo)
-            return false
-          }
-
-          if (selectedZip && typeof window.shp !== 'undefined') {
-            const reader = new FileReader()
-            reader.onload = function(e) {
-              const arrayBuffer = e.target.result
-              window.shp(arrayBuffer).then(function(geojson){
-                data.url = jsonToDataUrl(geojson)
-                data.layer_type = data.layer_type || 'custom'
-                doSave(data)
-              }).catch(function(err){
-                console.error('Error reading shapefile:', err)
-                alert('Could not read shapefile. Ensure it\'s a zipped Shapefile (.shp, .shx, .dbf).')
-              })
-            }
-            reader.readAsArrayBuffer(selectedZip)
-            return false
-          }
-
-          return false
-        }
-
-        // URL mode
+        // Save with URL
         doSave(data)
       })
     }
@@ -462,15 +320,17 @@ document.addEventListener("DOMContentLoaded", () => {
     let layerToDelete = null;
   
     // Handle delete button clicks
-    document.querySelector('.layers-list').addEventListener('click', function(e) {
-      const deleteBtn = e.target.closest('.delete-layer-btn');
-      if (deleteBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        layerToDelete = deleteBtn.getAttribute("data-id");
-        deleteLayerModal.show();
-      }
-    });
+    if (layersList) {
+      layersList.addEventListener('click', function(e) {
+        const deleteBtn = e.target.closest('.delete-layer-btn');
+        if (deleteBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          layerToDelete = deleteBtn.getAttribute("data-id");
+          deleteLayerModal.show();
+        }
+      });
+    }
   
     if (confirmDeleteBtn) {
       confirmDeleteBtn.addEventListener("click", () => {

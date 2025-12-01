@@ -13,6 +13,9 @@
         <a href="{% url 'app:upload' %}" class="btn btn-primary">
             <i class="fas fa-upload"></i> Upload New Data
         </a>
+        <a href="{% url 'app:upload_species_images' %}" class="btn btn-success">
+            <i class="fas fa-image"></i> Upload Species Images
+        </a>
         
         <div class="bulk-actions" id="bulkActions" style="display: none;">
             <button id="deleteSelectedBtn" class="btn btn-danger btn-sm">
@@ -109,7 +112,7 @@
                                 <button class="action-button action-view" title="View Details" data-id="{{ tree.id }}">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="action-button action-image" title="Preview Image" data-id="{{ tree.id }}" data-image-url="{% if tree.image %}{{ tree.image.url }}{% endif %}">
+                                <button class="action-button action-image" title="Preview Image" data-id="{{ tree.id }}" data-image-url="{% if tree.species.image %}/species-image/{{ tree.species.id }}/{% endif %}">
                                     <i class="fas fa-image"></i>
                                 </button>
                                 <button class="action-button action-edit" title="Edit" data-id="{{ tree.id }}">

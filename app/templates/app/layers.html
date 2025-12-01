@@ -110,18 +110,6 @@
                         </div>
                         
                         <div class="mb-3">
-                            <label class="form-label">Source</label>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="layerSourceType" id="sourceUrl" value="url" checked>
-                                <label class="form-check-label" for="sourceUrl">URL</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" name="layerSourceType" id="sourceFile" value="file">
-                                <label class="form-check-label" for="sourceFile">Local File (GeoJSON or Shapefile .zip)</label>
-                            </div>
-                        </div>
-
-                        <div class="mb-3" id="urlSourceGroup">
                             <label for="layerUrl" class="form-label">Layer URL *</label>
                             <input type="url" class="form-control" id="layerUrl" name="url" required 
                                    placeholder="https://example.com/layer">
@@ -131,20 +119,6 @@
                                 • ArcGIS: https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer<br>
                                 • GeoJSON: https://example.com/data.geojson
                             </div>
-                        </div>
-
-                        <div class="mb-3" id="fileSourceGroup" style="display:none">
-                            <label class="form-label">Choose Local File</label>
-                            <div class="form-text">Select either a .geojson/.json or a zipped Shapefile (.zip)</div>
-                            <div class="d-flex gap-2 align-items-center" style="margin-top:.5rem">
-                                <input type="file" class="form-control" id="localGeoJsonFile" accept=".geojson,.json">
-                                <button type="button" class="btn btn-secondary" id="previewGeoJsonBtn">Preview</button>
-                            </div>
-                            <div class="d-flex gap-2 align-items-center" style="margin-top:.5rem">
-                                <input type="file" class="form-control" id="localShapefileZip" accept=".zip">
-                                <button type="button" class="btn btn-secondary" id="previewShapefileBtn">Preview</button>
-                            </div>
-                            <div class="form-text" style="margin-top:.5rem">Note: Local files are for preview only in this page and are not saved to the server.</div>
                         </div>
                         
                         <div class="mb-3">
@@ -195,5 +169,5 @@
 
 {% block extra_js %}
 <script src="https://unpkg.com/shpjs@latest/dist/shp.min.js"></script>
-<script src="/static/js/layers.js?v=3.1"></script>
+<script src="/static/js/layers.js?v=3.3"></script>
 {% endblock %}
