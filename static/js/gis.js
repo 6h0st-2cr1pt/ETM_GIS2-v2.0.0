@@ -1143,7 +1143,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const geoJsonLayer = L.geoJSON(geojson, {
       pointToLayer: (feature, latlng) => {
-        const color = getColorForSpecies(feature.properties.common_name)
+        const commonName = feature.properties.common_name || 'Unknown';
+        const color = getColorForSpecies(commonName)
         return L.circleMarker(latlng, {
           radius: 8,
           fillColor: color,
@@ -1157,7 +1158,15 @@ document.addEventListener("DOMContentLoaded", () => {
         const p = feature.properties
         const __pos = typeof layer.getLatLng === 'function' ? layer.getLatLng() : { lat: feature.geometry.coordinates[1], lng: feature.geometry.coordinates[0] }
 
-        const imageHtml = p.image_url ? `<div style="margin:8px 0"><img src="${p.image_url}" alt="${p.common_name}" style="max-width:220px;border-radius:6px"></div>` : ''
+        // Handle undefined values safely - get values before using them
+        const commonName = p.common_name || 'Unknown';
+        const scientificName = p.scientific_name || 'Unknown';
+        const family = p.family || 'Unknown';
+        const genus = p.genus || 'Unknown';
+        const location = p.location || 'Unknown';
+        const healthStatus = p.health_status ? p.health_status.replace(/_/g, " ") : 'Unknown';
+        
+        const imageHtml = p.image_url ? `<div style="margin:8px 0"><img src="${p.image_url}" alt="${commonName}" style="max-width:220px;border-radius:6px"></div>` : ''
         // Format hectares - handle null, undefined, or numeric values (including 0)
         let hectaresDisplay = 'N/A'
         if (p.hectares !== null && p.hectares !== undefined && p.hectares !== '') {
@@ -1166,17 +1175,18 @@ document.addEventListener("DOMContentLoaded", () => {
             hectaresDisplay = `${hectaresNum.toFixed(2)} ha`
           }
         }
+        
         const popupContent = `
           <div class="tree-popup">
-            <h3>${p.common_name}</h3>
-            <p><em>${p.scientific_name}</em></p>
+            <h3>${commonName}</h3>
+            <p><em>${scientificName}</em></p>
             ${imageHtml}
             <table class="popup-table">
-              <tr><td>Family:</td><td>${p.family}</td></tr>
-              <tr><td>Genus:</td><td>${p.genus}</td></tr>
-              <tr><td>Population:</td><td>${p.population}</td></tr>
+              <tr><td>Family:</td><td>${family}</td></tr>
+              <tr><td>Genus:</td><td>${genus}</td></tr>
+              <tr><td>Population:</td><td>${p.population || 0}</td></tr>
               <tr><td><strong>Hectares:</strong></td><td>${hectaresDisplay}</td></tr>
-              <tr><td>Health Status:</td><td>${p.health_status ? p.health_status.replace(/_/g, " ") : 'Unknown'}</td></tr>
+              <tr><td>Health Status:</td><td>${healthStatus}</td></tr>
               <tr><td>Health Distribution:</td><td>
                 <div class="health-distribution">
                   <div class="health-count">Healthy: ${p.healthy_count ?? 0}</div>
@@ -1185,8 +1195,8 @@ document.addEventListener("DOMContentLoaded", () => {
                   <div class="health-count">Deceased: ${p.deceased_count ?? 0}</div>
                 </div>
               </td></tr>
-              <tr><td>Year:</td><td>${p.year}</td></tr>
-              <tr><td>Location:</td><td>${p.location} (${Number(__pos.lat).toFixed(6)}, ${Number(__pos.lng).toFixed(6)})</td></tr>
+              <tr><td>Year:</td><td>${p.year || 'N/A'}</td></tr>
+              <tr><td>Location:</td><td>${location} (${Number(__pos.lat).toFixed(6)}, ${Number(__pos.lng).toFixed(6)})</td></tr>
             </table>
             ${p.notes ? `<p class="popup-notes">${p.notes}</p>` : ""}
           </div>

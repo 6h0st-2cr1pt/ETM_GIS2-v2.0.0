@@ -1654,57 +1654,10 @@ def tree_data(request):
             }
             features.append(feature)
 
-        # Add public submissions to the map (only if they have been imported by THIS user)
-        try:
-            from public.models import TreePhotoSubmission
-            all_public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
-            
-            # Filter to only include submissions that have been imported by the current user
-            # A submission is considered imported if there's an EndemicTree with notes containing its ID
-            # AND the tree belongs to the current user
-            imported_submission_ids = set()
-            for submission in all_public_submissions:
-                # Check if there's an EndemicTree with notes containing this submission ID
-                # AND it belongs to the current user (data isolation)
-                # Check for both formats: "Imported from public submission - ID: X" and "[SUBMISSION_ID:X]"
-                imported_trees = EndemicTree.objects.filter(
-                    user=request.user,  # Only check trees belonging to current user
-                    notes__icontains=f"[SUBMISSION_ID:{submission.id}]"
-                ) | EndemicTree.objects.filter(
-                    user=request.user,
-                    notes__icontains=f"Imported from public submission - ID: {submission.id}"
-                )
-                if imported_trees.exists():
-                    imported_submission_ids.add(submission.id)
-            
-            # Only include submissions imported by the current user
-            public_submissions = all_public_submissions.filter(id__in=imported_submission_ids)
-            
-            for submission in public_submissions:
-                feature = {
-                    'type': 'Feature',
-                    'geometry': {
-                        'type': 'Point',
-                        'coordinates': [submission.longitude, submission.latitude]
-                    },
-                    'properties': {
-                        'id': f'public_{submission.id}',
-                        'common_name': 'Public Submission',
-                        'scientific_name': 'Unknown',
-                        'description': submission.tree_description,
-                        'person_name': submission.person_name,
-                        'location': f"({submission.latitude:.4f}, {submission.longitude:.4f})",
-                        'image_url': f'/public-submission-image/{submission.id}/',
-                        'created_at': submission.created_at.isoformat(),
-                        'data_source': 'public',  # Mark as public data
-                        'entity_type': 'public_submission',
-                    }
-                }
-                features.append(feature)
-            
-            print(f"Added {public_submissions.count()} imported public submissions to map (out of {all_public_submissions.count()} total)")
-        except Exception as e:
-            print(f"Error adding public submissions to map: {str(e)}")
+        # Note: Public submissions that have been imported are already included in the trees query above
+        # as EndemicTree records, so we don't need to add them separately here.
+        # The imported trees will have the proper species information (common_name, scientific_name, etc.)
+        # from when they were imported.
 
         geojson = {
             'type': 'FeatureCollection',
