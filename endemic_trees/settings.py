@@ -191,16 +191,49 @@ JAZZMIN_SETTINGS = {
     "site_title": "Administrator",
     "site_brand": "Administrator",
     "welcome_sign": "Welcome to Administrator",
+    
+    # Custom colors - Color Palette: #7FB482, #0A2E30, #0D1F25, #519269, #D6E993
+    "topmenu_links": [
+        {"name": "Home", "url": "admin:index", "permissions": ["auth.view_user"]},
+    ],
+    
+    # Custom CSS - path relative to STATIC_URL (without leading slash)
+    "custom_css": "css/jazzmin_custom.css",
+    "custom_js": None,
+    "show_sidebar": True,
+    "navigation_expanded": True,
+    "hide_apps": [],
+    "hide_models": [],
+    
+    # Branding with custom colors
+    "brand_colour": "#7FB482",
+    "brand_colour_secondary": "#519269",
 }
 
-# Django Debug Toolbar
-INTERNAL_IPS = [
-    '127.0.0.1',
-]
-
-# Custom theme settings
-THEME_SETTINGS = {
-    'DEFAULT_THEME': 'dark',  # or 'light'
+# Jazzmin UI Tweaks with custom color palette
+JAZZMIN_UI_TWEAKS = {
+    "theme": "darkly",
+    "navbar": "navbar-dark",
+    "navbar_small_text": False,
+    "navbar_fixed": False,
+    "footer_fixed": False,
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_nav_small_text": False,
+    "sidebar_disable_expand": False,
+    "sidebar_nav_child_indent": False,
+    "sidebar_nav_compact_style": False,
+    "sidebar_nav_legacy_style": False,
+    "sidebar_nav_flat_style": False,
+    "dark_mode_theme": None,
+    "button_classes": {
+        "primary": "btn-primary",
+        "secondary": "btn-secondary",
+        "info": "btn-info",
+        "warning": "btn-warning",
+        "danger": "btn-danger",
+        "success": "btn-success"
+    },
+    "actions_sticky_top": False
 }
 
 # Increase allowed request body size to 20 MB (set to None to disable)
@@ -223,3 +256,9 @@ if not DEBUG:
     SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+
+
+
+
+
+
