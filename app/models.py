@@ -201,7 +201,6 @@ class UserProfile(models.Model):
     """User profile to track user type/role"""
     USER_TYPE_CHOICES = [
         ('app_user', 'App User'),
-        ('head_user', 'Head User'),
         ('public_user', 'Public User'),
     ]
     

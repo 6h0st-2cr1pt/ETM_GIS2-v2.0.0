@@ -538,9 +538,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to load tree data from API for the map
   async function loadTreeDataForMap(mapDiv) {
     try {
-      // Determine if we're in head portal or app portal
-      const isHeadPortal = window.location.pathname.includes('/head/')
-      const apiUrl = isHeadPortal ? '/head/api/tree-data/' : '/api/tree-data/'
+      const apiUrl = '/api/tree-data/'
       
       const response = await fetch(apiUrl)
       if (!response.ok) {

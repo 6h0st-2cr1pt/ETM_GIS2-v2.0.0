@@ -1,3 +1,4 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="en" data-theme="{{ theme }}">
 <head>
@@ -11,21 +12,82 @@
     <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
-    <!-- Custom CSS -->
-    <link rel="stylesheet" href="/static/css/styles.css">
-    <link rel="stylesheet" href="/static/css/auth.css">
+    <!-- Custom CSS - Load auth.css AFTER Bootstrap to override -->
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+    <link rel="stylesheet" href="{% static 'css/auth.css' %}?v=2.2">
+    
+    <!-- Inline critical CSS as fallback -->
+    <style>
+        .login-split-container {
+            display: flex !important;
+            min-height: 100vh !important;
+            width: 100% !important;
+        }
+        .login-form-section {
+            flex: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: #1a1a1a !important;
+            padding: 2rem !important;
+        }
+        .login-image-section {
+            flex: 1 !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            background-color: #f3f4f6 !important;
+            overflow: hidden !important;
+            position: relative !important;
+        }
+        .login-forest-image {
+            width: 100% !important;
+            height: 100vh !important;
+            object-fit: cover !important;
+            display: block !important;
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+        }
+        .login-hello {
+            font-size: 3.5rem !important;
+            font-weight: 700 !important;
+            color: #7FB482 !important;
+            margin-bottom: 0.5rem !important;
+        }
+        .login-hello::after {
+            content: '' !important;
+            display: block !important;
+            width: 80px !important;
+            height: 4px !important;
+            background: #7FB482 !important;
+            margin-top: 0.5rem !important;
+        }
+        .login-form .form-control {
+            background-color: #D6E993 !important;
+            color: #1a1a1a !important;
+            border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        }
+        .login-form .form-control::placeholder {
+            color: rgba(26, 26, 26, 0.6) !important;
+        }
+        .login-form .form-control:focus {
+            background-color: #D6E993 !important;
+            border-color: #7FB482 !important;
+            box-shadow: 0 0 0 3px rgba(127, 180, 130, 0.3) !important;
+        }
+        .login-form .input-icon {
+            color: rgba(26, 26, 26, 0.6) !important;
+        }
+        .login-next-btn {
+            background: linear-gradient(135deg, #0A2E30 0%, #0D1F25 50%, #519269 100%) !important;
+        }
+        .login-next-btn:hover {
+            background: linear-gradient(135deg, #0D1F25 0%, #0A2E30 50%, #519269 100%) !important;
+        }
+    </style>
 </head>
 <body class="auth-body">
-    <div class="auth-background">
-        <div class="auth-particles" id="particles-js"></div>
-        <div class="auth-overlay"></div>
-    </div>
-
-    <div class="auth-logo">
-        <i class="fas fa-tree"></i>
-        <a href="/static/static_home/index.html" target="_blank" style="color:inherit;text-decoration:none;"><span>Endemic Trees Monitoring</span></a>
-    </div>
-
     {% if messages %}
     <div class="notification-container">
         {% for message in messages %}
@@ -41,92 +103,5 @@
 
     <!-- Bootstrap JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
-
-    <!-- Particles.js for background animation -->
-    <script src="https://cdn.jsdelivr.net/particles.js/2.0.0/particles.min.js"></script>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            // Initialize particles.js
-            particlesJS('particles-js', {
-                "particles": {
-                    "number": {
-                        "value": 80,
-                        "density": {
-                            "enable": true,
-                            "value_area": 800
-                        }
-                    },
-                    "color": {
-                        "value": "#ffffff"
-                    },
-                    "shape": {
-                        "type": "circle",
-                        "stroke": {
-                            "width": 0,
-                            "color": "#000000"
-                        },
-                    },
-                    "opacity": {
-                        "value": 0.5,
-                        "random": false,
-                    },
-                    "size": {
-                        "value": 3,
-                        "random": true,
-                    },
-                    "line_linked": {
-                        "enable": true,
-                        "distance": 150,
-                        "color": "#ffffff",
-                        "opacity": 0.4,
-                        "width": 1
-                    },
-                    "move": {
-                        "enable": true,
-                        "speed": 2,
-                        "direction": "none",
-                        "random": false,
-                        "straight": false,
-                        "out_mode": "out",
-                        "bounce": false,
-                    }
-                },
-                "interactivity": {
-                    "detect_on": "canvas",
-                    "events": {
-                        "onhover": {
-                            "enable": true,
-                            "mode": "grab"
-                        },
-                        "onclick": {
-                            "enable": true,
-                            "mode": "push"
-                        },
-                        "resize": true
-                    },
-                    "modes": {
-                        "grab": {
-                            "distance": 140,
-                            "line_linked": {
-                                "opacity": 1
-                            }
-                        },
-                        "push": {
-                            "particles_nb": 4
-                        },
-                    }
-                },
-                "retina_detect": true
-            });
-
-            // Form animation
-            const formElements = document.querySelectorAll('.auth-form .form-group');
-            formElements.forEach((element, index) => {
-                element.style.animationDelay = `${index * 0.1}s`;
-                element.classList.add('animate-in');
-            });
-        });
-    </script>
 </body>
 </html>

@@ -117,9 +117,7 @@ def dashboard(request):
     user_type = get_user_type(request.user)
     if user_type != 'app_user':
         messages.error(request, 'You do not have permission to access this page.')
-        if user_type == 'head_user':
-            return redirect('head:gis')
-        elif user_type == 'public_user':
+        if user_type == 'public_user':
             return redirect('public:home')
         else:
             return redirect('app:login')
