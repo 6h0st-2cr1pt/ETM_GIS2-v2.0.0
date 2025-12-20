@@ -46,6 +46,7 @@ urlpatterns = [
     path('edit-seed/<uuid:seed_id>/', views.edit_seed, name='edit_seed'),
     path('api/species-list/', views.api_species_list, name='api_species_list'),
     path('api/locations-list/', views.api_locations_list, name='api_locations_list'),
+    path('api/endemic-trees-list/', views.api_endemic_trees_list, name='api_endemic_trees_list'),
     path('upload-species-images/', views.upload_species_images, name='upload_species_images'),
     path('api/upload-species-image/', views.upload_species_image_api, name='upload_species_image_api'),
 ]

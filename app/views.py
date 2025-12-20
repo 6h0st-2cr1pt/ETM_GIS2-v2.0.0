@@ -1061,6 +1061,55 @@ def api_species_list(request):
         }, status=500)
 
 
+def api_endemic_trees_list(request):
+    """API endpoint to get endemic trees data from CSV for auto-population."""
+    import os
+    try:
+        # Path to the CSV file
+        csv_path = r'c:\Users\ASUS\Documents\EndemicTreesList.csv'
+        
+        # Check if file exists
+        if not os.path.exists(csv_path):
+            print(f"[API] CSV file not found at: {csv_path}")
+            return JsonResponse({
+                'success': False,
+                'error': f'CSV file not found at: {csv_path}'
+            }, status=404)
+        
+        print(f"[API] Reading CSV file from: {csv_path}")
+        # Read CSV file
+        trees_data = []
+        with open(csv_path, 'r', encoding='utf-8') as csvfile:
+            reader = csv.DictReader(csvfile)
+            for row in reader:
+                trees_data.append({
+                    'common_name': row.get('Common Name', '').strip(),
+                    'scientific_name': row.get('Scientific Name', '').strip(),
+                    'family': row.get('Family', '').strip(),
+                    'genus': row.get('Genus', '').strip()
+                })
+        
+        print(f"[API] Loaded {len(trees_data)} trees from CSV")
+        response = JsonResponse({
+            'success': True,
+            'trees': trees_data
+        })
+        response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        response['Pragma'] = 'no-cache'
+        response['Expires'] = '0'
+        # Allow CORS for local development
+        response['Access-Control-Allow-Origin'] = '*'
+        return response
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        print(f"[API] Error: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
 @login_required(login_url='app:login')
 def api_locations_list(request):
     """API endpoint to get current list of locations for dropdown updates."""

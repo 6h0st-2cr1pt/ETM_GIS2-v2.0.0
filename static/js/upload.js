@@ -283,4 +283,203 @@ document.addEventListener("DOMContentLoaded", () => {
   if (populationInput && healthStatusInputs.length) {
     validateHealthCounts()
   }
+
+  // Auto-populate tree data from CSV
+  const commonNameInput = document.getElementById("common_name")
+  const scientificNameInput = document.getElementById("scientific_name")
+  const familyInput = document.getElementById("family")
+  const genusInput = document.getElementById("genus")
+
+  // Check if we're on the manual entry form
+  if (!commonNameInput || !scientificNameInput || !familyInput || !genusInput) {
+    console.log("Tree auto-population: Form fields not found, skipping initialization")
+  } else {
+    console.log("Tree auto-population: Form fields found, initializing...")
+  }
+
+  let treesData = []
+  let dataLoaded = false
+
+  // Fetch tree data from API
+  async function loadTreesData() {
+    try {
+      console.log("Loading trees data from API...")
+      const response = await fetch("/api/endemic-trees-list/")
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`HTTP error! status: ${response.status}, body: ${errorText}`)
+      }
+      const data = await response.json()
+      console.log("API response:", data)
+      if (data.success && data.trees) {
+        treesData = data.trees
+        dataLoaded = true
+        console.log(`Loaded ${treesData.length} trees from CSV`)
+        // Log first few trees for debugging
+        if (treesData.length > 0) {
+          console.log("Sample trees:", treesData.slice(0, 3))
+        }
+      } else {
+        console.error("API returned unsuccessful response:", data)
+      }
+    } catch (error) {
+      console.error("Error loading trees data:", error)
+      // Show user-friendly error message
+      if (commonNameInput) {
+        const errorMsg = document.createElement('small')
+        errorMsg.className = 'text-danger'
+        errorMsg.textContent = ' (Unable to load tree data for auto-complete)'
+        errorMsg.style.display = 'block'
+        commonNameInput.parentElement.appendChild(errorMsg)
+      }
+    }
+  }
+
+  // Auto-populate fields based on common name
+  function autoPopulateTreeData(commonName) {
+    // If common name is empty, clear auto-populated fields
+    if (!commonName || !commonName.trim()) {
+      console.log("Common name is empty, clearing auto-populated fields")
+      if (scientificNameInput && scientificNameInput.dataset.autoFilled === 'true') {
+        scientificNameInput.value = ''
+        scientificNameInput.dataset.autoFilled = 'false'
+        scientificNameInput.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      if (familyInput && familyInput.dataset.autoFilled === 'true') {
+        familyInput.value = ''
+        familyInput.dataset.autoFilled = 'false'
+        familyInput.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      if (genusInput && genusInput.dataset.autoFilled === 'true') {
+        genusInput.value = ''
+        genusInput.dataset.autoFilled = 'false'
+        genusInput.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      return
+    }
+    
+    if (!dataLoaded || !treesData.length) {
+      console.log("Tree data not loaded yet or empty. Data loaded:", dataLoaded, "Trees count:", treesData.length)
+      return
+    }
+
+    const searchTerm = commonName.trim().toLowerCase()
+    if (!searchTerm) return
+
+    console.log(`Searching for: "${searchTerm}" in ${treesData.length} trees`)
+
+    // First try exact match (case-insensitive)
+    let matchedTree = treesData.find(tree => 
+      tree.common_name && tree.common_name.toLowerCase() === searchTerm
+    )
+
+    // If no exact match, try starts-with match
+    if (!matchedTree) {
+      matchedTree = treesData.find(tree => {
+        if (!tree.common_name) return false
+        const treeName = tree.common_name.toLowerCase()
+        return treeName.startsWith(searchTerm) || searchTerm.startsWith(treeName)
+      })
+    }
+
+    // If still no match, try partial match (user input contains tree name or vice versa)
+    if (!matchedTree) {
+      matchedTree = treesData.find(tree => {
+        if (!tree.common_name) return false
+        const treeName = tree.common_name.toLowerCase()
+        return treeName.includes(searchTerm) || searchTerm.includes(treeName)
+      })
+    }
+
+    if (matchedTree) {
+      console.log("Match found:", matchedTree)
+      // Populate fields - always populate if they're empty, or if they were auto-filled
+      const shouldPopulateScientific = !scientificNameInput.value || scientificNameInput.dataset.autoFilled === 'true'
+      const shouldPopulateFamily = !familyInput.value || familyInput.dataset.autoFilled === 'true'
+      const shouldPopulateGenus = !genusInput.value || genusInput.dataset.autoFilled === 'true'
+
+      if (shouldPopulateScientific && scientificNameInput && matchedTree.scientific_name) {
+        scientificNameInput.value = matchedTree.scientific_name
+        scientificNameInput.dataset.autoFilled = 'true'
+        console.log("Populated scientific name:", matchedTree.scientific_name)
+        // Trigger input event to ensure form validation sees the change
+        scientificNameInput.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      if (shouldPopulateFamily && familyInput && matchedTree.family) {
+        familyInput.value = matchedTree.family
+        familyInput.dataset.autoFilled = 'true'
+        console.log("Populated family:", matchedTree.family)
+        familyInput.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+      if (shouldPopulateGenus && genusInput && matchedTree.genus) {
+        genusInput.value = matchedTree.genus
+        genusInput.dataset.autoFilled = 'true'
+        console.log("Populated genus:", matchedTree.genus)
+        genusInput.dispatchEvent(new Event('input', { bubbles: true }))
+      }
+    } else {
+      console.log("No match found for:", searchTerm)
+      console.log("Available tree names:", treesData.map(t => t.common_name).slice(0, 5))
+    }
+  }
+
+  // Track manual changes to prevent overwriting user input
+  if (scientificNameInput) {
+    scientificNameInput.addEventListener('input', function() {
+      if (this.value && this.dataset.autoFilled !== 'true') {
+        this.dataset.autoFilled = 'false'
+      }
+    })
+  }
+
+  if (familyInput) {
+    familyInput.addEventListener('input', function() {
+      if (this.value && this.dataset.autoFilled !== 'true') {
+        this.dataset.autoFilled = 'false'
+      }
+    })
+  }
+
+  if (genusInput) {
+    genusInput.addEventListener('input', function() {
+      if (this.value && this.dataset.autoFilled !== 'true') {
+        this.dataset.autoFilled = 'false'
+      }
+    })
+  }
+
+  // Listen for common name input changes
+  if (commonNameInput && scientificNameInput && familyInput && genusInput) {
+    console.log("Common name input found, setting up event listeners")
+    let debounceTimer
+    commonNameInput.addEventListener('input', function(e) {
+      const value = this.value
+      console.log("Common name input changed to:", value)
+      clearTimeout(debounceTimer)
+      // Reduce debounce time for more responsive feel
+      debounceTimer = setTimeout(() => {
+        autoPopulateTreeData(value)
+      }, 200) // Wait 200ms after user stops typing
+    })
+    
+    // Also try to populate immediately if data is already loaded
+    commonNameInput.addEventListener('focus', function() {
+      console.log("Common name input focused, data loaded:", dataLoaded)
+      if (dataLoaded && this.value) {
+        autoPopulateTreeData(this.value)
+      }
+    })
+    
+    // Try to populate on blur as well (when user leaves the field)
+    commonNameInput.addEventListener('blur', function() {
+      if (dataLoaded && this.value) {
+        autoPopulateTreeData(this.value)
+      }
+    })
+
+    // Load tree data on page load
+    loadTreesData()
+  } else {
+    console.log("Tree auto-population: Not all form fields found, skipping setup")
+  }
 })
