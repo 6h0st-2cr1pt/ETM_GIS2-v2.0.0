@@ -136,8 +136,9 @@ class TreeSpeciesAdmin(admin.ModelAdmin):
 
 @admin.register(Location)
 class LocationAdmin(admin.ModelAdmin):
-    list_display = ('name', 'latitude', 'longitude', 'elevation')
-    search_fields = ('name',)
+    list_display = ('name', 'latitude', 'longitude', 'elevation', 'address')
+    search_fields = ('name', 'address')
+    readonly_fields = ('address',)  # Address is auto-generated, make it read-only in admin
 
 @admin.register(PinStyle)
 class PinStyleAdmin(admin.ModelAdmin):

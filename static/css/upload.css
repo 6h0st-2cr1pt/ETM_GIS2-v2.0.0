@@ -331,6 +331,58 @@ textarea.form-control {
   margin-bottom: 1.5rem;
 }
 
+/* Radio Button Group Styles */
+.radio-button-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+.radio-button-group .form-group {
+  margin-bottom: 0;
+}
+
+.radio-button-group .form-group label {
+  display: block;
+  margin-bottom: 0.75rem;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.radio-options {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.radio-option input[type="radio"] {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: #4caf50;
+}
+
+.radio-option label {
+  margin: 0;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 400;
+  font-size: 0.95rem;
+  user-select: none;
+}
+
+.radio-option:hover label {
+  color: white;
+}
+
 .health-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));

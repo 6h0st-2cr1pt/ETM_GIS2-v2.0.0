@@ -31,6 +31,8 @@ from .forms import (
     EndemicTreeForm, CSVUploadForm, ThemeSettingsForm,
     PinStyleForm, LocationForm
 )
+from .utils import geocode_location, get_address_from_coordinates
+from django.views.decorators.http import require_http_methods
 
 
 def get_setting(user, key, default=None):
@@ -542,8 +544,31 @@ def upload_data(request):
                 # Process CSV file
                 try:
                     df = pd.read_csv(csv_file)
-                    required_columns = ['common_name', 'scientific_name', 'family', 'genus', 'population', 'hectares', 'latitude',
+                    
+                    # Normalize column names (case-insensitive, strip whitespace)
+                    df.columns = df.columns.str.strip().str.lower()
+                    
+                    # Map various column name formats to standard names
+                    column_mapping = {
+                        'common name': 'common_name',
+                        'scientific name': 'scientific_name',
+                        'diameter breast': 'diameter_cm',
+                        'diameter breast height': 'diameter_cm',
+                        'dbh': 'diameter_cm',
+                        'hectars': 'hectares',
+                        'not healthy': 'not_healthy',
+                        'not_healthy': 'not_healthy',
+                    }
+                    
+                    # Apply column mapping
+                    df.rename(columns=column_mapping, inplace=True)
+                    
+                    required_columns = ['common_name', 'scientific_name', 'family', 'genus', 'population', 'latitude',
                                         'longitude', 'year']
+                    
+                    # Check for hectares or hectars
+                    if 'hectares' not in df.columns and 'hectars' not in df.columns:
+                        required_columns.append('hectares')
 
                     # Check if all required columns exist
                     missing_columns = [col for col in required_columns if col not in df.columns]
@@ -580,6 +605,9 @@ def upload_data(request):
                                 }
                             )
 
+                            # Get address from CSV if provided
+                            address = row.get('address', '').strip() if pd.notna(row.get('address', '')) else ''
+                            
                             # Get or create location
                             location, created = Location.objects.get_or_create(
                                 latitude=row['latitude'],
@@ -588,17 +616,81 @@ def upload_data(request):
                                 defaults={'name': f"{row['common_name']} location"}
                             )
                             
+                            # Set address if provided in CSV, otherwise geocode
+                            if address:
+                                location.address = address
+                                location.save(update_fields=['address'])
+                            else:
+                                # Geocode location to get address if not provided
+                                try:
+                                    geocode_location(location)
+                                except Exception as e:
+                                    # Don't fail the entire import if geocoding fails
+                                    print(f"Geocoding failed for location {location.id}: {str(e)}")
+                            
                             # Note: CSV upload doesn't support images - images must be uploaded via manual entry
 
                             # Create tree record
                             notes = row.get('notes', '')
-                            health_status = row.get('health_status', 'good')
                             
-                            # Get health distribution counts from CSV
-                            healthy_count = int(row.get('healthy_count', 0))
-                            good_count = int(row.get('good_count', 0))
-                            bad_count = int(row.get('bad_count', 0))
-                            deceased_count = int(row.get('deceased_count', 0))
+                            # Handle boolean fields: PLANTED/EXISTING
+                            planted_value = row.get('planted', '').strip().lower() if pd.notna(row.get('planted', '')) else ''
+                            existing_value = row.get('existing', '').strip().lower() if pd.notna(row.get('existing', '')) else ''
+                            
+                            if planted_value in ['true', '1', 'yes', 'y', 'planted']:
+                                is_planted = True
+                            elif existing_value in ['true', '1', 'yes', 'y', 'existing']:
+                                is_planted = False
+                            else:
+                                # Default to False if neither is specified
+                                is_planted = False
+                            
+                            # Handle boolean fields: HEALTHY/NOT HEALTHY
+                            healthy_value = row.get('healthy', '').strip().lower() if pd.notna(row.get('healthy', '')) else ''
+                            not_healthy_value = row.get('not_healthy', '').strip().lower() if pd.notna(row.get('not_healthy', '')) else ''
+                            
+                            if healthy_value in ['true', '1', 'yes', 'y', 'healthy']:
+                                is_healthy = True
+                                health_status = 'excellent'
+                                healthy_count = row['population']
+                                good_count = 0
+                                bad_count = 0
+                                deceased_count = 0
+                            elif not_healthy_value in ['true', '1', 'yes', 'y', 'not healthy', 'not_healthy']:
+                                is_healthy = False
+                                health_status = 'poor'
+                                healthy_count = 0
+                                good_count = 0
+                                bad_count = row['population']
+                                deceased_count = 0
+                            else:
+                                # Fallback: try to infer from health_status if available
+                                health_status = row.get('health_status', 'good')
+                                is_healthy = health_status in ['excellent', 'very_good', 'good']
+                                # Default health distribution counts
+                                healthy_count = int(row.get('healthy_count', 0))
+                                good_count = int(row.get('good_count', 0))
+                                bad_count = int(row.get('bad_count', 0))
+                                deceased_count = int(row.get('deceased_count', 0))
+
+                            # Optional physical measurements - handle HEIGHT and DIAMETER BREAST
+                            height_meters = row.get('height') or row.get('height_meters')
+                            if pd.notna(height_meters) and height_meters != '':
+                                try:
+                                    height_meters = float(height_meters)
+                                except (ValueError, TypeError):
+                                    height_meters = None
+                            else:
+                                height_meters = None
+
+                            diameter_cm = row.get('diameter_cm') or row.get('diameter breast')
+                            if pd.notna(diameter_cm) and diameter_cm != '':
+                                try:
+                                    diameter_cm = float(diameter_cm)
+                                except (ValueError, TypeError):
+                                    diameter_cm = None
+                            else:
+                                diameter_cm = None
 
                             # Get hectares from CSV (required). Accept both "hectares" and "hectars" headers.
                             hectares_value = row.get('hectares')
@@ -626,6 +718,10 @@ def upload_data(request):
                                 bad_count=bad_count,
                                 deceased_count=deceased_count,
                                 hectares=hectares,
+                                height_meters=height_meters,
+                                diameter_cm=diameter_cm,
+                                is_healthy=is_healthy,
+                                is_planted=is_planted,
                                 notes=notes,
                                 user=request.user
                             )
@@ -651,32 +747,38 @@ def upload_data(request):
                 genus_name = request.POST.get('genus')
                 population = int(request.POST.get('population'))
 
-                # Get health counts
-                healthy_count = int(request.POST.get('healthy_count', 0))
-                good_count = int(request.POST.get('good_count', 0))
-                bad_count = int(request.POST.get('bad_count', 0))
-                deceased_count = int(request.POST.get('deceased_count', 0))
+                # Get tree health and type from radio buttons
+                tree_health = request.POST.get('tree_health')
+                tree_type = request.POST.get('tree_type')
+                
+                if not tree_health:
+                    raise ValueError("Tree health status is required")
+                if not tree_type:
+                    raise ValueError("Tree type (Planted/Existing) is required")
 
-                # Calculate overall health status based on the distribution
-                total_count = healthy_count + good_count + bad_count + deceased_count
-                if total_count != population:
-                    raise ValueError("Health status counts do not match the total population")
+                # Convert to boolean values
+                is_healthy = (tree_health == 'healthy')
+                is_planted = (tree_type == 'planted')
 
-                # Calculate percentages
-                healthy_percent = (healthy_count / total_count) * 100
-                good_percent = (good_count / total_count) * 100
-
-                # Determine overall health status
-                if healthy_percent >= 60:
+                # Map tree health to health_status (for backward compatibility)
+                if tree_health == 'healthy':
                     health_status = 'excellent'
-                elif healthy_percent >= 40 or (healthy_percent + good_percent) >= 70:
-                    health_status = 'very_good'
-                elif healthy_percent >= 20 or (healthy_percent + good_percent) >= 50:
-                    health_status = 'good'
-                elif deceased_count / total_count <= 0.3:
+                    healthy_count = population
+                    good_count = 0
+                    bad_count = 0
+                    deceased_count = 0
+                else:  # not_healthy
                     health_status = 'poor'
-                else:
-                    health_status = 'very_poor'
+                    healthy_count = 0
+                    good_count = 0
+                    bad_count = population
+                    deceased_count = 0
+
+                # Optional physical measurements
+                height_meters_str = request.POST.get('height_meters', '').strip()
+                diameter_cm_str = request.POST.get('diameter_cm', '').strip()
+                height_meters = float(height_meters_str) if height_meters_str else None
+                diameter_cm = float(diameter_cm_str) if diameter_cm_str else None
 
                 latitude = float(request.POST.get('latitude'))
                 longitude = float(request.POST.get('longitude'))
@@ -694,6 +796,7 @@ def upload_data(request):
                 except (ValueError, TypeError):
                     messages.error(request, 'Invalid hectares value')
                     return redirect('app:upload')
+                
                 notes = request.POST.get('notes', '')
 
                 # Get or create family
@@ -716,6 +819,9 @@ def upload_data(request):
                     }
                 )
 
+                # Get address from form if provided
+                address = request.POST.get('address', '').strip()
+                
                 # Get or create location
                 location, created = Location.objects.get_or_create(
                     latitude=latitude,
@@ -723,6 +829,18 @@ def upload_data(request):
                     user=request.user,
                     defaults={'name': f"{common_name} Location"}
                 )
+                
+                # Save address if provided from form, otherwise geocode
+                if address:
+                    location.address = address
+                    location.save(update_fields=['address'])
+                else:
+                    # Geocode location to get address if not provided
+                    try:
+                        geocode_location(location)
+                    except Exception as e:
+                        # Don't fail the entire operation if geocoding fails
+                        print(f"Geocoding failed for location {location.id}: {str(e)}")
                 
                 # Image sharing logic:
                 # Images are shared ONLY when trees have:
@@ -782,6 +900,10 @@ def upload_data(request):
                     deceased_count=deceased_count,
                     year=year,
                     hectares=hectares,
+                    height_meters=height_meters,
+                    diameter_cm=diameter_cm,
+                    is_healthy=is_healthy,
+                    is_planted=is_planted,
                     notes=notes,
                     user=request.user
                 )
@@ -853,6 +975,13 @@ def upload_data(request):
                     user=request.user,
                     defaults={'name': f"{common_name} Seed Planting Location"}
                 )
+                
+                # Geocode location to get address
+                try:
+                    geocode_location(location)
+                except Exception as e:
+                    # Don't fail the entire operation if geocoding fails
+                    print(f"Geocoding failed for location {location.id}: {str(e)}")
                 
                 # Handle image upload for seed location - only update if new image is provided
                 if 'seed_location_image' in request.FILES:
@@ -1137,6 +1266,52 @@ def api_locations_list(request):
         response['Expires'] = '0'
         return response
     except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+@require_http_methods(["GET"])
+def api_geocode(request):
+    """API endpoint to geocode latitude/longitude to address using Nominatim."""
+    try:
+        latitude = request.GET.get('lat')
+        longitude = request.GET.get('lon')
+        
+        if not latitude or not longitude:
+            return JsonResponse({
+                'success': False,
+                'error': 'Latitude and longitude are required'
+            }, status=400)
+        
+        try:
+            lat = float(latitude)
+            lon = float(longitude)
+        except ValueError:
+            return JsonResponse({
+                'success': False,
+                'error': 'Invalid latitude or longitude format'
+            }, status=400)
+        
+        # Call geocoding utility
+        address = get_address_from_coordinates(lat, lon)
+        
+        if address:
+            return JsonResponse({
+                'success': True,
+                'address': address
+            })
+        else:
+            return JsonResponse({
+                'success': False,
+                'error': 'Could not geocode coordinates'
+            }, status=404)
+            
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -2140,10 +2315,24 @@ def edit_tree(request, tree_id):
                         longitude=longitude,
                         user=request.user
                     )
+                    # Geocode new location
+                    try:
+                        geocode_location(tree.location)
+                    except Exception as e:
+                        print(f"Geocoding failed for location {tree.location.id}: {str(e)}")
                 else:
+                    # Update coordinates and geocode if they changed
+                    coords_changed = (tree.location.latitude != latitude or tree.location.longitude != longitude)
                     tree.location.latitude = latitude
                     tree.location.longitude = longitude
                     tree.location.save()
+                    if coords_changed:
+                        # Clear address and geocode again
+                        tree.location.address = None
+                        try:
+                            geocode_location(tree.location)
+                        except Exception as e:
+                            print(f"Geocoding failed for location {tree.location.id}: {str(e)}")
                 
                 # Handle image upload - save to species level (shared by all trees with same common_name and scientific_name)
                 if 'tree_image' in request.FILES:
@@ -2535,10 +2724,24 @@ def edit_seed(request, seed_id):
                         longitude=longitude,
                         user=request.user
                     )
+                    # Geocode new location
+                    try:
+                        geocode_location(seed.location)
+                    except Exception as e:
+                        print(f"Geocoding failed for location {seed.location.id}: {str(e)}")
                 else:
+                    # Update coordinates and geocode if they changed
+                    coords_changed = (seed.location.latitude != latitude or seed.location.longitude != longitude)
                     seed.location.latitude = latitude
                     seed.location.longitude = longitude
                     seed.location.save()
+                    if coords_changed:
+                        # Clear address and geocode again
+                        seed.location.address = None
+                        try:
+                            geocode_location(seed.location)
+                        except Exception as e:
+                            print(f"Geocoding failed for location {seed.location.id}: {str(e)}")
                 
                 seed.save()
                 
@@ -2857,11 +3060,37 @@ def api_supabase_data(request):
                 defaults={'name': location_name}
             )
             
+            # Geocode location to get address
+            try:
+                geocode_location(location)
+            except Exception as e:
+                # Don't fail the entire operation if geocoding fails
+                print(f"Geocoding failed for location {location.id}: {str(e)}")
+            
             # Get health distribution counts
             healthy_count = int(data.get('healthy_count', 0))
             good_count = int(data.get('good_count', 0))
             bad_count = int(data.get('bad_count', 0))
             deceased_count = int(data.get('deceased_count', 0))
+            
+            # Optional physical measurements
+            height_meters = data.get('height_meters')
+            try:
+                height_meters = float(height_meters) if height_meters not in [None, ''] else None
+            except (ValueError, TypeError):
+                height_meters = None
+
+            diameter_cm = data.get('diameter_cm')
+            try:
+                diameter_cm = float(diameter_cm) if diameter_cm not in [None, ''] else None
+            except (ValueError, TypeError):
+                diameter_cm = None
+
+            # Get health_status and infer boolean values
+            health_status = data.get('health_status', 'good')
+            is_healthy = health_status in ['excellent', 'very_good', 'good']
+            # Public submissions are typically existing trees, default to False
+            is_planted = False
             
             # Get hectares (required)
             hectares = data.get('hectares')
@@ -2922,13 +3151,16 @@ def api_supabase_data(request):
                 location=location,
                 population=int(data.get('population')),
                 year=int(data.get('year')),
-                health_status=data.get('health_status'),
+                health_status=health_status,
                 healthy_count=healthy_count,
                 good_count=good_count,
                 bad_count=bad_count,
                 deceased_count=deceased_count,
-
                 hectares=hectares,
+                height_meters=height_meters,
+                diameter_cm=diameter_cm,
+                is_healthy=is_healthy,
+                is_planted=is_planted,
                 # Always include submission ID in notes for tracking, even if user provides custom notes
                 notes=f"{data.get('notes', '')} [SUBMISSION_ID:{data.get('supabase_id', 'Unknown')}]" if data.get('notes') else f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}",
                 user=request.user

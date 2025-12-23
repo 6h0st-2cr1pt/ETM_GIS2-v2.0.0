@@ -47,6 +47,7 @@ urlpatterns = [
     path('api/species-list/', views.api_species_list, name='api_species_list'),
     path('api/locations-list/', views.api_locations_list, name='api_locations_list'),
     path('api/endemic-trees-list/', views.api_endemic_trees_list, name='api_endemic_trees_list'),
+    path('api/geocode/', views.api_geocode, name='api_geocode'),
     path('upload-species-images/', views.upload_species_images, name='upload_species_images'),
     path('api/upload-species-image/', views.upload_species_image_api, name='upload_species_image_api'),
 ]

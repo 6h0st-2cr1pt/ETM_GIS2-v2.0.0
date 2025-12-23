@@ -68,6 +68,7 @@ class Location(models.Model):
     latitude = models.FloatField()
     longitude = models.FloatField()
     elevation = models.FloatField(null=True, blank=True)
+    address = models.TextField(blank=True, null=True, help_text="Human-readable address from reverse geocoding")
     description = models.TextField(blank=True, null=True)
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
 
@@ -117,6 +118,10 @@ class EndemicTree(models.Model):
     bad_count = models.IntegerField(default=0, help_text="Number of trees in bad condition (poor/very_poor)")
     deceased_count = models.IntegerField(default=0, help_text="Number of deceased trees")
     hectares = models.FloatField(help_text="Area covered in hectares")
+    height_meters = models.FloatField(null=True, blank=True, help_text="Tree height in meters")
+    diameter_cm = models.FloatField(null=True, blank=True, help_text="Diameter at breast height in centimeters")
+    is_healthy = models.BooleanField(default=True, help_text="Whether the tree is healthy (True) or not healthy (False)")
+    is_planted = models.BooleanField(default=False, help_text="Whether the tree is planted (True) or existing (False)")
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -1,26 +1,4 @@
 document.addEventListener("DOMContentLoaded", () => {
-  // Image preview functionality for location images
-  const locationImageInput = document.getElementById('location_image')
-  const locationImagePreview = document.getElementById('image-preview')
-  const locationImagePreviewContainer = document.getElementById('image-preview-container')
-  
-  if (locationImageInput && locationImagePreview) {
-    locationImageInput.addEventListener('change', function(e) {
-      const file = e.target.files[0]
-      if (file) {
-        const reader = new FileReader()
-        reader.onload = function(e) {
-          locationImagePreview.src = e.target.result
-          locationImagePreviewContainer.style.display = 'block'
-        }
-        reader.readAsDataURL(file)
-      } else {
-        locationImagePreviewContainer.style.display = 'none'
-      }
-    })
-  }
-  
-  
   // Tab switching functionality
   const tabButtons = document.querySelectorAll(".tab-button")
   const tabContents = document.querySelectorAll(".tab-content")
@@ -130,70 +108,37 @@ document.addEventListener("DOMContentLoaded", () => {
     else return (bytes / 1048576).toFixed(1) + " MB"
   }
 
-  // Health Status Distribution Validation
-  const populationInput = document.getElementById("population")
-  const populationCountDisplay = document.getElementById("population-count")
-  const healthyCount = document.getElementById("healthy_count")
-  const goodCount = document.getElementById("good_count")
-  const badCount = document.getElementById("bad_count")
-  const deceasedCount = document.getElementById("deceased_count")
-  const healthStatusInputs = document.querySelectorAll(".health-count")
-  const progressBar = document.getElementById("health-progress-bar")
-  const statusMessage = document.getElementById("health-status-message")
+  // Radio button validation for tree health and type
   const submitButton = document.getElementById("submit-manual-btn")
+  const treeHealthRadios = document.querySelectorAll('input[name="tree_health"]')
+  const treeTypeRadios = document.querySelectorAll('input[name="tree_type"]')
 
-  // Update population count display when population input changes
-  if (populationInput && populationCountDisplay) {
-    populationInput.addEventListener("input", () => {
-      const value = Number.parseInt(populationInput.value) || 0
-      populationCountDisplay.textContent = value
-      validateHealthCounts()
-    })
-  }
-
-  // Validate health counts when any health status input changes
-  if (healthStatusInputs.length) {
-    healthStatusInputs.forEach((input) => {
-      input.addEventListener("input", validateHealthCounts)
-    })
-  }
-
-  function validateHealthCounts() {
-    const population = Number.parseInt(populationInput.value) || 0
-    const healthy = Number.parseInt(healthyCount.value) || 0
-    const good = Number.parseInt(goodCount.value) || 0
-    const bad = Number.parseInt(badCount.value) || 0
-    const deceased = Number.parseInt(deceasedCount.value) || 0
-
-    const totalHealth = healthy + good + bad + deceased
-    const percentage = population > 0 ? (totalHealth / population) * 100 : 0
-
-    // Update progress bar
-    progressBar.style.width = `${Math.min(percentage, 100)}%`
-    progressBar.textContent = `${Math.round(percentage)}%`
-
-    // Update color based on match
-    if (totalHealth === population) {
-      progressBar.style.background = "linear-gradient(90deg, #4CAF50, #8BC34A)"
-      statusMessage.textContent = "Health status counts match the total population!"
-      statusMessage.style.color = "#4CAF50"
+  function validateRadioButtons() {
+    const healthSelected = document.querySelector('input[name="tree_health"]:checked')
+    const typeSelected = document.querySelector('input[name="tree_type"]:checked')
+    
+    if (healthSelected && typeSelected && submitButton) {
       submitButton.disabled = false
-    } else if (totalHealth > population) {
-      progressBar.style.background = "#F44336"
-      statusMessage.textContent = `Health status total (${totalHealth}) exceeds population (${population})!`
-      statusMessage.style.color = "#F44336"
-      submitButton.disabled = true
-    } else {
-      progressBar.style.background = "#FF9800"
-      statusMessage.textContent = `Health status total (${totalHealth}) is less than population (${population})`
-      statusMessage.style.color = "#FF9800"
+    } else if (submitButton) {
       submitButton.disabled = true
     }
-
-    // Set aria values for accessibility
-    progressBar.setAttribute("aria-valuenow", percentage)
-    progressBar.setAttribute("aria-valuemax", 100)
   }
+
+  // Validate when radio buttons change
+  if (treeHealthRadios.length) {
+    treeHealthRadios.forEach((radio) => {
+      radio.addEventListener("change", validateRadioButtons)
+    })
+  }
+
+  if (treeTypeRadios.length) {
+    treeTypeRadios.forEach((radio) => {
+      radio.addEventListener("change", validateRadioButtons)
+    })
+  }
+
+  // Initial validation
+  validateRadioButtons()
 
   // Form validation and submission
   const manualForm = document.getElementById("manual-entry-form")
@@ -240,23 +185,43 @@ document.addEventListener("DOMContentLoaded", () => {
     const requiredFields = form.querySelectorAll("[required]")
 
     requiredFields.forEach((field) => {
-      if (!field.value.trim()) {
-        isValid = false
-        field.classList.add("error")
-
-        // Add error message if not already present
-        let errorMsg = field.parentElement.querySelector(".error-message")
-        if (!errorMsg) {
-          errorMsg = document.createElement("div")
-          errorMsg.className = "error-message"
-          errorMsg.textContent = "This field is required"
-          field.parentElement.appendChild(errorMsg)
+      // Handle radio buttons differently
+      if (field.type === 'radio') {
+        const radioGroup = form.querySelectorAll(`input[name="${field.name}"]`)
+        const isChecked = Array.from(radioGroup).some(radio => radio.checked)
+        
+        if (!isChecked) {
+          isValid = false
+          // Mark all radios in the group as error
+          radioGroup.forEach(radio => {
+            radio.classList.add("error")
+          })
+        } else {
+          // Remove error from all radios in the group
+          radioGroup.forEach(radio => {
+            radio.classList.remove("error")
+          })
         }
       } else {
-        field.classList.remove("error")
-        const errorMsg = field.parentElement.querySelector(".error-message")
-        if (errorMsg) {
-          errorMsg.remove()
+        // Handle other input types
+        if (!field.value.trim()) {
+          isValid = false
+          field.classList.add("error")
+
+          // Add error message if not already present
+          let errorMsg = field.parentElement.querySelector(".error-message")
+          if (!errorMsg) {
+            errorMsg = document.createElement("div")
+            errorMsg.className = "error-message"
+            errorMsg.textContent = "This field is required"
+            field.parentElement.appendChild(errorMsg)
+          }
+        } else {
+          field.classList.remove("error")
+          const errorMsg = field.parentElement.querySelector(".error-message")
+          if (errorMsg) {
+            errorMsg.remove()
+          }
         }
       }
     })
@@ -279,10 +244,8 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 50 * index)
   })
 
-  // Initialize health status validation on page load
-  if (populationInput && healthStatusInputs.length) {
-    validateHealthCounts()
-  }
+  // Initialize radio button validation on page load
+  validateRadioButtons()
 
   // Auto-populate tree data from CSV
   const commonNameInput = document.getElementById("common_name")
@@ -481,5 +444,88 @@ document.addEventListener("DOMContentLoaded", () => {
     loadTreesData()
   } else {
     console.log("Tree auto-population: Not all form fields found, skipping setup")
+  }
+
+  // Auto-geocode address from latitude/longitude
+  const latitudeInput = document.getElementById("latitude")
+  const longitudeInput = document.getElementById("longitude")
+  const addressInput = document.getElementById("address")
+
+  if (latitudeInput && longitudeInput && addressInput) {
+    let geocodeTimeout = null
+    let lastGeocodeTime = 0
+    const GEOCODE_THROTTLE_MS = 1000 // 1 second throttle
+
+    function geocodeCoordinates() {
+      const lat = latitudeInput.value.trim()
+      const lon = longitudeInput.value.trim()
+
+      // Clear address if lat or lon is empty
+      if (!lat || !lon) {
+        addressInput.value = ""
+        return
+      }
+
+      // Validate coordinates are numbers
+      const latNum = parseFloat(lat)
+      const lonNum = parseFloat(lon)
+      
+      if (isNaN(latNum) || isNaN(lonNum)) {
+        addressInput.value = ""
+        return
+      }
+
+      // Throttle: ensure at least 1 second has passed since last request
+      const now = Date.now()
+      const timeSinceLastRequest = now - lastGeocodeTime
+      
+      if (timeSinceLastRequest < GEOCODE_THROTTLE_MS) {
+        // Clear existing timeout and set new one
+        if (geocodeTimeout) {
+          clearTimeout(geocodeTimeout)
+        }
+        const delay = GEOCODE_THROTTLE_MS - timeSinceLastRequest
+        geocodeTimeout = setTimeout(() => {
+          performGeocode(latNum, lonNum)
+        }, delay)
+        return
+      }
+
+      // Perform geocode immediately
+      performGeocode(latNum, lonNum)
+    }
+
+    function performGeocode(lat, lon) {
+      lastGeocodeTime = Date.now()
+      
+      // Show loading state
+      addressInput.value = "Loading address..."
+      addressInput.disabled = true
+
+      // Call geocoding API
+      fetch(`/api/geocode/?lat=${lat}&lon=${lon}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success && data.address) {
+            addressInput.value = data.address
+          } else {
+            addressInput.value = ""
+          }
+          addressInput.disabled = false
+        })
+        .catch(error => {
+          console.error("Geocoding error:", error)
+          addressInput.value = ""
+          addressInput.disabled = false
+        })
+    }
+
+    // Listen for changes on latitude and longitude inputs
+    latitudeInput.addEventListener("input", geocodeCoordinates)
+    longitudeInput.addEventListener("input", geocodeCoordinates)
+    
+    // Also trigger on blur (when user leaves the field)
+    latitudeInput.addEventListener("blur", geocodeCoordinates)
+    longitudeInput.addEventListener("blur", geocodeCoordinates)
   }
 })

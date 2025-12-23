@@ -54,25 +54,27 @@
 
             <div class="csv-format-info">
                <h4>Required CSV Format</h4>
-               <p>Your CSV file should have the following columns:</p>
+               <p>Your CSV file should have the following columns (case-insensitive):</p>
                <div class="table-responsive">
                   <table class="table table-sm">
                      <thead>
                         <tr>
-                           <th>common_name</th>
-                           <th>scientific_name</th>
-                           <th>family</th>
-                           <th>genus</th>
-                          <th>population</th>
-                          <th>hectars (hectares)</th>
-                           <th>healthy_count</th>
-                           <th>good_count</th>
-                           <th>bad_count</th>
-                           <th>deceased_count</th>
-                           <th>latitude</th>
-                           <th>longitude</th>
-                           <th>year</th>
-                           <th>notes</th>
+                           <th>COMMON NAME</th>
+                           <th>SCIENTIFIC NAME</th>
+                           <th>FAMILY</th>
+                           <th>GENUS</th>
+                           <th>POPULATION</th>
+                           <th>HECTARS</th>
+                           <th>PLANTED</th>
+                           <th>EXISTING</th>
+                           <th>HEIGHT</th>
+                           <th>DIAMETER BREAST</th>
+                           <th>HEALTHY</th>
+                           <th>NOT HEALTHY</th>
+                           <th>LATITUDE</th>
+                           <th>LONGITUDE</th>
+                           <th>ADDRESS</th>
+                           <th>YEAR</th>
                         </tr>
                      </thead>
                      <tbody>
@@ -83,17 +85,20 @@
                            <td>Afzelia</td>
                            <td>120</td>
                            <td>5.5</td>
-                           <td>80</td>
-                           <td>30</td>
-                           <td>8</td>
-                           <td>2</td>
+                           <td>Yes</td>
+                           <td>No</td>
+                           <td>15.5</td>
+                           <td>45.2</td>
+                           <td>Yes</td>
+                           <td>No</td>
                            <td>10.4234</td>
                            <td>123.1234</td>
+                           <td>123 Main St, Suburb, City</td>
                            <td>2023</td>
-                           <td>Mixed health population</td>
                         </tr>
                      </tbody>
                   </table>
+                  <p class="mt-2"><small><strong>Note:</strong> PLANTED/EXISTING and HEALTHY/NOT HEALTHY are boolean fields. Use "Yes", "True", "1", or "No", "False", "0". ADDRESS is optional - if not provided, it will be auto-generated from coordinates.</small></p>
                </div>
             </div>
          </div>
@@ -144,6 +149,18 @@
                      </div>
 
                      <div class="form-group">
+                        <label for="height_meters">Height (meters)</label>
+                        <input type="number" name="height_meters" id="height_meters" class="form-control" step="0.01" min="0">
+                        <small class="form-text text-muted">Optional: tree height in meters</small>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="diameter_cm">Diameter at Breast Height (cm)</label>
+                        <input type="number" name="diameter_cm" id="diameter_cm" class="form-control" step="0.01" min="0">
+                        <small class="form-text text-muted">Optional: trunk diameter at breast height (cm)</small>
+                     </div>
+
+                     <div class="form-group">
                         <label for="year">Year</label>
                         <input type="number" name="year" id="year" class="form-control" required>
                      </div>
@@ -159,58 +176,44 @@
                      </div>
 
                      <div class="form-group full-width">
-                        <label for="location_image">Tree Image</label>
-                        <input type="file" name="location_image" id="location_image" class="form-control" accept="image/*">
-                        <small class="form-text text-muted">Upload an image for this tree. This image will be shared by all trees with the same location, common name, and scientific name, and displayed in the GIS map popup.</small>
-                        <div id="image-preview-container" style="margin-top: 10px; display: none;">
-                           <img id="image-preview" src="" alt="Preview" style="max-width: 300px; max-height: 200px; border-radius: 4px; border: 1px solid #ddd;">
-                        </div>
+                        <label for="address">Address</label>
+                        <input type="text" name="address" id="address" class="form-control" readonly>
+                        <small class="form-text text-muted">Address will be automatically generated from coordinates</small>
                      </div>
+
                   </div>
 
                   <div class="health-status-section">
-                     <h3>Health Status Distribution</h3>
-                     <p class="health-status-info">Enter the number of trees in each health category. The total should match the population count: <span id="population-count">0</span></p>
-
-                     <div class="health-status-grid">
-                        <div class="health-status-card">
-                           <div class="health-icon healthy">
-                              <i class="fas fa-heart"></i>
+                     <h3>Tree Status</h3>
+                     
+                     <div class="radio-button-group">
+                        <div class="form-group">
+                           <label>Health Status</label>
+                           <div class="radio-options">
+                              <div class="radio-option">
+                                 <input type="radio" name="tree_health" id="tree_health_healthy" value="healthy" required>
+                                 <label for="tree_health_healthy">Healthy</label>
+                              </div>
+                              <div class="radio-option">
+                                 <input type="radio" name="tree_health" id="tree_health_not_healthy" value="not_healthy" required>
+                                 <label for="tree_health_not_healthy">Not Healthy</label>
+                              </div>
                            </div>
-                           <label for="healthy_count">Healthy</label>
-                           <input type="number" name="healthy_count" id="healthy_count" class="form-control health-count" min="0" value="0">
                         </div>
 
-                        <div class="health-status-card">
-                           <div class="health-icon good">
-                              <i class="fas fa-check-circle"></i>
+                        <div class="form-group">
+                           <label>Tree Type</label>
+                           <div class="radio-options">
+                              <div class="radio-option">
+                                 <input type="radio" name="tree_type" id="tree_type_planted" value="planted" required>
+                                 <label for="tree_type_planted">Planted</label>
+                              </div>
+                              <div class="radio-option">
+                                 <input type="radio" name="tree_type" id="tree_type_existing" value="existing" required>
+                                 <label for="tree_type_existing">Existing</label>
+                              </div>
                            </div>
-                           <label for="good_count">Good</label>
-                           <input type="number" name="good_count" id="good_count" class="form-control health-count" min="0" value="0">
                         </div>
-
-                        <div class="health-status-card">
-                           <div class="health-icon bad">
-                              <i class="fas fa-exclamation-triangle"></i>
-                           </div>
-                           <label for="bad_count">Bad</label>
-                           <input type="number" name="bad_count" id="bad_count" class="form-control health-count" min="0" value="0">
-                        </div>
-
-                        <div class="health-status-card">
-                           <div class="health-icon deceased">
-                              <i class="fas fa-times-circle"></i>
-                           </div>
-                           <label for="deceased_count">Deceased</label>
-                           <input type="number" name="deceased_count" id="deceased_count" class="form-control health-count" min="0" value="0">
-                        </div>
-                     </div>
-
-                     <div class="health-status-validation">
-                        <div class="progress">
-                           <div id="health-progress-bar" class="progress-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">0%</div>
-                        </div>
-                        <p id="health-status-message" class="mt-2">Please enter health status counts that sum to the total population.</p>
                      </div>
                   </div>
 
