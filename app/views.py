@@ -16,6 +16,7 @@ from django.contrib import messages
 from django.views.decorators.http import require_POST
 from django.core.serializers import serialize
 from django.db.models import Count, Sum, F, Q, Case, When, Value, IntegerField, Avg
+from django.contrib.sessions.models import Session
 from django.urls import reverse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.models import User
@@ -119,10 +120,7 @@ def dashboard(request):
     user_type = get_user_type(request.user)
     if user_type != 'app_user':
         messages.error(request, 'You do not have permission to access this page.')
-        if user_type == 'public_user':
-            return redirect('public:home')
-        else:
-            return redirect('app:login')
+        return redirect('app:login')
     
     try:
         # Get basic stats for dashboard with proper null checks
@@ -378,26 +376,16 @@ def layers(request):
 def datasets(request):
     """
     Display and manage datasets
-    Includes user's data and all public submissions
     """
     trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
     seeds = TreeSeed.objects.filter(user=request.user).select_related('species', 'location').all()
     species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
-    
-    # Get all public submissions (available to all app users)
-    try:
-        from public.models import TreePhotoSubmission
-        public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
-    except Exception as e:
-        print(f"Error fetching public submissions: {str(e)}")
-        public_submissions = []
 
     context = {
         'active_page': 'datasets',
         'trees': trees,
         'seeds': seeds,
         'species_list': species_list,
-        'public_submissions': public_submissions,  # Add public submissions
     }
     return render(request, 'app/datasets.html', context)
 
@@ -543,28 +531,54 @@ def upload_data(request):
 
                 # Process CSV file
                 try:
+                    # Initialize progress tracking FIRST, before processing
+                    # This ensures the progress API can return status immediately
+                    request.session['csv_upload_progress'] = {
+                        'total': 0,
+                        'processed': 0,
+                        'geocoded': 0,
+                        'status': 'initializing'
+                    }
+                    request.session.save()
+                    
                     df = pd.read_csv(csv_file)
                     
-                    # Normalize column names (case-insensitive, strip whitespace)
-                    df.columns = df.columns.str.strip().str.lower()
+                    # Normalize column names (case-insensitive, strip whitespace, remove trailing colons)
+                    df.columns = df.columns.str.strip().str.rstrip(':').str.strip().str.lower()
                     
                     # Map various column name formats to standard names
                     column_mapping = {
                         'common name': 'common_name',
+                        'common_name': 'common_name',
                         'scientific name': 'scientific_name',
+                        'scientific_name': 'scientific_name',
+                        'family': 'family',
+                        'genus': 'genus',
+                        'hectars': 'hectares',
+                        'hectares': 'hectares',
+                        'planted': 'planted',
+                        'existing': 'existing',
+                        'height': 'height',
+                        'height_meters': 'height',
                         'diameter breast': 'diameter_cm',
                         'diameter breast height': 'diameter_cm',
+                        'diameter_breast': 'diameter_cm',
                         'dbh': 'diameter_cm',
-                        'hectars': 'hectares',
+                        'diameter_cm': 'diameter_cm',
+                        'healthy': 'healthy',
                         'not healthy': 'not_healthy',
                         'not_healthy': 'not_healthy',
+                        'latitude': 'latitude',
+                        'longitude': 'longitude',
+                        'address': 'address',
+                        'year': 'year',
                     }
                     
                     # Apply column mapping
                     df.rename(columns=column_mapping, inplace=True)
                     
-                    required_columns = ['common_name', 'scientific_name', 'family', 'genus', 'population', 'latitude',
-                                        'longitude', 'year']
+                    # Required columns - each row represents 1 tree
+                    required_columns = ['common_name', 'scientific_name', 'family', 'genus', 'latitude', 'longitude', 'year']
                     
                     # Check for hectares or hectars
                     if 'hectares' not in df.columns and 'hectars' not in df.columns:
@@ -573,14 +587,66 @@ def upload_data(request):
                     # Check if all required columns exist
                     missing_columns = [col for col in required_columns if col not in df.columns]
                     if missing_columns:
+                        request.session['csv_upload_progress'] = {
+                            'status': 'failed',
+                            'error': f'Missing required columns: {", ".join(missing_columns)}'
+                        }
+                        request.session.save()
                         messages.error(request, f'Missing required columns: {", ".join(missing_columns)}')
                         return redirect('app:upload')
 
-                    # Process each row and save to database
+                    # Update progress with actual total
+                    total_rows = len(df)
+                    request.session['csv_upload_progress'] = {
+                        'total': total_rows,
+                        'processed': 0,
+                        'geocoded': 0,
+                        'status': 'processing'
+                    }
+                    request.session.save()
+                    
+                    # Process each row and aggregate trees with same species/location/year
+                    # Since each row = 1 tree, we need to aggregate duplicates
+                    from collections import defaultdict
+                    tree_aggregates = defaultdict(lambda: {
+                        'species': None,
+                        'location': None,
+                        'year': None,
+                        'count': 0,
+                        'healthy_count': 0,
+                        'good_count': 0,
+                        'bad_count': 0,
+                        'deceased_count': 0,
+                        'is_planted_count': 0,
+                        'is_existing_count': 0,
+                        'hectares': None,
+                        'height_meters': None,
+                        'diameter_cm': None,
+                        'notes': '',
+                        'health_status': 'good',
+                        'is_healthy': True,
+                    })
+                    
                     success_count = 0
                     error_count = 0
-
-                    for _, row in df.iterrows():
+                    
+                    # First pass: aggregate all rows
+                    for idx, row in df.iterrows():
+                        # Check for cancellation flag
+                        if request.session.get('csv_upload_cancelled'):
+                            # Clear cancellation flag
+                            request.session['csv_upload_cancelled'] = False
+                            request.session['csv_upload_progress'] = {
+                                'status': 'cancelled',
+                                'processed': success_count + error_count,
+                                'total': total_rows,
+                                'success': success_count,
+                                'errors': error_count
+                            }
+                            request.session.save()
+                            messages.warning(request, f'Upload cancelled. {success_count} trees were imported before cancellation.')
+                            return redirect('app:upload')
+                        
                         try:
                             # Get or create family
                             family, _ = TreeFamily.objects.get_or_create(
@@ -605,54 +671,89 @@ def upload_data(request):
                                 }
                             )
 
-                            # Get address from CSV if provided
-                            address = row.get('address', '').strip() if pd.notna(row.get('address', '')) else ''
+                            # Get location coordinates
+                            lat = float(row['latitude'])
+                            lon = float(row['longitude'])
                             
-                            # Get or create location
+                            # Get address from CSV if provided
+                            address_from_csv = row.get('address', '')
+                            if pd.notna(address_from_csv) and str(address_from_csv).strip():
+                                address_value = str(address_from_csv).strip()
+                            else:
+                                address_value = ''  # Leave empty if not provided in CSV
+                            
+                            # Get or create location with address from CSV if provided
                             location, created = Location.objects.get_or_create(
-                                latitude=row['latitude'],
-                                longitude=row['longitude'],
+                                latitude=lat,
+                                longitude=lon,
                                 user=request.user,
-                                defaults={'name': f"{row['common_name']} location"}
+                                defaults={
+                                    'name': f"{row['common_name']} location",
+                                    'address': address_value
+                                }
                             )
                             
-                            # Set address if provided in CSV, otherwise geocode
-                            if address:
-                                location.address = address
+                            # If location exists and CSV has address, update it
+                            if address_value and not location.address:
+                                location.address = address_value
                                 location.save(update_fields=['address'])
-                            else:
-                                # Geocode location to get address if not provided
-                                try:
-                                    geocode_location(location)
-                                except Exception as e:
-                                    # Don't fail the entire import if geocoding fails
-                                    print(f"Geocoding failed for location {location.id}: {str(e)}")
                             
                             # Note: CSV upload doesn't support images - images must be uploaded via manual entry
 
                             # Create tree record
                             notes = row.get('notes', '')
                             
-                            # Handle boolean fields: PLANTED/EXISTING
-                            planted_value = row.get('planted', '').strip().lower() if pd.notna(row.get('planted', '')) else ''
-                            existing_value = row.get('existing', '').strip().lower() if pd.notna(row.get('existing', '')) else ''
+                            # Handle PLANTED/EXISTING - each row represents 1 tree
+                            planted_value = row.get('planted', '')
+                            existing_value = row.get('existing', '')
                             
-                            if planted_value in ['true', '1', 'yes', 'y', 'planted']:
-                                is_planted = True
-                            elif existing_value in ['true', '1', 'yes', 'y', 'existing']:
-                                is_planted = False
+                            # Each row = 1 tree, so population is always 1
+                            population = 1
+                            
+                            # Determine if planted or existing based on which field has a value
+                            if pd.notna(planted_value) and str(planted_value).strip():
+                                planted_str = str(planted_value).strip().lower()
+                                if planted_str in ['true', '1', 'yes', 'y', 'planted']:
+                                    is_planted = True
+                                else:
+                                    try:
+                                        val = float(planted_value)
+                                        is_planted = val > 0
+                                    except (ValueError, TypeError):
+                                        is_planted = False
+                            elif pd.notna(existing_value) and str(existing_value).strip():
+                                existing_str = str(existing_value).strip().lower()
+                                if existing_str in ['true', '1', 'yes', 'y', 'existing']:
+                                    is_planted = False
+                                else:
+                                    try:
+                                        val = float(existing_value)
+                                        is_planted = val == 0
+                                    except (ValueError, TypeError):
+                                        is_planted = False
                             else:
-                                # Default to False if neither is specified
+                                # Default to existing if neither is specified
                                 is_planted = False
                             
                             # Handle boolean fields: HEALTHY/NOT HEALTHY
-                            healthy_value = row.get('healthy', '').strip().lower() if pd.notna(row.get('healthy', '')) else ''
-                            not_healthy_value = row.get('not_healthy', '').strip().lower() if pd.notna(row.get('not_healthy', '')) else ''
+                            # Convert to string first to handle both numeric and string values
+                            healthy_raw = row.get('healthy', '')
+                            if pd.notna(healthy_raw) and healthy_raw != '':
+                                healthy_value = str(healthy_raw).strip().lower()
+                            else:
+                                healthy_value = ''
                             
+                            not_healthy_raw = row.get('not_healthy', '')
+                            if pd.notna(not_healthy_raw) and not_healthy_raw != '':
+                                not_healthy_value = str(not_healthy_raw).strip().lower()
+                            else:
+                                not_healthy_value = ''
+                            
+                            # Each row = 1 tree, so health counts are either 1 or 0
                             if healthy_value in ['true', '1', 'yes', 'y', 'healthy']:
                                 is_healthy = True
                                 health_status = 'excellent'
-                                healthy_count = row['population']
+                                healthy_count = 1  # This row = 1 healthy tree
                                 good_count = 0
                                 bad_count = 0
                                 deceased_count = 0
@@ -661,17 +762,16 @@ def upload_data(request):
                                 health_status = 'poor'
                                 healthy_count = 0
                                 good_count = 0
-                                bad_count = row['population']
+                                bad_count = 1  # This row = 1 not healthy tree
                                 deceased_count = 0
                             else:
-                                # Fallback: try to infer from health_status if available
-                                health_status = row.get('health_status', 'good')
-                                is_healthy = health_status in ['excellent', 'very_good', 'good']
-                                # Default health distribution counts
-                                healthy_count = int(row.get('healthy_count', 0))
-                                good_count = int(row.get('good_count', 0))
-                                bad_count = int(row.get('bad_count', 0))
-                                deceased_count = int(row.get('deceased_count', 0))
+                                # Default: assume healthy if neither is specified
+                                is_healthy = True
+                                health_status = 'good'
+                                healthy_count = 1
+                                good_count = 0
+                                bad_count = 0
+                                deceased_count = 0
 
                             # Optional physical measurements - handle HEIGHT and DIAMETER BREAST
                             height_meters = row.get('height') or row.get('height_meters')
@@ -697,44 +797,137 @@ def upload_data(request):
                             if hectares_value is None or pd.isna(hectares_value):
                                 hectares_value = row.get('hectars')
                             if hectares_value is None or (isinstance(hectares_value, str) and not hectares_value.strip()) or pd.isna(hectares_value):
-                                raise ValueError(f"Row {_ + 1}: hectares (hectars) is required")
+                                raise ValueError(f"Row {idx + 1}: hectares (hectars) is required")
                             try:
                                 hectares = float(hectares_value)
                                 if hectares < 0:
-                                    raise ValueError(f"Row {_ + 1}: hectares must be non-negative")
+                                    raise ValueError(f"Row {idx + 1}: hectares must be non-negative")
                             except (ValueError, TypeError) as e:
                                 if isinstance(e, ValueError) and "must be non-negative" in str(e):
                                     raise
-                                raise ValueError(f"Row {_ + 1}: invalid hectares value: {hectares_value}")
+                                raise ValueError(f"Row {idx + 1}: invalid hectares value: {hectares_value}")
                             
-                            tree = EndemicTree(
-                                species=species,
-                                location=location,
-                                population=row['population'],
-                                year=row['year'],
-                                health_status=health_status,
-                                healthy_count=healthy_count,
-                                good_count=good_count,
-                                bad_count=bad_count,
-                                deceased_count=deceased_count,
-                                hectares=hectares,
-                                height_meters=height_meters,
-                                diameter_cm=diameter_cm,
-                                is_healthy=is_healthy,
-                                is_planted=is_planted,
-                                notes=notes,
-                                user=request.user
-                            )
-                            tree.save()
+                            # Create a unique key for aggregation (species, location, year)
+                            agg_key = (species.id, location.id, int(row['year']))
+                            
+                            # Initialize aggregate if first time seeing this combination
+                            if tree_aggregates[agg_key]['species'] is None:
+                                tree_aggregates[agg_key]['species'] = species
+                                tree_aggregates[agg_key]['location'] = location
+                                tree_aggregates[agg_key]['year'] = int(row['year'])
+                                tree_aggregates[agg_key]['hectares'] = hectares
+                                tree_aggregates[agg_key]['height_meters'] = height_meters
+                                tree_aggregates[agg_key]['diameter_cm'] = diameter_cm
+                                tree_aggregates[agg_key]['health_status'] = health_status
+                                tree_aggregates[agg_key]['is_healthy'] = is_healthy
+                                tree_aggregates[agg_key]['notes'] = notes
+                            
+                            # Aggregate counts (each row = 1 tree)
+                            tree_aggregates[agg_key]['count'] += 1
+                            tree_aggregates[agg_key]['healthy_count'] += healthy_count
+                            tree_aggregates[agg_key]['good_count'] += good_count
+                            tree_aggregates[agg_key]['bad_count'] += bad_count
+                            tree_aggregates[agg_key]['deceased_count'] += deceased_count
+                            
+                            if is_planted:
+                                tree_aggregates[agg_key]['is_planted_count'] += 1
+                            else:
+                                tree_aggregates[agg_key]['is_existing_count'] += 1
+                            
                             success_count += 1
+                            
+                            # Update progress frequently
+                            request.session['csv_upload_progress']['processed'] = success_count + error_count
+                            request.session['csv_upload_progress']['status'] = 'processing'
+                            # Save session every 5 rows for better responsiveness
+                            if (success_count + error_count) % 5 == 0:
+                                request.session.save()
                         except Exception as e:
                             error_count += 1
-                            print(f"Error processing row: {str(e)}")
+                            import traceback
+                            error_msg = f"Error processing row {idx + 1}: {str(e)}"
+                            print(error_msg)
+                            traceback.print_exc()
+                            
+                            # Update progress even on error
+                            request.session['csv_upload_progress']['processed'] = success_count + error_count
+                            request.session['csv_upload_progress']['last_error'] = error_msg
+                            if (success_count + error_count) % 10 == 0:
+                                request.session.save()
+                    
+                    # Second pass: Save aggregated trees to database
+                    aggregated_success_count = 0
+                    for agg_key, agg_data in tree_aggregates.items():
+                        try:
+                            # Check if tree already exists (update or create)
+                            tree, created = EndemicTree.objects.get_or_create(
+                                species=agg_data['species'],
+                                location=agg_data['location'],
+                                year=agg_data['year'],
+                                user=request.user,
+                                defaults={
+                                    'population': agg_data['count'],
+                                    'health_status': agg_data['health_status'],
+                                    'healthy_count': agg_data['healthy_count'],
+                                    'good_count': agg_data['good_count'],
+                                    'bad_count': agg_data['bad_count'],
+                                    'deceased_count': agg_data['deceased_count'],
+                                    'hectares': agg_data['hectares'],
+                                    'height_meters': agg_data['height_meters'],
+                                    'diameter_cm': agg_data['diameter_cm'],
+                                    'is_healthy': agg_data['is_healthy'],
+                                    'is_planted': agg_data['is_planted_count'] > agg_data['is_existing_count'],
+                                    'notes': agg_data['notes'],
+                                }
+                            )
+                            
+                            # If tree already exists, update it with aggregated counts
+                            if not created:
+                                tree.population = agg_data['count']
+                                tree.healthy_count = agg_data['healthy_count']
+                                tree.good_count = agg_data['good_count']
+                                tree.bad_count = agg_data['bad_count']
+                                tree.deceased_count = agg_data['deceased_count']
+                                tree.is_planted = agg_data['is_planted_count'] > agg_data['is_existing_count']
+                                tree.save()
+                            
+                            aggregated_success_count += 1
+                        except Exception as e:
+                            import traceback
+                            error_msg = f"Error saving aggregated tree: {str(e)}"
+                            print(error_msg)
+                            traceback.print_exc()
+                            error_count += 1
 
-                    messages.success(request, f'Successfully imported {success_count} trees. {error_count} errors.')
-                    # Redirect to GIS page to see the newly added data
-                    return redirect('app:gis')
+                    # Mark upload as completed
+                    request.session['csv_upload_progress'] = {
+                        'status': 'completed', 
+                        'success': success_count, 
+                        'errors': error_count,
+                        'total': total_rows,
+                        'processed': success_count + error_count,
+                    }
+                    request.session.save()
+                    
+                    if aggregated_success_count > 0:
+                        messages.success(request, f'Successfully imported {success_count} trees aggregated into {aggregated_success_count} records. {error_count} errors occurred.')
+                        # Redirect to GIS page to see the newly added data
+                        return redirect('app:gis')
+                    else:
+                        messages.error(request, f'No trees were imported. {error_count} errors occurred.')
+                        return redirect('app:upload')
                 except Exception as e:
+                    import traceback
+                    error_trace = traceback.format_exc()
+                    print(f"CSV processing error: {error_trace}")
+                    
+                    # Mark progress as failed
+                    request.session['csv_upload_progress'] = {
+                        'status': 'failed',
+                        'error': str(e)
+                    }
+                    request.session.save()
+                    
                     messages.error(request, f'Error processing CSV file: {str(e)}')
                     return redirect('app:upload')
 
@@ -1147,14 +1340,33 @@ def about(request):
 @login_required(login_url='app:login')
 def reports(request):
     """View for generating reports."""
-    # Get all species and locations for the filters - fresh from database
-    species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
-    location_list = Location.objects.filter(user=request.user).all().order_by('name')
+    # Get all endemic trees with species information
+    trees = EndemicTree.objects.filter(
+        user=request.user,
+        species__isnull=False
+    ).select_related('species', 'location').order_by('species__common_name', 'year')
+    
+    # Get unique addresses from locations (no duplicates)
+    unique_addresses = Location.objects.filter(
+        user=request.user,
+        address__isnull=False
+    ).exclude(address='').values_list('address', flat=True).distinct().order_by('address')
+    
+    # Create tree list with common name and scientific name
+    # Show all trees (not just unique species)
+    tree_list = []
+    for tree in trees:
+        if tree.species:
+            tree_list.append({
+                'id': str(tree.id),
+                'common_name': tree.species.common_name,
+                'scientific_name': tree.species.scientific_name,
+            })
 
     return render(request, 'app/reports.html', {
         'active_page': 'reports',
-        'species_list': species_list,
-        'location_list': location_list
+        'tree_list': tree_list,
+        'address_list': list(unique_addresses)
     })
 
 
@@ -1319,74 +1531,46 @@ def api_geocode(request):
 
 
 @login_required(login_url='app:login')
-def new_data(request):
-    """View for inspecting and managing public tree photo submissions."""
+@csrf_protect
+def api_csv_upload_progress(request):
+    """API endpoint to check CSV upload progress and handle cancellation."""
     try:
-        from public.models import TreePhotoSubmission
+        if request.method == 'POST':
+            # Handle cancel request
+            import json
+            try:
+                data = json.loads(request.body)
+                if data.get('cancel'):
+                    request.session['csv_upload_cancelled'] = True
+                    request.session.save()
+                    return JsonResponse({
+                        'success': True,
+                        'message': 'Upload cancellation requested'
+                    })
+            except json.JSONDecodeError:
+                pass
         
-        # Fetch all public submissions
-        all_public_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
-        
-        # Filter out submissions that have been imported by ANY user
-        # Once ANY user imports a submission, it should be removed from the table for all users
-        unimported_submission_ids = []
-        for submission in all_public_submissions:
-            # Check if there's ANY EndemicTree (regardless of user) with notes containing this submission ID
-            # Check for both formats: "Imported from public submission - ID: X" and "[SUBMISSION_ID:X]"
-            imported_trees = EndemicTree.objects.filter(
-                notes__icontains=f"[SUBMISSION_ID:{submission.id}]"
-            ) | EndemicTree.objects.filter(
-                notes__icontains=f"Imported from public submission - ID: {submission.id}"
-            )
-            # Only include if NOT imported by anyone
-            if not imported_trees.exists():
-                unimported_submission_ids.append(submission.id)
-        
-        # Only get unimported submissions
-        public_submissions = all_public_submissions.filter(id__in=unimported_submission_ids)
-        
-        # Convert to format similar to Supabase data for template compatibility
-        public_data = []
-        for submission in public_submissions:
-            public_data.append({
-                'id': submission.id,
-                'tree_description': submission.tree_description,
-                'person_name': submission.person_name,
-                'latitude': submission.latitude,
-                'longitude': submission.longitude,
-                'image_url': f'/public-submission-image/{submission.id}/',  # URL to view image
-                'created_at': submission.created_at,
-                'image_format': submission.image_format,
+        # Check for cancellation flag
+        if request.session.get('csv_upload_cancelled'):
+            request.session['csv_upload_cancelled'] = False  # Reset flag
+            request.session.save()
+            return JsonResponse({
+                'success': True,
+                'progress': {'status': 'cancelled'}
             })
         
-        print(f"Fetched {len(public_data)} unimported records from public submissions (out of {all_public_submissions.count()} total)")
-        if public_data:
-            print("Sample record:", public_data[0])
-        
-        # Get existing species and locations for reference
-        species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
-        location_list = Location.objects.filter(user=request.user).all().order_by('name')
-        
-        context = {
-            'active_page': 'new_data',
-            'supabase_data': public_data,  # Keep same key for template compatibility
-            'species_list': species_list,
-            'location_list': location_list,
-        }
-        return render(request, 'app/new_data.html', context)
-        
+        progress = request.session.get('csv_upload_progress', {})
+        return JsonResponse({
+            'success': True,
+            'progress': progress
+        })
     except Exception as e:
-        print(f"Error fetching public submissions: {str(e)}")
         import traceback
         traceback.print_exc()
-        context = {
-            'active_page': 'new_data',
-            'supabase_data': [],
-            'species_list': [],
-            'location_list': [],
-            'error': f"Error fetching public submissions: {str(e)}"
-        }
-        return render(request, 'app/new_data.html', context)
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
 
 
 @login_required(login_url='app:login')
@@ -1397,45 +1581,51 @@ def generate_report(request):
         return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
 
     try:
-        # Get form data
-        report_type = request.POST.get('report_type')
-        time_range = request.POST.get('time_range')
-        species_filter = request.POST.get('species_filter')
-        location_filter = request.POST.get('location_filter')
-        include_charts = request.POST.get('include_charts') == 'on'
-        include_map = request.POST.get('include_map') == 'on'
-        include_table = request.POST.get('include_table') == 'on'
+        # Get selected trees and addresses
+        selected_trees = request.POST.getlist('selected_trees')
+        selected_addresses = request.POST.getlist('selected_addresses')
+        
+        if not selected_trees:
+            return JsonResponse({'success': False, 'error': 'Please select at least one tree.'}, status=400)
+        
+        if not selected_addresses:
+            return JsonResponse({'success': False, 'error': 'Please select at least one address.'}, status=400)
 
         # Get the current date and time
         now = timezone.now()
         date_str = now.strftime('%B %d, %Y')
         time_str = now.strftime('%I:%M %p')
 
-        # Get report title based on type
-        report_titles = {
-            'species_distribution': 'Species Distribution Report',
-            'population_trends': 'Population Trends Report',
-            'health_analysis': 'Health Status Analysis Report',
-            'conservation_status': 'Conservation Status Report',
-            'spatial_density': 'Spatial Density Report'
-        }
-        report_title = report_titles.get(report_type, 'Endemic Trees Report')
+        report_title = 'Endemic Trees Report'
 
-        # Get actual data statistics (only current user's data)
+        # Get actual data statistics based on selected trees and addresses
         try:
-            trees_query = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+            # Convert selected tree IDs to UUIDs (EndemicTree uses UUIDField)
+            import uuid
+            tree_ids = []
+            for tree_id in selected_trees:
+                try:
+                    # Try to convert string to UUID
+                    tree_ids.append(uuid.UUID(tree_id))
+                except (ValueError, TypeError):
+                    # If conversion fails, skip this ID and log error
+                    import traceback
+                    traceback.print_exc()
+                    continue
             
-            # Apply filters for statistics
-            if species_filter and species_filter != 'all':
-                try:
-                    trees_query = trees_query.filter(species_id=int(species_filter))
-                except (ValueError, TypeError):
-                    pass
-            if location_filter and location_filter != 'all':
-                try:
-                    trees_query = trees_query.filter(location_id=int(location_filter))
-                except (ValueError, TypeError):
-                    pass
+            if not tree_ids:
+                return JsonResponse({'success': False, 'error': 'Invalid tree selection. No valid tree IDs found.'}, status=400)
+            
+            # Filter trees by selected tree IDs
+            trees_query = EndemicTree.objects.filter(
+                user=request.user,
+                id__in=tree_ids
+            ).select_related('species', 'location')
+            
+            # Filter by selected addresses
+            trees_query = trees_query.filter(
+                location__address__in=selected_addresses
+            )
             
             # Calculate actual statistics with error handling
             total_trees = trees_query.count()
@@ -1490,307 +1680,145 @@ def generate_report(request):
             species_dist = []
             year_dist = []
 
-        # Build the report HTML - ensure all values are safe for f-string
-        total_trees = int(total_trees) if total_trees else 0
-        total_population = int(total_population) if total_population else 0
-        unique_species = int(unique_species) if unique_species else 0
-        unique_locations = int(unique_locations) if unique_locations else 0
-        
+        # Build the report HTML - only show the table
         html = f'''
         <div class="report-document">
             <div class="report-header">
                 <h1 class="report-title">{report_title}</h1>
                 <p class="report-subtitle">Endemic Trees Monitoring System - User Account Report</p>
                 <p class="report-date">Generated on {date_str} at {time_str}</p>
-                <p class="report-note"><strong>Note:</strong> This report includes data from your account only.</p>
-            </div>
-
-            <div class="report-section">
-                <h2 class="report-section-title">Executive Summary</h2>
-                <div class="report-stats-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1rem 0;">
-                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
-                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Total Tree Records</h3>
-                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #007bff;">{total_trees}</p>
-                    </div>
-                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
-                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Total Population</h3>
-                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #28a745;">{total_population:,}</p>
-                    </div>
-                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
-                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Unique Species</h3>
-                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #ffc107;">{unique_species}</p>
-                    </div>
-                    <div class="stat-card" style="background: #f8f9fa; padding: 1rem; border-radius: 8px; border: 1px solid #dee2e6;">
-                        <h3 style="margin: 0; color: #495057; font-size: 0.9rem;">Unique Locations</h3>
-                        <p style="margin: 0.5rem 0 0 0; font-size: 2rem; font-weight: bold; color: #dc3545;">{unique_locations}</p>
-                    </div>
-                </div>
-                <p style="margin-top: 1.5rem;">This report provides an analysis of endemic tree data from your account. 
-                   The data includes {total_trees} tree records with a total population of {total_population:,} trees across {unique_species} unique species and {unique_locations} locations.</p>
             </div>
         '''
 
-        # Add charts section if included
-        if include_charts:
-            html += '''
-            <div class="report-section">
-                <h2 class="report-section-title">Data Visualization</h2>
-                <div class="report-chart-container">
-                    <canvas id="reportChart1"></canvas>
-                </div>
-                <div class="report-chart-container">
-                    <canvas id="reportChart2"></canvas>
-                </div>
-            </div>
-            '''
 
-        # Add map section if included
-        if include_map:
-            html += '''
-            <div class="report-section">
-                <h2 class="report-section-title">Spatial Distribution</h2>
-                <div class="report-map-container" id="reportMap"></div>
-            </div>
-            '''
-
-        # Add data table if included
-        if include_table:
-            # Query the database for tree data (only current user's data)
-            # Use select_related to avoid N+1 queries and handle potential None values
-            trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family')
-            
-            # Apply filters
-            if species_filter and species_filter != 'all':
+        # Add data table - grouped by species with calculations
+        # Query the database for tree data based on selected trees and addresses
+        trees = trees_query.select_related('species', 'location', 'species__genus', 'species__genus__family')
+        
+        # Group trees by species and calculate aggregates
+        from collections import defaultdict
+        species_data = defaultdict(lambda: {
+            'common_name': '',
+            'scientific_name': '',
+            'planted': 0,
+            'existing': 0,
+            'healthy_count': 0,
+            'not_healthy_count': 0,
+            'total_population': 0
+        })
+        
+        for tree in trees:
+            try:
+                if not tree.species:
+                    continue
+                    
+                species_id = tree.species.id
+                species_data[species_id]['common_name'] = tree.species.common_name or 'Unknown'
+                species_data[species_id]['scientific_name'] = tree.species.scientific_name or 'Unknown'
+                
+                population = tree.population or 0
+                species_data[species_id]['total_population'] += population
+                
+                # Calculate Planted and Existing
+                if tree.is_planted:
+                    species_data[species_id]['planted'] += population
+                else:
+                    species_data[species_id]['existing'] += population
+                
+                # Calculate healthy and not healthy counts
+                # Using healthy_count field if available, otherwise use is_healthy boolean
+                if hasattr(tree, 'healthy_count') and tree.healthy_count is not None:
+                    # Count healthy trees (excellent/very_good)
+                    species_data[species_id]['healthy_count'] += tree.healthy_count or 0
+                else:
+                    # Fallback to is_healthy boolean
+                    if tree.is_healthy:
+                        species_data[species_id]['healthy_count'] += population
+                
+                # Not healthy count will be calculated as: total - healthy_count
+                        
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                continue
+        
+        # Generate table HTML
+        html += '''
+        <div class="report-section">
+            <h2 class="report-section-title">Tree Species Report</h2>
+            <div class="report-table-container">
+                <table class="report-table" style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: #f8f9fa;">
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: left;">Species</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Total No. Tree</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Planted</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Existing</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">No. of Healthy Tree</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">No. of Not Healthy Tree</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        '''
+        
+        # Add table rows with calculations
+        if species_data:
+            for species_id, data in sorted(species_data.items(), key=lambda x: x[1]['common_name']):
                 try:
-                    trees = trees.filter(species_id=int(species_filter))
-                except (ValueError, TypeError):
-                    pass  # Invalid filter, ignore
-            if location_filter and location_filter != 'all':
-                try:
-                    trees = trees.filter(location_id=int(location_filter))
-                except (ValueError, TypeError):
-                    pass  # Invalid filter, ignore
-            
-            # Generate table HTML
-            html += '''
-            <div class="report-section">
-                <h2 class="report-section-title">Data Table</h2>
-                <div class="report-table-container">
-                    <table class="report-table">
-                        <thead>
-                            <tr>
-                                <th>Species</th>
-                                <th>Location</th>
-                                <th>Population</th>
-                                <th>Health Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-            '''
-            
-            # Add table rows with proper error handling
-            tree_count = 0
-            for tree in trees[:10]:  # Limit to 10 rows for performance
-                try:
-                    common_name = tree.species.common_name if tree.species else 'Unknown'
-                    scientific_name = tree.species.scientific_name if tree.species else 'Unknown'
-                    location_name = tree.location.name if tree.location else 'Unknown'
-                    health_status = tree.health_status or 'Unknown'
-                    population = tree.population or 0
+                    common_name = data['common_name']
+                    scientific_name = data['scientific_name']
+                    planted = data['planted']
+                    existing = data['existing']
+                    total = planted + existing
+                    healthy_count = data['healthy_count']
+                    # Not healthy count = total - healthy count (includes good + bad + deceased)
+                    not_healthy_count = total - healthy_count
+                    
+                    # Calculate percentages
+                    # Percentage of healthy tree = (no. of healthy trees) / (total) * 100
+                    healthy_percentage = (healthy_count / total * 100) if total > 0 else 0
+                    # Percentage of not healthy tree = 100% - healthy percentage
+                    not_healthy_percentage = 100 - healthy_percentage
                     
                     html += f'''
-                    <tr>
-                        <td>{common_name} ({scientific_name})</td>
-                        <td>{location_name}</td>
-                        <td>{population}</td>
-                        <td>{health_status}</td>
-                    </tr>
-                    '''
-                    tree_count += 1
-                except Exception as e:
-                    # Skip trees with errors, log but continue
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            
-            if tree_count == 0:
-                html += '''
-                    <tr>
-                        <td colspan="4" style="text-align: center; padding: 20px;">No tree data available for the selected filters.</td>
-                    </tr>
-                '''
-            
-            html += '''
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-            '''
-
-        # Add data analysis sections
-        if health_distribution:
-            html += '''
-            <div class="report-section">
-                <h2 class="report-section-title">Health Status Distribution</h2>
-                <table class="report-table" style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #f8f9fa;">
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Health Status</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Number of Records</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            '''
-            for health in health_distribution:
-                try:
-                    status_display = health.get('health_status', 'Unknown')
-                    if status_display:
-                        status_display = str(status_display).replace('_', ' ').title()
-                    else:
-                        status_display = 'Unknown'
-                    count = health.get('count', 0) or 0
-                    population = health.get('population', 0) or 0
-                    html += f'''
                         <tr>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{status_display}</td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population:,}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">
+                                {common_name} <span style="font-size: 0.85em; font-style: italic; color: #666;">{scientific_name}</span>
+                            </td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{total:,}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{planted:,}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{existing:,}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">
+                                {healthy_count:,} ({healthy_percentage:.2f}%)
+                            </td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">
+                                {not_healthy_count:,} ({not_healthy_percentage:.2f}%)
+                            </td>
                         </tr>
                     '''
                 except Exception as e:
                     import traceback
                     traceback.print_exc()
                     continue
-            html += '''
-                    </tbody>
-                </table>
-            </div>
-            '''
-        
-        if species_dist:
-            html += '''
-            <div class="report-section">
-                <h2 class="report-section-title">Top Species by Population</h2>
-                <table class="report-table" style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #f8f9fa;">
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Common Name</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Scientific Name</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            '''
-            for species in species_dist:
-                try:
-                    common_name = species.get('species__common_name') or 'Unknown'
-                    scientific_name = species.get('species__scientific_name') or 'Unknown'
-                    count = species.get('count', 0) or 0
-                    total_pop = species.get('total_population', 0) or 0
-                    html += f'''
-                        <tr>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{common_name}</td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;"><em>{scientific_name}</em></td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{total_pop:,}</td>
-                        </tr>
-                    '''
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            html += '''
-                    </tbody>
-                </table>
-            </div>
-            '''
-        
-        if year_dist:
-            html += '''
-            <div class="report-section">
-                <h2 class="report-section-title">Population Trends by Year</h2>
-                <table class="report-table" style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: #f8f9fa;">
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Year</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Records</th>
-                            <th style="padding: 0.75rem; border: 1px solid #dee2e6;">Total Population</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            '''
-            for year_data in year_dist:
-                try:
-                    year = year_data.get('year', 'Unknown') or 'Unknown'
-                    count = year_data.get('count', 0) or 0
-                    population = year_data.get('population', 0) or 0
-                    html += f'''
-                        <tr>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{year}</td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{count}</td>
-                            <td style="padding: 0.75rem; border: 1px solid #dee2e6;">{population:,}</td>
-                        </tr>
-                    '''
-                except Exception as e:
-                    import traceback
-                    traceback.print_exc()
-                    continue
-            html += '''
-                    </tbody>
-                </table>
-            </div>
-            '''
-
-        # Add conclusions based on actual data
-        conclusions = []
-        if total_trees == 0:
-            conclusions.append("No tree data is available in your account. Please add tree records to generate meaningful reports.")
         else:
-            if unique_species > 0:
-                conclusions.append(f"Your account contains data for {unique_species} unique species, indicating good species diversity.")
-            if unique_locations > 0:
-                conclusions.append(f"Trees are distributed across {unique_locations} different locations, showing geographic diversity.")
-            if health_distribution:
-                try:
-                    excellent_count = next((h.get('count', 0) for h in health_distribution if h.get('health_status') == 'excellent'), 0)
-                    poor_count = next((h.get('count', 0) for h in health_distribution if h.get('health_status') in ['poor', 'very_poor']), 0)
-                    if excellent_count > poor_count:
-                        conclusions.append("The majority of trees are in good to excellent health, indicating successful conservation efforts.")
-                    elif poor_count > excellent_count:
-                        conclusions.append("A significant number of trees require attention due to poor health status.")
-                except:
-                    pass
-        
-        html += f'''
-            <div class="report-section">
-                <h2 class="report-section-title">Conclusions and Recommendations</h2>
-                <p>Based on the actual data analysis from your account, the following conclusions can be drawn:</p>
-                <ul>
-        '''
-        for conclusion in conclusions:
-            # Escape HTML to prevent issues
-            from django.utils.html import escape
-            escaped_conclusion = escape(str(conclusion))
-            html += f'<li>{escaped_conclusion}</li>'
-        
-        if not conclusions:
-            html += '<li>Continue monitoring and collecting data to build a comprehensive dataset.</li>'
+            html += '''
+                <tr>
+                    <td colspan="6" style="text-align: center; padding: 20px;">No tree data available for the selected trees and addresses.</td>
+                </tr>
+            '''
         
         html += '''
-                </ul>
+                    </tbody>
+                </table>
             </div>
+        </div>
         </div>
         '''
 
         try:
             return JsonResponse({
                 'reportContent': html,
-                'success': True,
-                'yearData': year_dist,  # Include year distribution data for charts
-                'healthData': health_distribution,  # Include health distribution data
-                'speciesData': species_dist  # Include species distribution data
+                'success': True
             })
         except Exception as json_error:
             # If JSON encoding fails, try to return a simpler error
@@ -1822,7 +1850,6 @@ def generate_report(request):
 def tree_data(request):
     """
     API endpoint for tree data in GeoJSON format
-    Includes both user's trees and public submissions
     """
     try:
         trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
@@ -1862,12 +1889,15 @@ def tree_data(request):
                     'health_status': tree.health_status,
                     'year': tree.year,
                     'location': tree.location.name,
+                    'address': tree.location.address or '',
                     'notes': tree.notes or '',
                     # Use actual stored health distribution
                     'healthy_count': tree.healthy_count,
                     'good_count': tree.good_count,
                     'bad_count': tree.bad_count,
                     'deceased_count': tree.deceased_count,
+                    'is_healthy': tree.is_healthy,
+                    'is_planted': tree.is_planted,
                     'hectares': tree.hectares,
                     # Include species image URL if available (shared by all trees with same common_name and scientific_name)
                     'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None,
@@ -1876,10 +1906,6 @@ def tree_data(request):
             }
             features.append(feature)
 
-        # Note: Public submissions that have been imported are already included in the trees query above
-        # as EndemicTree records, so we don't need to add them separately here.
-        # The imported trees will have the proper species information (common_name, scientific_name, etc.)
-        # from when they were imported.
 
         geojson = {
             'type': 'FeatureCollection',
@@ -2014,12 +2040,15 @@ def filter_trees(request, species_id):
                     'health_status': tree.health_status,
                     'year': tree.year,
                     'location': tree.location.name,
+                    'address': tree.location.address or '',
                     'notes': tree.notes or '',
                     # Use actual stored health distribution
                     'healthy_count': tree.healthy_count,
                     'good_count': tree.good_count,
                     'bad_count': tree.bad_count,
                     'deceased_count': tree.deceased_count,
+                    'is_healthy': tree.is_healthy,
+                    'is_planted': tree.is_planted,
                     'hectares': tree.hectares,
                     # Include species image URL if available (shared by all trees with same common_name and scientific_name)
                     'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None,
@@ -2941,317 +2970,6 @@ def api_layers_detail(request, layer_id):
     
     return JsonResponse({'error': 'Method not allowed'}, status=405)
 
-
-@login_required(login_url='app:login')
-def api_supabase_data(request):
-    """API endpoint for managing public tree photo submissions from the public app."""
-    try:
-        from public.models import TreePhotoSubmission
-        
-        if request.method == 'GET':
-            # Fetch all public submissions
-            all_submissions = TreePhotoSubmission.objects.all().order_by('-created_at')
-            
-            # Filter out submissions that have been imported by ANY user
-            # Once ANY user imports a submission, it should be removed from the table for all users
-            unimported_submission_ids = []
-            for submission in all_submissions:
-                # Check if there's ANY EndemicTree (regardless of user) with notes containing this submission ID
-                # Check for both formats: "Imported from public submission - ID: X" and "[SUBMISSION_ID:X]"
-                imported_trees = EndemicTree.objects.filter(
-                    notes__icontains=f"[SUBMISSION_ID:{submission.id}]"
-                ) | EndemicTree.objects.filter(
-                    notes__icontains=f"Imported from public submission - ID: {submission.id}"
-                )
-                # Only include if NOT imported by anyone
-                if not imported_trees.exists():
-                    unimported_submission_ids.append(submission.id)
-            
-            # Only get unimported submissions
-            submissions = all_submissions.filter(id__in=unimported_submission_ids)
-            
-            data = []
-            for submission in submissions:
-                data.append({
-                    'id': submission.id,
-                    'tree_description': submission.tree_description,
-                    'person_name': submission.person_name,
-                    'latitude': submission.latitude,
-                    'longitude': submission.longitude,
-                    'image_url': f'/public-submission-image/{submission.id}/',
-                    'created_at': submission.created_at.isoformat(),
-                    'image_format': submission.image_format,
-                })
-            return JsonResponse({
-                'success': True,
-                'data': data
-            })
-            
-        elif request.method == 'POST':
-            # Add new endemic tree to SQLite from form data
-            data = json.loads(request.body)
-            
-            # Validate required fields (including health distribution)
-            required_fields = [
-                'common_name', 'scientific_name', 'family', 'genus',
-                'latitude', 'longitude', 'population', 'year', 'health_status',
-                'healthy_count', 'good_count', 'bad_count', 'deceased_count'
-            ]
-            missing_fields = [field for field in required_fields if data.get(field) in [None, "", []]]
-            
-            if missing_fields:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Missing required fields: {", ".join(missing_fields)}'
-                }, status=400)
-            
-            # Server-side validation: health distribution must match population
-            try:
-                pop = int(data.get('population'))
-                healthy = int(data.get('healthy_count'))
-                good = int(data.get('good_count'))
-                bad = int(data.get('bad_count'))
-                deceased = int(data.get('deceased_count'))
-            except (TypeError, ValueError):
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Health counts and population must be integers.'
-                }, status=400)
-            total_health = healthy + good + bad + deceased
-            if total_health != pop:
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Health status total ({total_health}) must equal the total population ({pop}).'
-                }, status=400)
-            
-            # Create or get family
-            family_name = data.get('family')
-            family, _ = TreeFamily.objects.get_or_create(name=family_name, user=request.user)
-            
-            # Create or get genus
-            genus_name = data.get('genus')
-            genus, _ = TreeGenus.objects.get_or_create(
-                name=genus_name,
-                user=request.user,
-                defaults={'family': family}
-            )
-            
-            # Create or get species
-            scientific_name = data.get('scientific_name')
-            common_name = data.get('common_name')
-            species, _ = TreeSpecies.objects.get_or_create(
-                scientific_name=scientific_name,
-                user=request.user,
-                defaults={
-                    'common_name': common_name,
-                    'genus': genus
-                }
-            )
-            
-            # Create or get location
-            latitude = float(data.get('latitude'))
-            longitude = float(data.get('longitude'))
-            location_name = data.get('location_name', f"{common_name} Location")
-            
-            location, _ = Location.objects.get_or_create(
-                latitude=latitude,
-                longitude=longitude,
-                user=request.user,
-                defaults={'name': location_name}
-            )
-            
-            # Geocode location to get address
-            try:
-                geocode_location(location)
-            except Exception as e:
-                # Don't fail the entire operation if geocoding fails
-                print(f"Geocoding failed for location {location.id}: {str(e)}")
-            
-            # Get health distribution counts
-            healthy_count = int(data.get('healthy_count', 0))
-            good_count = int(data.get('good_count', 0))
-            bad_count = int(data.get('bad_count', 0))
-            deceased_count = int(data.get('deceased_count', 0))
-            
-            # Optional physical measurements
-            height_meters = data.get('height_meters')
-            try:
-                height_meters = float(height_meters) if height_meters not in [None, ''] else None
-            except (ValueError, TypeError):
-                height_meters = None
-
-            diameter_cm = data.get('diameter_cm')
-            try:
-                diameter_cm = float(diameter_cm) if diameter_cm not in [None, ''] else None
-            except (ValueError, TypeError):
-                diameter_cm = None
-
-            # Get health_status and infer boolean values
-            health_status = data.get('health_status', 'good')
-            is_healthy = health_status in ['excellent', 'very_good', 'good']
-            # Public submissions are typically existing trees, default to False
-            is_planted = False
-            
-            # Get hectares (required)
-            hectares = data.get('hectares')
-            if hectares is None:
-                return JsonResponse({'success': False, 'error': 'hectares is required'}, status=400)
-            try:
-                hectares = float(hectares)
-                if hectares < 0:
-                    return JsonResponse({'success': False, 'error': 'hectares must be non-negative'}, status=400)
-            except (ValueError, TypeError):
-                return JsonResponse({'success': False, 'error': 'invalid hectares value'}, status=400)
-            
-            # Check if there's an existing tree with same location and species
-            # Get image from public submission if submission_id is provided
-            submission_id = data.get('supabase_id')
-            # Convert to int if it's a string
-            if submission_id:
-                try:
-                    submission_id = int(submission_id)
-                except (ValueError, TypeError):
-                    print(f"Warning: Invalid submission_id format: {submission_id}")
-                    submission_id = None
-            print(f"DEBUG: Import request - submission_id: {submission_id}, data keys: {list(data.keys())}")
-            if submission_id:
-                try:
-                    submission = TreePhotoSubmission.objects.get(id=submission_id)
-                    # Get binary image data
-                    image_data = submission.tree_image
-                    if isinstance(image_data, memoryview):
-                        image_data = bytes(image_data)
-                    elif not isinstance(image_data, bytes):
-                        image_data = bytes(image_data)
-                    
-                    # Validate image data
-                    if not image_data or len(image_data) == 0:
-                        print(f"Warning: Submission {submission_id} has empty image data")
-                    else:
-                        # Check if species already has an image
-                        if species.image:
-                            print(f"Warning: Species {species.id} ({species.common_name}) already has an image. Skipping image import from submission {submission_id}.")
-                        else:
-                            # Store binary data in species (shared by all trees with same common_name and scientific_name)
-                            species.image = image_data
-                            species.image_format = submission.image_format
-                            species.save()
-                            print(f"Saved image from submission {submission_id} to species {species.id}: {len(image_data)} bytes")
-                except TreePhotoSubmission.DoesNotExist:
-                    print(f"Submission {submission_id} not found")
-                    pass
-                except Exception as e:
-                    print(f"Error copying image from submission {submission_id}: {str(e)}")
-                    import traceback
-                    traceback.print_exc()
-            
-            # Create endemic tree record
-            tree = EndemicTree(
-                species=species,
-                location=location,
-                population=int(data.get('population')),
-                year=int(data.get('year')),
-                health_status=health_status,
-                healthy_count=healthy_count,
-                good_count=good_count,
-                bad_count=bad_count,
-                deceased_count=deceased_count,
-                hectares=hectares,
-                height_meters=height_meters,
-                diameter_cm=diameter_cm,
-                is_healthy=is_healthy,
-                is_planted=is_planted,
-                # Always include submission ID in notes for tracking, even if user provides custom notes
-                notes=f"{data.get('notes', '')} [SUBMISSION_ID:{data.get('supabase_id', 'Unknown')}]" if data.get('notes') else f"Imported from public submission - ID: {data.get('supabase_id', 'Unknown')}",
-                user=request.user
-            )
-            
-            # Save tree
-            tree.save()
-            
-            return JsonResponse({
-                'success': True,
-                'message': f'Successfully added {common_name} to database',
-                'tree_id': str(tree.id)
-            })
-            
-        elif request.method == 'DELETE':
-            # Delete data from public submissions
-            data = json.loads(request.body)
-            submission_id = data.get('supabase_id')  # Keep same key for JS compatibility
-            
-            if not submission_id:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Submission ID is required'
-                }, status=400)
-            
-            try:
-                # Delete from public submissions
-                submission = TreePhotoSubmission.objects.get(id=submission_id)
-                submission.delete()
-                
-                return JsonResponse({
-                    'success': True,
-                    'message': 'Successfully deleted public submission'
-                })
-                    
-            except TreePhotoSubmission.DoesNotExist:
-                return JsonResponse({
-                    'success': False,
-                    'error': 'Submission not found'
-                }, status=404)
-            except Exception as e:
-                print(f"Error deleting public submission: {str(e)}")
-                return JsonResponse({
-                    'success': False,
-                    'error': f'Failed to delete submission: {str(e)}'
-                }, status=500)
-            
-    except Exception as e:
-        print(f"Error in public submissions API: {str(e)}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
-
-
-@login_required(login_url='app:login')
-def public_submission_image(request, submission_id):
-    """Serve image from public TreePhotoSubmission as HTTP response."""
-    try:
-        from public.models import TreePhotoSubmission
-        
-        submission = TreePhotoSubmission.objects.get(id=submission_id)
-        
-        # Get binary data - BinaryField returns bytes
-        image_data = submission.tree_image
-        if isinstance(image_data, memoryview):
-            image_data = bytes(image_data)
-        elif not isinstance(image_data, bytes):
-            image_data = bytes(image_data)
-        
-        # Determine content type based on image format
-        if submission.image_format == 'JPEG':
-            content_type = 'image/jpeg'
-        elif submission.image_format == 'PNG':
-            content_type = 'image/png'
-        else:
-            content_type = 'image/jpeg'  # Default
-        
-        # Create response with proper headers
-        response = HttpResponse(image_data, content_type=content_type)
-        response['Content-Length'] = len(image_data)
-        response['Cache-Control'] = 'public, max-age=3600'
-        
-        return response
-        
-    except TreePhotoSubmission.DoesNotExist:
-        return HttpResponseNotFound("Image not found")
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return HttpResponseServerError(f"Error serving image: {str(e)}")
 
 
 @login_required(login_url='app:login')

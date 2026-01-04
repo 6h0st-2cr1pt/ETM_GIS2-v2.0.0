@@ -96,15 +96,17 @@ document.addEventListener("DOMContentLoaded", () => {
   
   // Get DOM elements
   const reportForm = document.getElementById("reportForm")
-  const timeRange = document.getElementById("timeRange")
-  const customTimeRange = document.querySelector(".custom-time-range")
   const generateReportBtn = document.getElementById("generateReportBtn")
   const downloadReportBtn = document.getElementById("downloadReportBtn")
   const reportPreviewContent = document.getElementById("reportPreviewContent")
   const csrfTokenElement = document.querySelector('[name=csrfmiddlewaretoken]')
   const csrfToken = csrfTokenElement ? csrfTokenElement.value : ''
-  const speciesFilter = document.getElementById("speciesFilter")
-  const locationFilter = document.getElementById("locationFilter")
+  
+  // Select all/deselect all buttons
+  const selectAllTreesBtn = document.getElementById("selectAllTreesBtn")
+  const deselectAllTreesBtn = document.getElementById("deselectAllTreesBtn")
+  const selectAllAddressesBtn = document.getElementById("selectAllAddressesBtn")
+  const deselectAllAddressesBtn = document.getElementById("deselectAllAddressesBtn")
   
   // Debug: Log element availability
   console.log('Reports.js loaded. Elements found:', {
@@ -115,7 +117,37 @@ document.addEventListener("DOMContentLoaded", () => {
     csrfTokenLength: csrfToken ? csrfToken.length : 0
   });
   
-  // Function to update species dropdown
+  // Select all/deselect all functionality for trees
+  if (selectAllTreesBtn) {
+    selectAllTreesBtn.addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('.tree-checkbox');
+      checkboxes.forEach(cb => cb.checked = true);
+    });
+  }
+  
+  if (deselectAllTreesBtn) {
+    deselectAllTreesBtn.addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('.tree-checkbox');
+      checkboxes.forEach(cb => cb.checked = false);
+    });
+  }
+  
+  // Select all/deselect all functionality for addresses
+  if (selectAllAddressesBtn) {
+    selectAllAddressesBtn.addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('.address-checkbox');
+      checkboxes.forEach(cb => cb.checked = true);
+    });
+  }
+  
+  if (deselectAllAddressesBtn) {
+    deselectAllAddressesBtn.addEventListener('click', () => {
+      const checkboxes = document.querySelectorAll('.address-checkbox');
+      checkboxes.forEach(cb => cb.checked = false);
+    });
+  }
+  
+  // Function to update species dropdown (removed - no longer needed)
   async function updateSpeciesDropdown() {
     if (!speciesFilter) {
       console.warn('Species filter element not found');
@@ -300,117 +332,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   
-  // Update dropdowns when page loads (with a small delay to ensure DOM is ready)
-  setTimeout(() => {
-    console.log('Initializing dropdown updates...');
-    updateSpeciesDropdown();
-    updateLocationDropdown();
-  }, 200);
-  
-  // Add refresh button handlers
-  const refreshSpeciesBtn = document.getElementById("refreshSpeciesBtn");
-  const refreshLocationBtn = document.getElementById("refreshLocationBtn");
-  
-  if (refreshSpeciesBtn) {
-    refreshSpeciesBtn.addEventListener("click", async () => {
-      const btn = document.getElementById("refreshSpeciesBtn");
-      if (!btn) return; // Button no longer exists
-      
-      console.log('Refresh species button clicked');
-      btn.disabled = true;
-      const icon = btn.querySelector('i');
-      if (icon) {
-        icon.classList.add('fa-spin');
-        icon.style.opacity = '0.6';
-      }
-      try {
-        await updateSpeciesDropdown();
-        console.log('Species dropdown refreshed successfully');
-        // Show brief success feedback
-        const currentBtn = document.getElementById("refreshSpeciesBtn");
-        if (currentBtn) {
-          const originalTitle = currentBtn.title;
-          currentBtn.title = 'Refreshed!';
-          setTimeout(() => {
-            const btnCheck = document.getElementById("refreshSpeciesBtn");
-            if (btnCheck) {
-              btnCheck.title = originalTitle;
-            }
-          }, 2000);
-        }
-      } catch (error) {
-        console.error('Error refreshing species dropdown:', error);
-        alert('Failed to refresh species list. Check console for details.');
-      } finally {
-        const finalBtn = document.getElementById("refreshSpeciesBtn");
-        if (finalBtn) {
-          finalBtn.disabled = false;
-          const finalIcon = finalBtn.querySelector('i');
-          if (finalIcon) {
-            finalIcon.classList.remove('fa-spin');
-            finalIcon.style.opacity = '1';
-          }
-        }
-      }
-    });
-  }
-  
-  if (refreshLocationBtn) {
-    refreshLocationBtn.addEventListener("click", async () => {
-      const btn = document.getElementById("refreshLocationBtn");
-      if (!btn) return; // Button no longer exists
-      
-      console.log('Refresh location button clicked');
-      btn.disabled = true;
-      const icon = btn.querySelector('i');
-      if (icon) {
-        icon.classList.add('fa-spin');
-        icon.style.opacity = '0.6';
-      }
-      try {
-        await updateLocationDropdown();
-        console.log('Location dropdown refreshed successfully');
-        // Show brief success feedback
-        const currentBtn = document.getElementById("refreshLocationBtn");
-        if (currentBtn) {
-          const originalTitle = currentBtn.title;
-          currentBtn.title = 'Refreshed!';
-          setTimeout(() => {
-            const btnCheck = document.getElementById("refreshLocationBtn");
-            if (btnCheck) {
-              btnCheck.title = originalTitle;
-            }
-          }, 2000);
-        }
-      } catch (error) {
-        console.error('Error refreshing location dropdown:', error);
-        alert('Failed to refresh location list. Check console for details.');
-      } finally {
-        const finalBtn = document.getElementById("refreshLocationBtn");
-        if (finalBtn) {
-          finalBtn.disabled = false;
-          const finalIcon = finalBtn.querySelector('i');
-          if (finalIcon) {
-            finalIcon.classList.remove('fa-spin');
-            finalIcon.style.opacity = '1';
-          }
-        }
-      }
-    });
-  }
-
-  // Show/hide custom time range based on selection
-  if (timeRange) {
-    timeRange.addEventListener("change", function () {
-      if (this.value === "custom") {
-        customTimeRange.classList.remove("d-none")
-      } else {
-        customTimeRange.classList.add("d-none")
-      }
-      // Re-apply styling after change
-      forceDropdownStyling();
-    })
-  }
 
   // Generate report button click handler
   if (generateReportBtn) {
@@ -430,11 +351,19 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Get form data
       const formData = new FormData(form);
-      const reportType = formData.get("report_type");
-      console.log('Report type selected:', reportType);
+      const selectedTrees = formData.getAll("selected_trees");
+      const selectedAddresses = formData.getAll("selected_addresses");
+      
+      console.log('Selected trees:', selectedTrees);
+      console.log('Selected addresses:', selectedAddresses);
 
-      if (!reportType) {
-        alert("Please select a report type.");
+      if (!selectedTrees || selectedTrees.length === 0) {
+        alert("Please select at least one tree.");
+        return;
+      }
+      
+      if (!selectedAddresses || selectedAddresses.length === 0) {
+        alert("Please select at least one address.");
         return;
       }
 
@@ -523,16 +452,6 @@ document.addEventListener("DOMContentLoaded", () => {
           console.error('Report preview content element not found!');
         }
 
-        // Initialize charts and map if needed
-        if (formData.get("include_charts") === "on") {
-          initReportCharts(reportType, data.yearData, data.healthData, data.speciesData);
-        }
-        
-        if (formData.get("include_map") === "on") {
-          const speciesFilter = formData.get("species_filter");
-          const locationFilter = formData.get("location_filter");
-          initReportMap(speciesFilter, locationFilter);
-        }
 
         // Enable download button
         if (downloadReportBtn) {

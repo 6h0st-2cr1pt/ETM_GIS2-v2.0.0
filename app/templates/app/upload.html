@@ -26,7 +26,7 @@
             </div>
 
             <div class="csv-upload-area" id="dropzone">
-               <form method="post" enctype="multipart/form-data" id="csv-upload-form">
+               <form method="post" enctype="multipart/form-data" id="csv-upload-form" action="{% url 'app:upload' %}">
                   {% csrf_token %}
                   <div class="drag-drop-area">
                      <div class="drag-drop-icon">
@@ -63,7 +63,6 @@
                            <th>SCIENTIFIC NAME</th>
                            <th>FAMILY</th>
                            <th>GENUS</th>
-                           <th>POPULATION</th>
                            <th>HECTARS</th>
                            <th>PLANTED</th>
                            <th>EXISTING</th>
@@ -79,26 +78,25 @@
                      </thead>
                      <tbody>
                         <tr>
-                           <td>Tindalo</td>
-                           <td>Afzelia rhomboidea</td>
-                           <td>Fabaceae</td>
-                           <td>Afzelia</td>
-                           <td>120</td>
-                           <td>5.5</td>
-                           <td>Yes</td>
-                           <td>No</td>
-                           <td>15.5</td>
-                           <td>45.2</td>
-                           <td>Yes</td>
-                           <td>No</td>
-                           <td>10.4234</td>
-                           <td>123.1234</td>
-                           <td>123 Main St, Suburb, City</td>
-                           <td>2023</td>
+                           <td>Yakal</td>
+                           <td>Shorea astylosa</td>
+                           <td>Dipterocarpaceae</td>
+                           <td>Shorea</td>
+                           <td>24</td>
+                           <td>1</td>
+                           <td></td>
+                           <td>2.3</td>
+                           <td>1.2</td>
+                           <td>1</td>
+                           <td></td>
+                           <td>10.722327</td>
+                           <td>122.962117</td>
+                           <td></td>
+                           <td>2011</td>
                         </tr>
                      </tbody>
                   </table>
-                  <p class="mt-2"><small><strong>Note:</strong> PLANTED/EXISTING and HEALTHY/NOT HEALTHY are boolean fields. Use "Yes", "True", "1", or "No", "False", "0". ADDRESS is optional - if not provided, it will be auto-generated from coordinates.</small></p>
+                  <p class="mt-2"><small><strong>Note:</strong> Each row represents 1 tree. PLANTED/EXISTING and HEALTHY/NOT HEALTHY can be "1" or empty. ADDRESS is optional - if not provided, it will be left empty.</small></p>
                </div>
             </div>
          </div>

@@ -14,7 +14,6 @@ urlpatterns = [
     path('settings/', views.settings, name='settings'),
     path('about/', views.about, name='about'),
     path('reports/', views.reports, name='reports'),
-    path('new-data/', views.new_data, name='new_data'),
 
     # Authentication URLs
     path('login/', views.user_login, name='login'),
@@ -28,8 +27,6 @@ urlpatterns = [
     # Map layer APIs
     path('api/layers/', views.api_layers, name='api_layers'),
     path('api/layers/<int:layer_id>/', views.api_layers_detail, name='api_layers_detail'),
-    path('api/supabase-data/', views.api_supabase_data, name='api_supabase_data'),
-    path('public-submission-image/<int:submission_id>/', views.public_submission_image, name='public_submission_image'),
     path('species-image/<int:species_id>/', views.species_image, name='species_image'),
     path('api/set-theme/', views.set_theme, name='set_theme'),
     path('api/set-map-style/', views.set_map_style, name='set_map_style'),
@@ -48,6 +45,7 @@ urlpatterns = [
     path('api/locations-list/', views.api_locations_list, name='api_locations_list'),
     path('api/endemic-trees-list/', views.api_endemic_trees_list, name='api_endemic_trees_list'),
     path('api/geocode/', views.api_geocode, name='api_geocode'),
+    path('api/csv-upload-progress/', views.api_csv_upload_progress, name='api_csv_upload_progress'),
     path('upload-species-images/', views.upload_species_images, name='upload_species_images'),
     path('api/upload-species-image/', views.upload_species_image_api, name='upload_species_image_api'),
 ]

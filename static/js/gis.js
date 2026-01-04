@@ -1,4 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // Check if Leaflet is loaded
+  if (typeof window.L === 'undefined') {
+    console.error("❌ Leaflet is not loaded! Please check if the Leaflet script is included.")
+    alert("Error: Map library not loaded. Please refresh the page.")
+    return
+  }
+  
   // Declare L at the beginning of the script to ensure it's defined
   const L = window.L
   
@@ -69,12 +76,38 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   // Initialize the map centered on Negros Island, Philippines
   // Negros Island coordinates: approximately 10.0° N, 123.0° E
-  const map = L.map("map", {
-    center: [10.0, 123.0],
-    zoom: 9,
-    zoomControl: false, // We'll add custom controls
-    attributionControl: false,
-  })
+  const mapContainer = document.getElementById("map")
+  if (!mapContainer) {
+    console.error("❌ Map container not found!")
+    alert("Error: Map container not found. Please refresh the page.")
+    return
+  }
+
+  console.log("✅ Map container found, initializing map...")
+  
+  let map
+  try {
+    map = L.map("map", {
+      center: [10.0, 123.0],
+      zoom: 9,
+      zoomControl: false, // We'll add custom controls
+      attributionControl: false,
+    })
+
+    console.log("✅ Map object created successfully")
+  } catch (error) {
+    console.error("❌ Error initializing map:", error)
+    alert("Error initializing map: " + error.message)
+    return
+  }
+
+  // Invalidate map size to ensure proper rendering
+  setTimeout(() => {
+    if (map) {
+      map.invalidateSize()
+      console.log("✅ Map initialized and size invalidated")
+    }
+  }, 100)
 
   // Add attribution control to the bottom right
   L.control
@@ -171,7 +204,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Set initial base layer (dark by default)
   let currentBaseLayer = "dark"
-  baseLayers[currentBaseLayer].addTo(map)
+  
+  // Add base layer to map
+  try {
+    baseLayers[currentBaseLayer].addTo(map)
+    console.log("✅ Base layer added to map")
+    
+    // Ensure map renders properly - multiple attempts to handle timing issues
+    setTimeout(() => {
+      if (map) {
+        map.invalidateSize()
+        console.log("✅ Map size invalidated (first attempt)")
+      }
+    }, 100)
+    
+    setTimeout(() => {
+      if (map) {
+        map.invalidateSize()
+        console.log("✅ Map size invalidated (second attempt)")
+        // Force a view reset to ensure tiles load
+        map.setView(map.getCenter(), map.getZoom())
+      }
+    }, 500)
+  } catch (error) {
+    console.error("❌ Error adding base layer:", error)
+  }
 
   // Create layer groups for tree and seed markers
   const treeLayer = L.layerGroup().addTo(map)
@@ -215,6 +272,11 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       return response.json();
+    })
+    .catch(error => {
+      console.error('Error loading custom layers:', error);
+      // Don't block map initialization if layers fail to load
+      return { layers: [] };
     })
     .then(data => {
       console.log('Loaded custom layers:', data);
@@ -1164,6 +1226,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const family = p.family || 'Unknown';
         const genus = p.genus || 'Unknown';
         const location = p.location || 'Unknown';
+        const address = p.address || '';
         const healthStatus = p.health_status ? p.health_status.replace(/_/g, " ") : 'Unknown';
         
         const imageHtml = p.image_url ? `<div style="margin:8px 0"><img src="${p.image_url}" alt="${commonName}" style="max-width:220px;border-radius:6px"></div>` : ''
@@ -1186,17 +1249,13 @@ document.addEventListener("DOMContentLoaded", () => {
               <tr><td>Genus:</td><td>${genus}</td></tr>
               <tr><td>Population:</td><td>${p.population || 0}</td></tr>
               <tr><td><strong>Hectares:</strong></td><td>${hectaresDisplay}</td></tr>
-              <tr><td>Health Status:</td><td>${healthStatus}</td></tr>
-              <tr><td>Health Distribution:</td><td>
-                <div class="health-distribution">
-                  <div class="health-count">Healthy: ${p.healthy_count ?? 0}</div>
-                  <div class="health-count">Good: ${p.good_count ?? 0}</div>
-                  <div class="health-count">Bad: ${p.bad_count ?? 0}</div>
-                  <div class="health-count">Deceased: ${p.deceased_count ?? 0}</div>
+              <tr><td>Health Status:</td><td>
+                <div class="health-status-indicator" style="display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; ${p.is_healthy ? 'background-color: #4CAF50; color: white;' : 'background-color: #F44336; color: white;'}">
+                  ${p.is_healthy !== undefined ? (p.is_healthy ? '✓ Healthy' : '✗ Not Healthy') : 'Status Unknown'}
                 </div>
               </td></tr>
               <tr><td>Year:</td><td>${p.year || 'N/A'}</td></tr>
-              <tr><td>Location:</td><td>${location} (${Number(__pos.lat).toFixed(6)}, ${Number(__pos.lng).toFixed(6)})</td></tr>
+              <tr><td>Location:</td><td>${address ? address : `${location} (${Number(__pos.lat).toFixed(6)}, ${Number(__pos.lng).toFixed(6)})`}</td></tr>
             </table>
             ${p.notes ? `<p class="popup-notes">${p.notes}</p>` : ""}
           </div>
@@ -1263,6 +1322,16 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   legend.addTo(map)
+
+  // Add window resize listener to ensure map updates properly
+  window.addEventListener('resize', () => {
+    if (map) {
+      setTimeout(() => {
+        map.invalidateSize()
+        console.log("✅ Map size invalidated on window resize")
+      }, 100)
+    }
+  })
 
   // Function to update the legend
   function updateLegend() {

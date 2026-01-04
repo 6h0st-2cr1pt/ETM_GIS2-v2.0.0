@@ -1,31 +1,60 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // Check if there's a hash in URL to open specific tab (for error redirects)
+  const hash = window.location.hash
+  let defaultTab = "manual-entry"
+  if (hash) {
+    const tabId = hash.substring(1) // Remove the #
+    if (tabId === "csv-upload" || tabId === "seed-entry" || tabId === "manual-entry") {
+      defaultTab = tabId
+    }
+  }
+  
   // Tab switching functionality
   const tabButtons = document.querySelectorAll(".tab-button")
   const tabContents = document.querySelectorAll(".tab-content")
+  
+  // Function to switch tabs
+  function switchTab(tabId) {
+    // Update active tab button
+    tabButtons.forEach((btn) => {
+      if (btn.getAttribute("data-tab") === tabId) {
+        btn.classList.add("active")
+      } else {
+        btn.classList.remove("active")
+      }
+    })
+
+    // Show selected tab content, hide others
+    tabContents.forEach((content) => {
+      if (content.id === tabId) {
+        content.style.display = "block"
+        // Add a small delay before showing for animation effect
+        setTimeout(() => {
+          content.style.opacity = "1"
+        }, 50)
+      } else {
+        content.style.display = "none"
+        content.style.opacity = "0"
+      }
+    })
+    
+    // Update URL hash without scrolling
+    if (history.pushState) {
+      history.pushState(null, null, '#' + tabId)
+    }
+  }
 
   tabButtons.forEach((button) => {
     button.addEventListener("click", () => {
       const tabId = button.getAttribute("data-tab")
-
-      // Update active tab button
-      tabButtons.forEach((btn) => btn.classList.remove("active"))
-      button.classList.add("active")
-
-      // Show selected tab content, hide others
-      tabContents.forEach((content) => {
-        if (content.id === tabId) {
-          content.style.display = "block"
-          // Add a small delay before showing for animation effect
-          setTimeout(() => {
-            content.style.opacity = "1"
-          }, 50)
-        } else {
-          content.style.display = "none"
-          content.style.opacity = "0"
-        }
-      })
+      switchTab(tabId)
     })
   })
+  
+  // Switch to default tab on page load
+  if (defaultTab !== "manual-entry") {
+    switchTab(defaultTab)
+  }
 
   // CSV file upload handling
   const dropZone = document.getElementById("dropzone")
@@ -139,6 +168,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Initial validation
   validateRadioButtons()
+
+  // CSV Upload - simple form submission without progress bar
+  const csvUploadForm = document.getElementById("csv-upload-form")
+
+  if (csvUploadForm) {
+    csvUploadForm.addEventListener("submit", function (e) {
+      const fileInput = document.getElementById("csv_file")
+      
+      if (!fileInput || !fileInput.files.length) {
+        e.preventDefault()
+        alert("Please select a CSV file to upload")
+        return false
+      }
+      
+      // Form will submit normally - no AJAX, no progress bar
+      return true
+    })
+  }
 
   // Form validation and submission
   const manualForm = document.getElementById("manual-entry-form")
