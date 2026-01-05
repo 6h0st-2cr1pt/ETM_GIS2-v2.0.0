@@ -117,18 +117,28 @@ document.addEventListener("DOMContentLoaded", () => {
     csrfTokenLength: csrfToken ? csrfToken.length : 0
   });
   
-  // Select all/deselect all functionality for trees
+  // Select all/deselect all functionality for trees (only visible trees)
   if (selectAllTreesBtn) {
     selectAllTreesBtn.addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.tree-checkbox');
-      checkboxes.forEach(cb => cb.checked = true);
+      const treeItems = document.querySelectorAll('.tree-item');
+      treeItems.forEach(item => {
+        if (item.style.display !== 'none') {
+          const checkbox = item.querySelector('.tree-checkbox');
+          if (checkbox) checkbox.checked = true;
+        }
+      });
     });
   }
   
   if (deselectAllTreesBtn) {
     deselectAllTreesBtn.addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.tree-checkbox');
-      checkboxes.forEach(cb => cb.checked = false);
+      const treeItems = document.querySelectorAll('.tree-item');
+      treeItems.forEach(item => {
+        if (item.style.display !== 'none') {
+          const checkbox = item.querySelector('.tree-checkbox');
+          if (checkbox) checkbox.checked = false;
+        }
+      });
     });
   }
   
@@ -146,6 +156,200 @@ document.addEventListener("DOMContentLoaded", () => {
       checkboxes.forEach(cb => cb.checked = false);
     });
   }
+
+  // Address filtering functionality
+  let selectedAddresses = new Set();
+
+  // Function to normalize address for comparison (trim whitespace and handle empty)
+  function normalizeAddress(address) {
+    if (!address) return '';
+    return String(address).trim();
+  }
+
+  // Function to filter trees by selected addresses
+  function filterTreesByAddresses() {
+    const treeItems = document.querySelectorAll('.tree-item');
+    let visibleCount = 0;
+    const selectedAddressesArray = Array.from(selectedAddresses);
+
+    console.log('Filtering trees. Selected addresses:', selectedAddressesArray);
+
+    treeItems.forEach((item, index) => {
+      const treeAddressesStr = item.getAttribute('data-address') || '';
+      
+      // Show tree if no addresses selected OR if tree exists at any selected address
+      if (selectedAddresses.size === 0) {
+        item.style.display = '';
+        item.style.visibility = 'visible';
+        visibleCount++;
+      } else {
+        // Check if any of the tree's addresses match any selected address
+        // Tree addresses are stored as pipe-separated values (|)
+        let matches = false;
+        
+        if (treeAddressesStr) {
+          // Split addresses by | separator
+          const treeAddresses = treeAddressesStr.split('|').map(addr => normalizeAddress(addr));
+          
+          // Check if any tree address matches any selected address
+          for (const selectedAddr of selectedAddressesArray) {
+            const normalizedSelected = normalizeAddress(selectedAddr);
+            
+            for (const treeAddr of treeAddresses) {
+              if (normalizedSelected === treeAddr && treeAddr !== '') {
+                matches = true;
+                break;
+              }
+            }
+            
+            if (matches) break;
+          }
+        }
+        
+        if (matches) {
+          item.style.display = '';
+          item.style.visibility = 'visible';
+          visibleCount++;
+        } else {
+          item.style.display = 'none';
+          item.style.visibility = 'hidden';
+        }
+      }
+    });
+
+    console.log(`Filtered: ${visibleCount} trees visible out of ${treeItems.length} total`);
+
+    // Show message if no trees match
+    const treeContainer = document.querySelector('.tree-list-container');
+    if (!treeContainer) return;
+    
+    let noMatchMessage = treeContainer.querySelector('.no-match-message');
+    if (visibleCount === 0 && selectedAddresses.size > 0) {
+      if (!noMatchMessage) {
+        noMatchMessage = document.createElement('p');
+        noMatchMessage.className = 'no-match-message';
+        noMatchMessage.style.color = 'rgba(255, 255, 255, 0.7)';
+        noMatchMessage.style.margin = '10px 0';
+        noMatchMessage.style.textAlign = 'center';
+        noMatchMessage.textContent = 'No trees found for the selected address(es).';
+        treeContainer.appendChild(noMatchMessage);
+      }
+    } else if (noMatchMessage) {
+      noMatchMessage.remove();
+    }
+  }
+
+  // Function to clear all address filters
+  function clearAddressFilter() {
+    selectedAddresses.clear();
+    filterTreesByAddresses();
+    
+    // Remove active state from all address labels
+    document.querySelectorAll('.address-label').forEach(label => {
+      label.style.backgroundColor = '';
+      label.style.color = '#ffffff';
+      label.style.fontWeight = '';
+    });
+  }
+
+  // Initialize address filtering after DOM is ready
+  function initializeAddressFiltering() {
+    // Add click handlers to address items (both label and container)
+    const addressItems = document.querySelectorAll('.address-item');
+    console.log(`Found ${addressItems.length} address items`);
+    
+    addressItems.forEach((item) => {
+      const label = item.querySelector('.address-label');
+      const checkbox = item.querySelector('.address-checkbox');
+      const address = item.getAttribute('data-address');
+      const normalizedAddress = normalizeAddress(address);
+      
+      if (!label || !checkbox) return;
+      
+      // Handle checkbox change event (works for both click and keyboard)
+      checkbox.addEventListener('change', function(e) {
+        e.stopPropagation();
+        updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
+      });
+      
+      // Handle checkbox click
+      checkbox.addEventListener('click', function(e) {
+        e.stopPropagation();
+        // The change event will handle the filtering, but we need to sync the visual state
+        setTimeout(() => {
+          updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
+        }, 10);
+      });
+      
+      // Handle label click
+      label.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Toggle checkbox state
+        checkbox.checked = !checkbox.checked;
+        updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
+      });
+      
+      // Also handle clicking on the address item container (but not the checkbox)
+      item.addEventListener('click', function(e) {
+        // Only handle if not clicking directly on checkbox
+        if (e.target === checkbox) return;
+        e.preventDefault();
+        e.stopPropagation();
+        // Toggle checkbox state
+        checkbox.checked = !checkbox.checked;
+        updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
+      });
+    });
+  }
+  
+  // Function to update filter based on checkbox state
+  function updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox) {
+    console.log(`Updating filter for address: "${normalizedAddress}", checked: ${checkbox.checked}`);
+    
+    if (checkbox.checked) {
+      selectedAddresses.add(normalizedAddress);
+      console.log('Added address to selection');
+      // Add active state
+      label.style.backgroundColor = 'rgba(78, 115, 223, 0.5)';
+      label.style.color = '#ffffff';
+      label.style.fontWeight = 'bold';
+    } else {
+      selectedAddresses.delete(normalizedAddress);
+      console.log('Removed address from selection');
+      // Remove active state
+      label.style.backgroundColor = '';
+      label.style.color = '#ffffff';
+      label.style.fontWeight = '';
+    }
+    
+    console.log('Current selected addresses:', Array.from(selectedAddresses));
+    
+    // Apply filter
+    filterTreesByAddresses();
+    
+    // If no addresses selected, clear all active states
+    if (selectedAddresses.size === 0) {
+      document.querySelectorAll('.address-label').forEach(l => {
+        l.style.backgroundColor = '';
+        l.style.color = '#ffffff';
+        l.style.fontWeight = '';
+      });
+    }
+  }
+  
+  // Function to toggle address filter (kept for backward compatibility)
+  function toggleAddressFilter(normalizedAddress, label, item) {
+    const checkbox = item.querySelector('.address-checkbox');
+    if (checkbox) {
+      checkbox.checked = !checkbox.checked;
+      updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
+    }
+  }
+  
+  // Initialize after a short delay to ensure DOM is ready
+  setTimeout(initializeAddressFiltering, 200);
+
   
   // Function to update species dropdown (removed - no longer needed)
   async function updateSpeciesDropdown() {

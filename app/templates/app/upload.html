@@ -11,14 +11,13 @@
    <h1 class="page-title">Upload Data</h1>
 
    <div class="tab-navigation">
-      <button class="tab-button active" data-tab="manual-entry">Manual Tree Entry</button>
-      <button class="tab-button" data-tab="seed-entry">Seed Planting</button>
-      <button class="tab-button" data-tab="csv-upload">CSV Upload</button>
+      <button class="tab-button active" data-tab="csv-upload">CSV Upload</button>
+      <button class="tab-button" data-tab="manual-entry">Manual Tree Entry</button>
    </div>
 
    <div class="upload-content">
       <!-- CSV Upload Tab -->
-      <div class="upload-section csv-upload-section tab-content" id="csv-upload" style="display: none;">
+      <div class="upload-section csv-upload-section tab-content active" id="csv-upload">
          <div class="upload-card">
             <div class="upload-card-header">
                <h2>Upload CSV</h2>
@@ -103,7 +102,7 @@
       </div>
 
       <!-- Manual Entry Tab -->
-      <div class="upload-section manual-entry-section tab-content active" id="manual-entry">
+      <div class="upload-section manual-entry-section tab-content" id="manual-entry" style="display: none;">
          <div class="upload-card">
             <div class="upload-card-header">
                <h2>Manual Tree Entry</h2>
@@ -175,8 +174,8 @@
 
                      <div class="form-group full-width">
                         <label for="address">Address</label>
-                        <input type="text" name="address" id="address" class="form-control" readonly>
-                        <small class="form-text text-muted">Address will be automatically generated from coordinates</small>
+                        <input type="text" name="address" id="address" class="form-control">
+                        <small class="form-text text-muted">Type: Barangay, City or Municipality, Province</small>
                      </div>
 
                   </div>
@@ -230,107 +229,6 @@
          </div>
       </div>
 
-      <!-- Seed Entry Tab -->
-      <div class="upload-section tab-content" id="seed-entry" style="display: none;">
-         <div class="upload-card">
-            <div class="upload-card-header">
-               <h2>Plant New Tree Seeds</h2>
-               <p>Record new seed plantings and track their germination progress.</p>
-            </div>
-
-            <div class="manual-entry-form">
-               <form method="post" class="data-form" id="seed-entry-form" enctype="multipart/form-data">
-                  {% csrf_token %}
-                  <div class="form-grid">
-                     <div class="form-group">
-                        <label for="seed_common_name">Common Name</label>
-                        <input type="text" id="seed_common_name" name="seed_common_name" class="form-control" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_scientific_name">Scientific Name</label>
-                        <input type="text" id="seed_scientific_name" name="seed_scientific_name" class="form-control" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_family">Family</label>
-                        <input type="text" id="seed_family" name="seed_family" class="form-control" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_genus">Genus</label>
-                        <input type="text" id="seed_genus" name="seed_genus" class="form-control" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_quantity">Quantity</label>
-                        <input type="number" id="seed_quantity" name="seed_quantity" class="form-control" min="1" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_hectares">Hectares *</label>
-                        <input type="number" id="seed_hectares" name="seed_hectares" class="form-control" step="0.01" min="0" required>
-                        <small class="form-text text-muted">Area covered in hectares</small>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_planting_date">Planting Date</label>
-                        <input type="date" id="seed_planting_date" name="seed_planting_date" class="form-control" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_germination_status">Germination Status</label>
-                        <select id="seed_germination_status" name="seed_germination_status" class="form-control" required>
-                           <option value="not_germinated">Not Germinated</option>
-                           <option value="germinating">Germinating</option>
-                           <option value="partially_germinated">Partially Germinated</option>
-                           <option value="fully_germinated">Fully Germinated</option>
-                           <option value="failed">Failed to Germinate</option>
-                        </select>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_germination_date">Germination Date</label>
-                        <input type="date" id="seed_germination_date" name="seed_germination_date" class="form-control">
-                        <small class="form-text text-muted">If applicable</small>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_survival_rate">Survival Rate (%)</label>
-                        <input type="number" id="seed_survival_rate" name="seed_survival_rate" class="form-control" min="0" max="100" step="0.1">
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_expected_maturity_date">Expected Maturity Date</label>
-                        <input type="date" id="seed_expected_maturity_date" name="seed_expected_maturity_date" class="form-control">
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_latitude">Latitude</label>
-                        <input type="number" id="seed_latitude" name="seed_latitude" class="form-control" step="0.000001" required>
-                     </div>
-
-                     <div class="form-group">
-                        <label for="seed_longitude">Longitude</label>
-                        <input type="number" id="seed_longitude" name="seed_longitude" class="form-control" step="0.000001" required>
-                     </div>
-
-                  </div>
-
-                  <div class="form-group full-width">
-                     <label for="seed_notes">Notes</label>
-                     <textarea id="seed_notes" name="seed_notes" class="form-control" rows="3"></textarea>
-                  </div>
-
-                  <div class="form-actions">
-                     <button type="submit" name="submit_seed" class="btn btn-primary">
-                        <i class="fas fa-seedling"></i> Submit Seed Planting
-                     </button>
-                  </div>
-               </form>
-            </div>
-         </div>
-      </div>
    </div>
 </div>
 {% endblock %}

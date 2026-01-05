@@ -1349,33 +1349,6 @@ document.addEventListener("DOMContentLoaded", () => {
       `
     }
 
-    // Add germination status legend
-    legendContent += `
-    <div class="germination-legend">
-      <h4>🌱 Seed Status</h4>
-      <div class="germination-item">
-        <span class="germination-color" style="background-color: #8B4513"></span>
-        <span class="germination-label">Not Germinated</span>
-      </div>
-      <div class="germination-item">
-        <span class="germination-color" style="background-color: #9ACD32"></span>
-        <span class="germination-label">Germinating</span>
-      </div>
-      <div class="germination-item">
-        <span class="germination-color" style="background-color: #32CD32"></span>
-        <span class="germination-label">Partially Germinated</span>
-      </div>
-      <div class="germination-item">
-        <span class="germination-color" style="background-color: #228B22"></span>
-        <span class="germination-label">Fully Germinated</span>
-      </div>
-      <div class="germination-item">
-        <span class="germination-color" style="background-color: #A52A2A"></span>
-        <span class="germination-label">Failed</span>
-      </div>
-    </div>
-  `
-
     legendDiv.innerHTML = legendContent
   }
 

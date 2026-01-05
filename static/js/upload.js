@@ -1,10 +1,10 @@
 document.addEventListener("DOMContentLoaded", () => {
   // Check if there's a hash in URL to open specific tab (for error redirects)
   const hash = window.location.hash
-  let defaultTab = "manual-entry"
+  let defaultTab = "csv-upload"
   if (hash) {
     const tabId = hash.substring(1) // Remove the #
-    if (tabId === "csv-upload" || tabId === "seed-entry" || tabId === "manual-entry") {
+    if (tabId === "csv-upload" || tabId === "manual-entry") {
       defaultTab = tabId
     }
   }
@@ -52,8 +52,11 @@ document.addEventListener("DOMContentLoaded", () => {
   })
   
   // Switch to default tab on page load
-  if (defaultTab !== "manual-entry") {
+  if (defaultTab !== "csv-upload") {
     switchTab(defaultTab)
+  } else {
+    // Ensure CSV upload tab is active by default
+    switchTab("csv-upload")
   }
 
   // CSV file upload handling
@@ -493,86 +496,4 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Tree auto-population: Not all form fields found, skipping setup")
   }
 
-  // Auto-geocode address from latitude/longitude
-  const latitudeInput = document.getElementById("latitude")
-  const longitudeInput = document.getElementById("longitude")
-  const addressInput = document.getElementById("address")
-
-  if (latitudeInput && longitudeInput && addressInput) {
-    let geocodeTimeout = null
-    let lastGeocodeTime = 0
-    const GEOCODE_THROTTLE_MS = 1000 // 1 second throttle
-
-    function geocodeCoordinates() {
-      const lat = latitudeInput.value.trim()
-      const lon = longitudeInput.value.trim()
-
-      // Clear address if lat or lon is empty
-      if (!lat || !lon) {
-        addressInput.value = ""
-        return
-      }
-
-      // Validate coordinates are numbers
-      const latNum = parseFloat(lat)
-      const lonNum = parseFloat(lon)
-      
-      if (isNaN(latNum) || isNaN(lonNum)) {
-        addressInput.value = ""
-        return
-      }
-
-      // Throttle: ensure at least 1 second has passed since last request
-      const now = Date.now()
-      const timeSinceLastRequest = now - lastGeocodeTime
-      
-      if (timeSinceLastRequest < GEOCODE_THROTTLE_MS) {
-        // Clear existing timeout and set new one
-        if (geocodeTimeout) {
-          clearTimeout(geocodeTimeout)
-        }
-        const delay = GEOCODE_THROTTLE_MS - timeSinceLastRequest
-        geocodeTimeout = setTimeout(() => {
-          performGeocode(latNum, lonNum)
-        }, delay)
-        return
-      }
-
-      // Perform geocode immediately
-      performGeocode(latNum, lonNum)
-    }
-
-    function performGeocode(lat, lon) {
-      lastGeocodeTime = Date.now()
-      
-      // Show loading state
-      addressInput.value = "Loading address..."
-      addressInput.disabled = true
-
-      // Call geocoding API
-      fetch(`/api/geocode/?lat=${lat}&lon=${lon}`)
-        .then(response => response.json())
-        .then(data => {
-          if (data.success && data.address) {
-            addressInput.value = data.address
-          } else {
-            addressInput.value = ""
-          }
-          addressInput.disabled = false
-        })
-        .catch(error => {
-          console.error("Geocoding error:", error)
-          addressInput.value = ""
-          addressInput.disabled = false
-        })
-    }
-
-    // Listen for changes on latitude and longitude inputs
-    latitudeInput.addEventListener("input", geocodeCoordinates)
-    longitudeInput.addEventListener("input", geocodeCoordinates)
-    
-    // Also trigger on blur (when user leaves the field)
-    latitudeInput.addEventListener("blur", geocodeCoordinates)
-    longitudeInput.addEventListener("blur", geocodeCoordinates)
-  }
 })

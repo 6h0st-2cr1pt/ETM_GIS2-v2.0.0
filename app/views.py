@@ -1352,16 +1352,40 @@ def reports(request):
         address__isnull=False
     ).exclude(address='').values_list('address', flat=True).distinct().order_by('address')
     
-    # Create tree list with common name and scientific name
-    # Show all trees (not just unique species)
+    # Create tree list with common name, scientific name, and addresses
+    # Show only unique species (prevent duplicates)
+    # Collect all addresses where each species exists
     tree_list = []
+    species_data = {}  # Track species data: {species_key: {id, common_name, scientific_name, addresses: set}}
+    
     for tree in trees:
         if tree.species:
-            tree_list.append({
-                'id': str(tree.id),
-                'common_name': tree.species.common_name,
-                'scientific_name': tree.species.scientific_name,
-            })
+            species_key = (tree.species.common_name, tree.species.scientific_name)
+            address = tree.location.address if tree.location and tree.location.address else ''
+            
+            if species_key not in species_data:
+                # First time seeing this species
+                species_data[species_key] = {
+                    'id': str(tree.species.id),
+                    'common_name': tree.species.common_name,
+                    'scientific_name': tree.species.scientific_name,
+                    'addresses': set()
+                }
+            
+            # Add address to the set (will automatically handle duplicates)
+            if address:
+                species_data[species_key]['addresses'].add(address)
+    
+    # Convert to list format with comma-separated addresses
+    for species_key, data in species_data.items():
+        # Join all addresses with a special separator for JavaScript filtering
+        addresses_str = '|'.join(sorted(data['addresses']))  # Use | as separator
+        tree_list.append({
+            'id': data['id'],
+            'common_name': data['common_name'],
+            'scientific_name': data['scientific_name'],
+            'address': addresses_str,  # Store all addresses separated by |
+        })
 
     return render(request, 'app/reports.html', {
         'active_page': 'reports',
@@ -1591,8 +1615,9 @@ def generate_report(request):
         if not selected_addresses:
             return JsonResponse({'success': False, 'error': 'Please select at least one address.'}, status=400)
 
-        # Get the current date and time
-        now = timezone.now()
+        # Get the current date and time in local timezone
+        from django.utils.timezone import localtime
+        now = localtime(timezone.now())
         date_str = now.strftime('%B %d, %Y')
         time_str = now.strftime('%I:%M %p')
 
@@ -1600,26 +1625,26 @@ def generate_report(request):
 
         # Get actual data statistics based on selected trees and addresses
         try:
-            # Convert selected tree IDs to UUIDs (EndemicTree uses UUIDField)
-            import uuid
-            tree_ids = []
-            for tree_id in selected_trees:
+            # Convert selected species IDs to get all trees for those species
+            # TreeSpecies uses integer IDs (BigAutoField), not UUIDs
+            species_ids = []
+            for species_id in selected_trees:
                 try:
-                    # Try to convert string to UUID
-                    tree_ids.append(uuid.UUID(tree_id))
+                    # Try to convert string to integer (species IDs are integers)
+                    species_ids.append(int(species_id))
                 except (ValueError, TypeError):
                     # If conversion fails, skip this ID and log error
                     import traceback
                     traceback.print_exc()
                     continue
             
-            if not tree_ids:
-                return JsonResponse({'success': False, 'error': 'Invalid tree selection. No valid tree IDs found.'}, status=400)
+            if not species_ids:
+                return JsonResponse({'success': False, 'error': 'Invalid tree selection. No valid species IDs found.'}, status=400)
             
-            # Filter trees by selected tree IDs
+            # Filter trees by selected species IDs (get all trees for selected species)
             trees_query = EndemicTree.objects.filter(
                 user=request.user,
-                id__in=tree_ids
+                species__id__in=species_ids
             ).select_related('species', 'location')
             
             # Filter by selected addresses
