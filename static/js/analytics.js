@@ -145,11 +145,27 @@ document.addEventListener("DOMContentLoaded", () => {
                 return 'Address: ' + context[0].label
               },
               label: function(context) {
+                // Only show the tree species if it exists at this address (population > 0)
+                const value = context.parsed.x
+                
+                // If population is 0 or null, don't show this species
+                if (!value || value === 0) {
+                  return null
+                }
+                
                 // Show the tree species name and population
                 const species = context.dataset.label || ''
-                const value = context.parsed.x
                 return `${species}: ${value.toLocaleString()} trees`
+              },
+              beforeBody: function(context) {
+                // Filter out labels that returned null
+                // This ensures we only show species that exist at this address
+                return null
               }
+            },
+            filter: function(tooltipItem) {
+              // Only show tooltip items where the value is greater than 0
+              return tooltipItem.parsed.x > 0
             }
           }
         },
