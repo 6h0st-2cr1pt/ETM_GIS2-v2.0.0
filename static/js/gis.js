@@ -492,8 +492,8 @@ document.addEventListener("DOMContentLoaded", () => {
   ]
   let colorIndex = 0
 
-  // Load all trees and seeds by default
-  Promise.all([loadTrees(), loadSeeds()])
+  // Load all trees and seeds by default (aggregated by address for "All Trees")
+  Promise.all([loadTreesByAddress(), loadSeeds()])
     .then(() => {
       console.log("Initial data load complete")
       // Ensure seed layer is visible
@@ -594,7 +594,7 @@ document.addEventListener("DOMContentLoaded", () => {
       treeLayer.clearLayers()
 
       if (filterValue === "all") {
-        loadTrees()
+        loadTreesByAddress()
         // Hide the filtered data container
         filteredDataContainer.style.display = "none"
       } else {
@@ -781,6 +781,72 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .catch((error) => {
         console.error("Error loading trees:", error)
+        console.error("Error details:", {
+          message: error.message,
+          stack: error.stack,
+          name: error.name
+        })
+        alert(`Error loading tree data: ${error.message}\n\nPlease check the console for more details.`)
+      })
+  }
+
+  // Function to load trees aggregated by address (for "All Trees" filter)
+  function loadTreesByAddress() {
+    // Clear existing tree markers
+    treeLayer.clearLayers()
+
+    console.log("Loading all trees aggregated by address...")
+
+    // Use the correct API endpoint
+    fetch("/api/tree-data/", {
+      credentials: 'same-origin' // Include session cookies for authentication
+    })
+      .then(async (response) => {
+        // Check if redirected (likely to login page)
+        if (response.redirected) {
+          const redirectUrl = response.url || 'login page';
+          throw new Error(`Redirected to ${redirectUrl}. You may need to log in again.`)
+        }
+        
+        // Check response status
+        if (!response.ok) {
+          let errorMessage = `HTTP error! Status: ${response.status}`
+          try {
+            const contentType = response.headers.get('content-type') || ''
+            if (contentType.includes('application/json')) {
+              const errorData = await response.json()
+              errorMessage = errorData.error || errorData.message || errorMessage
+            } else {
+              const text = await response.text()
+              errorMessage = text || errorMessage
+            }
+          } catch (e) {
+            console.error("Error parsing error response:", e)
+          }
+          throw new Error(errorMessage)
+        }
+        
+        return response.json()
+      })
+      .then((data) => {
+        console.log("Tree data received for address aggregation:", data)
+        
+        // Check if response contains an error
+        if (data.error) {
+          console.error("API returned error:", data.error)
+          throw new Error(data.error)
+        }
+        
+        // Aggregate trees by address
+        addTreesByAddressToMap(data)
+
+        // Also update heatmap if active
+        if (map.hasLayer(additionalLayers.heatmap)) {
+          updateHeatmap(data)
+        }
+      })
+      .catch((error) => {
+        console.error("Error loading trees by address:", error)
         console.error("Error details:", {
           message: error.message,
           stack: error.stack,
@@ -1268,6 +1334,116 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLegend()
   }
 
+  // Function to add trees aggregated by address to the map
+  function addTreesByAddressToMap(geojson) {
+    if (!geojson.features || geojson.features.length === 0) {
+      console.log("No tree data found in the response")
+      return
+    }
+
+    // Aggregate trees by address
+    const addressMap = new Map()
+    
+    geojson.features.forEach((feature) => {
+      const address = feature.properties.address || ''
+      const lat = feature.geometry.coordinates[1]
+      const lng = feature.geometry.coordinates[0]
+      
+      // Use address as key, or coordinates if no address
+      const key = address || `${lat.toFixed(6)},${lng.toFixed(6)}`
+      
+      if (!addressMap.has(key)) {
+        addressMap.set(key, {
+          address: address,
+          lat: lat,
+          lng: lng,
+          trees: []
+        })
+      }
+      
+      // Add tree to this address
+      const addressData = addressMap.get(key)
+      const treeKey = `${feature.properties.common_name}|${feature.properties.scientific_name}`
+      const existingTree = addressData.trees.find(t => t.key === treeKey)
+      
+      if (existingTree) {
+        // Aggregate population for same species at same address
+        existingTree.population += feature.properties.population || 0
+      } else {
+        addressData.trees.push({
+          key: treeKey,
+          common_name: feature.properties.common_name || 'Unknown',
+          scientific_name: feature.properties.scientific_name || 'Unknown',
+          population: feature.properties.population || 0
+        })
+      }
+    })
+
+    // Create markers for each address
+    const markers = []
+    addressMap.forEach((addressData, key) => {
+      const latlng = [addressData.lat, addressData.lng]
+      
+      // Create marker
+      const marker = L.circleMarker(latlng, {
+        radius: 10,
+        fillColor: "#4CAF50",
+        color: "#fff",
+        weight: 2,
+        opacity: 1,
+        fillOpacity: 0.8,
+      })
+      
+      // Create popup content with table
+      let tableRows = ''
+      addressData.trees.forEach(tree => {
+        tableRows += `
+          <tr>
+            <td>${tree.common_name} <em>(${tree.scientific_name})</em></td>
+            <td style="text-align: center;">${tree.population}</td>
+          </tr>
+        `
+      })
+      
+      const popupContent = `
+        <div class="tree-popup">
+          <h3>${addressData.address || 'Location'}</h3>
+          <table class="popup-table" style="width: 100%; margin-top: 10px;">
+            <thead>
+              <tr>
+                <th style="text-align: left; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.3);">Tree</th>
+                <th style="text-align: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.3);">Population</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows}
+            </tbody>
+          </table>
+        </div>
+      `
+      
+      marker.bindPopup(popupContent)
+      markers.push(marker)
+    })
+
+    // Add all markers to the tree layer
+    markers.forEach(marker => {
+      marker.addTo(treeLayer)
+    })
+
+    // Fit bounds to show all markers
+    if (markers.length > 0) {
+      try {
+        const group = new L.featureGroup(markers)
+        map.fitBounds(group.getBounds().pad(0.1))
+      } catch (e) {
+        console.error('Error fitting bounds:', e)
+      }
+    }
+    
+    updateLegend()
+  }
+
   // Function to update heatmap
   function updateHeatmap(geojson) {
     console.log("🔥 Updating heatmap with data:", geojson)
@@ -1340,17 +1516,48 @@ document.addEventListener("DOMContentLoaded", () => {
 
     let legendContent = "<h4>Tree Species</h4>"
 
-    for (const [species, color] of Object.entries(colorMap)) {
+    // Get all species from template
+    const allSpecies = window.allTreeSpecies || []
+    const speciesSet = new Set()
+    
+    // First, add all species from template and assign colors
+    if (allSpecies.length > 0) {
+      allSpecies.forEach((species, index) => {
+        if (species.common_name) {
+          speciesSet.add(species.common_name)
+          // Assign color if not already set (from trees loaded on map)
+          if (!colorMap[species.common_name]) {
+            colorMap[species.common_name] = colorPalette[index % colorPalette.length]
+          }
+        }
+      })
+    }
+    
+    // Also include any species that are in colorMap but not in template (for backward compatibility)
+    Object.keys(colorMap).forEach(species => {
+      speciesSet.add(species)
+    })
+
+    // Sort species alphabetically for consistent display
+    const sortedSpecies = Array.from(speciesSet).sort()
+    
+    sortedSpecies.forEach(species => {
+      const color = colorMap[species] || colorPalette[0] // Default color if not set
       legendContent += `
         <div class="legend-item">
           <span class="legend-color" style="background-color: ${color}"></span>
           <span class="legend-label">${species}</span>
         </div>
       `
-    }
+    })
 
     legendDiv.innerHTML = legendContent
   }
+  
+  // Initialize legend with all species on page load (after a delay to ensure template data is loaded)
+  setTimeout(() => {
+    updateLegend()
+  }, 500)
 
   // Entity type control change event
   document.getElementById("showTrees").addEventListener("change", function () {

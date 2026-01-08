@@ -58,27 +58,15 @@ html * option {
                         {% csrf_token %}
                         
                         <div class="form-group mb-3">
-                            <label for="addressList">Address List</label>
-                            <div class="address-list-container" style="max-height: 180px; overflow-y: auto; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; padding: 10px; background-color: rgba(0, 0, 0, 0.3);">
+                            <label for="addressDropdown">Address List</label>
+                            <select class="form-select" id="addressDropdown" name="selected_address" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
+                                <option value="">Select an address...</option>
                                 {% for address in address_list %}
-                                <div class="form-check mb-2 address-item" data-address="{{ address }}">
-                                    <input class="form-check-input address-checkbox" type="checkbox" name="selected_addresses" value="{{ address }}" id="address_{{ forloop.counter0 }}" style="background-color: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.4);">
-                                    <label class="form-check-label address-label" for="address_{{ forloop.counter0 }}" style="color: #ffffff; cursor: pointer;">
-                                        {{ address }}
-                                    </label>
-                                </div>
+                                <option value="{{ address }}">{{ address }}</option>
                                 {% empty %}
-                                <p style="color: rgba(255, 255, 255, 0.7); margin: 0;">No addresses found in database.</p>
+                                <option value="">No addresses found in database.</option>
                                 {% endfor %}
-                            </div>
-                            <div class="mt-2">
-                                <button type="button" id="selectAllAddressesBtn" class="btn btn-sm btn-outline-secondary" style="margin-right: 5px;">
-                                    <i class="fas fa-check-square"></i> Select All
-                                </button>
-                                <button type="button" id="deselectAllAddressesBtn" class="btn btn-sm btn-outline-secondary">
-                                    <i class="fas fa-square"></i> Deselect All
-                                </button>
-                            </div>
+                            </select>
                         </div>
 
                         <div class="form-group mb-3">

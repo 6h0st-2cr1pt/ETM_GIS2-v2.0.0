@@ -135,7 +135,6 @@ class EndemicTree(models.Model):
         indexes = [
             models.Index(fields=['year']),
         ]
-        unique_together = ['species', 'location', 'year']
 
 
 class TreeSeed(models.Model):

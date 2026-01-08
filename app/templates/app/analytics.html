@@ -5,70 +5,53 @@
 {% endblock %}
 
 {% block content %}
-<div class="analytics-container">
+<div class="analytics-container" data-seed-sources='{{ seed_sources }}'>
     <h1 class="page-title">Analytics</h1>
 
-    {% if error_message %}
-    <div class="alert alert-danger">
-        {{ error_message }}
-    </div>
-    {% else %}
     <div class="analytics-charts-container">
         <div class="analytics-chart-card">
-            <h3>Population Growth Over Time</h3>
-            <canvas id="populationTimeChart" data-population='{{ population_data }}'></canvas>
+            <h3>Endemic Tree Population by Address (by Species)</h3>
+            <canvas id="populationByAddressChart" data-address-species='{{ address_species_data }}'></canvas>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
-
+        
         <div class="analytics-chart-card">
-            <h3>Health Status Distribution</h3>
-            <canvas id="healthDistributionChart" data-health='{{ health_status_data }}'></canvas>
+            <h3>Endemic Tree Species Distribution</h3>
+            <canvas id="speciesDistributionPieChart" data-address-species='{{ address_species_data }}'></canvas>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
-
-        <div class="analytics-chart-card">
-            <h3>Family Distribution</h3>
-            <canvas id="familyDistributionChart" data-family='{{ family_data }}'></canvas>
-            <div class="no-data-message" style="display: none;">No data available</div>
-        </div>
-
-        <div class="analytics-chart-card">
-            <h3>Species Distribution by Genus</h3>
-            <canvas id="genusDistributionChart" data-genus='{{ genus_data }}'></canvas>
+        
+        <div class="analytics-chart-card full-width">
+            <h3>Total Tree Population by Address</h3>
+            <canvas id="totalPopulationByAddressChart" data-address-species='{{ address_species_data }}'></canvas>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
     </div>
 
-    <div class="analytics-metrics-container">
-        <div class="metrics-card">
-            <h3>Tree Distribution Map</h3>
-            <div id="distributionMap" class="mini-map" data-locations='{{ location_data }}'></div>
-        </div>
-
-        <div class="metrics-card">
-            <h3>Annual Growth Rate</h3>
-            <canvas id="growthRateChart" data-growth='{{ growth_rate_by_year }}'></canvas>
-            <div class="no-data-message" style="display: none;">No data available</div>
-        </div>
-    </div>
-
-        <div class="analytics-charts-container">
-            <div class="analytics-chart-card">
-            <h3>Top Species by Population</h3>
-            <canvas id="speciesPopulationChart" data-species='{{ species_data }}'></canvas>
-            <div class="no-data-message" style="display: none;">No data available</div>
-            </div>
-
-            <div class="analytics-chart-card">
-            <h3>Health Status by Year</h3>
-            <canvas id="healthByYearChart" data-health-year='{{ health_by_year }}'></canvas>
-            <div class="no-data-message" style="display: none;">No data available</div>
+    <!-- Seed Sources Panel -->
+    <div class="critical-areas-panel">
+        <h2>Good Seed Sources</h2>
+        <p class="panel-description">Addresses and endemic trees identified as excellent seed sources (outliers with Z-Score ≥ 2)</p>
+        <div id="seedSourcesTable" class="critical-areas-table">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Address</th>
+                        <th>Endemic Tree</th>
+                        <th>Population</th>
+                    </tr>
+                </thead>
+                <tbody id="seedSourcesBody">
+                    <tr>
+                        <td colspan="3" class="text-center">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
         </div>
     </div>
-    {% endif %}
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="/static/js/analytics.js?v=3"></script>
+<script src="/static/js/analytics.js"></script>
 {% endblock %}

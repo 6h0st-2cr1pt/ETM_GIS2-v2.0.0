@@ -264,6 +264,17 @@
 <script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <script src="{% static 'js/gis.js' %}?v=8"></script>
 <script>
+  // Pass all tree species to JavaScript
+  window.allTreeSpecies = [
+    {% for species in tree_species %}
+    {
+      id: {{ species.id }},
+      common_name: "{{ species.common_name|escapejs }}",
+      scientific_name: "{{ species.scientific_name|escapejs }}"
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+  ];
+  
   // Ensure map is properly initialized
   document.addEventListener("DOMContentLoaded", function() {
     console.log("GIS page loaded, map should be initializing...");

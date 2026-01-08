@@ -156,6 +156,33 @@ def dashboard(request):
         population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year')
             .annotate(total=Sum('population'))
             .order_by('year'))
+        
+        # Get unique years for filter
+        years = sorted(list(EndemicTree.objects.filter(user=request.user).values_list('year', flat=True).distinct()))
+        
+        # Get unique areas for filter (from addresses)
+        def parse_administrative_area(address):
+            if not address:
+                return None
+            parts = [p.strip() for p in address.split(',')]
+            if len(parts) >= 2:
+                return f"{parts[-2]}, {parts[-1]}"
+            elif len(parts) == 1:
+                return parts[0]
+            return None
+        
+        locations = Location.objects.filter(user=request.user).exclude(address__isnull=True).exclude(address='')
+        areas = set()
+        for loc in locations:
+            area = parse_administrative_area(loc.address)
+            if area:
+                areas.add(area)
+        areas = sorted(list(areas))
+        
+        # Get species list for filter
+        species_list = list(TreeSpecies.objects.filter(user=request.user)
+            .order_by('common_name')
+            .values('id', 'common_name', 'scientific_name'))
 
         # Prepare context with empty data handling
         context = {
@@ -176,7 +203,10 @@ def dashboard(request):
             'health_data': json.dumps([{
                 'status': item['health_status'],
                 'count': item['count'] or 0
-            } for item in (health_data or [])])
+            } for item in (health_data or [])]),
+            'years': years,
+            'areas': areas,
+            'species_list': species_list
         }
 
         return render(request, 'app/dashboard.html', context)
@@ -205,10 +235,9 @@ def gis(request):
     # Get all available map layers
     layers = MapLayer.objects.filter(user=request.user, is_active=True)
 
-    # Get only tree species that have associated trees
+    # Get all tree species for the user (not just those with trees)
     tree_species = TreeSpecies.objects.filter(
-        user=request.user,
-        trees__isnull=False  # Only species that have trees
+        user=request.user
     ).distinct().order_by('common_name')  # Remove duplicates and order by common name
 
     # Get default pin style
@@ -229,83 +258,103 @@ def gis(request):
 @login_required(login_url='app:login')
 def analytics(request):
     """
-    Analytics and visualization view
+    Analytics and visualization view - Population by Address with Species Breakdown
     """
     try:
         # Check if there's any data in the database
         if not EndemicTree.objects.filter(user=request.user).exists():
             return render(request, 'app/analytics.html', {
                 'active_page': 'analytics',
-                'population_data': '[]',
-                'health_status_data': '[]',
-                'family_data': '[]',
-                'genus_data': '[]',
-                'species_data': '[]',
-                'growth_rate_by_year': '[]',
-                'location_data': '[]',
-                'health_by_year': '[]'
+                'address_species_data': '[]'
             })
 
-        # Population by year with proper aggregation
-        population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year')
-            .annotate(total=Sum('population'))
-            .order_by('year'))
+        # Get population by address and species
+        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').exclude(
+            location__address__isnull=True
+        ).exclude(location__address='')
 
-        # Health status distribution with population counts
-        health_status_data = list(EndemicTree.objects.filter(user=request.user).values('health_status')
-            .annotate(count=Sum('population'))
-            .order_by('health_status'))
+        # Group by address and species
+        address_species_map = {}
+        
+        for tree in trees:
+            address = tree.location.address if tree.location and tree.location.address else 'Unknown'
+            species_name = tree.species.common_name if tree.species else 'Unknown'
+            species_id = tree.species.id if tree.species else None
+            
+            if address not in address_species_map:
+                address_species_map[address] = {}
+            
+            if species_name not in address_species_map[address]:
+                address_species_map[address][species_name] = {
+                    'species_id': species_id,
+                    'species_name': species_name,
+                    'population': 0
+                }
+            
+            address_species_map[address][species_name]['population'] += tree.population
 
-        # Family distribution data
-        family_data = list(TreeFamily.objects.filter(user=request.user).annotate(
-            total_population=Sum('genera__species__trees__population'),
-            species_count=Count('genera__species', distinct=True)
-        ).values('name', 'total_population', 'species_count')
-        .order_by('-total_population')[:10])
+        # Convert to list format for chart
+        address_species_data = []
+        for address, species_dict in address_species_map.items():
+            address_species_data.append({
+                'address': address,
+                'species': list(species_dict.values())
+            })
 
-        # Species distribution by genus
-        genus_data = list(TreeGenus.objects.filter(user=request.user).annotate(
-            total_population=Sum('species__trees__population'),
-            species_count=Count('species', distinct=True)
-        ).values('name', 'family__name', 'total_population', 'species_count')
-        .order_by('-total_population')[:10])
+        # Sort addresses by total population (descending)
+        address_species_data.sort(
+            key=lambda x: sum(s['population'] for s in x['species']),
+            reverse=True
+        )
 
-        # Species data with population
-        species_data = list(TreeSpecies.objects.filter(user=request.user).annotate(
-            total_population=Sum('trees__population'),
-            locations_count=Count('trees__location', distinct=True)
-        ).values('common_name', 'scientific_name', 'total_population', 'locations_count')
-        .order_by('-total_population')[:10])
-
-        # Calculate growth rate
-        growth_rate_by_year = []
-        if len(population_by_year) > 1:
-            for i in range(1, len(population_by_year)):
-                current_year = population_by_year[i]
-                prev_year = population_by_year[i - 1]
-                
-                if prev_year['total'] and prev_year['total'] > 0:
-                    growth_rate = ((current_year['total'] - prev_year['total']) / prev_year['total']) * 100
-                else:
-                    growth_rate = 0
-                
-                growth_rate_by_year.append({
-                    'year': current_year['year'],
-                    'growth_rate': round(growth_rate, 2)
+        # Calculate Z-scores for seed source identification using SciPy
+        from scipy import stats
+        import numpy as np
+        
+        # Collect all population values with their address and species info
+        population_data = []
+        for item in address_species_data:
+            address = item['address']
+            for species in item['species']:
+                pop_value = float(species['population']) if species['population'] else 0
+                population_data.append({
+                    'address': address,
+                    'species': species['species_name'],
+                    'population': pop_value
                 })
-
-        # Location-based distribution
-        location_data = list(Location.objects.filter(user=request.user).annotate(
-            total_trees=Sum('trees__population'),
-            species_count=Count('trees__species', distinct=True)
-        ).values('name', 'latitude', 'longitude', 'total_trees', 'species_count')
-        .exclude(total_trees__isnull=True)
-        .order_by('-total_trees'))
-
-        # Health status by year
-        health_by_year = list(EndemicTree.objects.filter(user=request.user).values('year', 'health_status')
-            .annotate(population=Sum('population'))
-            .order_by('year', 'health_status'))
+        
+        if len(population_data) > 1:
+            # Extract population values as numpy array
+            populations = np.array([item['population'] for item in population_data], dtype=float)
+            
+            # Calculate Z-scores using SciPy
+            z_scores = stats.zscore(populations, nan_policy='omit')
+            
+            # Debug: Print some statistics
+            print(f"[Analytics] Total population data points: {len(population_data)}")
+            print(f"[Analytics] Population range: {populations.min():.2f} - {populations.max():.2f}")
+            print(f"[Analytics] Mean: {populations.mean():.2f}, Std: {populations.std():.2f}")
+            print(f"[Analytics] Z-score range: {z_scores.min():.2f} - {z_scores.max():.2f}")
+            
+            # Find outliers where Z >= 2 (good seed sources)
+            seed_sources = []
+            for i, data in enumerate(population_data):
+                z_score = float(z_scores[i]) if not np.isnan(z_scores[i]) else 0
+                if z_score >= 2:
+                    seed_sources.append({
+                        'address': data['address'],
+                        'species': data['species'],
+                        'population': data['population'],
+                        'z_score': z_score
+                    })
+                    print(f"[Analytics] Found seed source: {data['species']} at {data['address']} with Z={z_score:.2f}, Pop={data['population']}")
+            
+            # Sort seed sources by Z-score (descending)
+            seed_sources.sort(key=lambda x: x['z_score'], reverse=True)
+            print(f"[Analytics] Total seed sources found: {len(seed_sources)}")
+        else:
+            seed_sources = []
+            print(f"[Analytics] Not enough data points for Z-score calculation: {len(population_data)}")
 
         # Handle None values and convert Decimal to float for JSON serialization
         def clean_data(data):
@@ -317,43 +366,27 @@ def analytics(request):
                 return float(data)
             return data
 
-        # Clean and prepare all data for JSON serialization
-        population_by_year = clean_data(population_by_year or [])
-        health_status_data = clean_data(health_status_data or [])
-        family_data = clean_data(family_data or [])
-        genus_data = clean_data(genus_data or [])
-        species_data = clean_data(species_data or [])
-        growth_rate_by_year = clean_data(growth_rate_by_year or [])
-        location_data = clean_data(location_data or [])
-        health_by_year = clean_data(health_by_year or [])
+        # Clean and prepare data for JSON serialization
+        address_species_data = clean_data(address_species_data or [])
+        seed_sources = clean_data(seed_sources or [])
 
         context = {
             'active_page': 'analytics',
-            'population_data': json.dumps(population_by_year),
-            'health_status_data': json.dumps(health_status_data),
-            'family_data': json.dumps(family_data),
-            'genus_data': json.dumps(genus_data),
-            'species_data': json.dumps(species_data),
-            'growth_rate_by_year': json.dumps(growth_rate_by_year),
-            'location_data': json.dumps(location_data),
-            'health_by_year': json.dumps(health_by_year)
+            'address_species_data': json.dumps(address_species_data),
+            'seed_sources': json.dumps(seed_sources)
         }
 
         return render(request, 'app/analytics.html', context)
 
     except Exception as e:
-        print(f"Analytics Error: {str(e)}")  # Add logging for debugging
+        import traceback
+        traceback.print_exc()
+        print(f"Analytics Error: {str(e)}")
         # Return empty data in case of error
         context = {
             'active_page': 'analytics',
-            'population_data': '[]',
-            'health_status_data': '[]',
-            'family_data': '[]',
-            'genus_data': '[]',
-            'species_data': '[]',
-            'growth_rate_by_year': '[]',
-            'location_data': '[]',
-            'health_by_year': '[]'
+            'address_species_data': '[]',
+            'seed_sources': '[]'
         }
         return render(request, 'app/analytics.html', context)
 
@@ -377,14 +410,66 @@ def datasets(request):
     """
     Display and manage datasets
     """
-    trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
-    seeds = TreeSeed.objects.filter(user=request.user).select_related('species', 'location').all()
+    trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family').all()
     species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
+
+    # Expand aggregated trees into individual tree rows (each row = 1 tree)
+    expanded_trees = []
+    for tree in trees:
+        total_trees = tree.population
+        
+        # Get health counts
+        healthy_count = tree.healthy_count or 0
+        not_healthy_count = tree.bad_count or 0
+        
+        # Determine planted vs existing based on is_planted flag
+        # If is_planted=True, all trees are planted; otherwise all are existing
+        is_planted_flag = tree.is_planted if hasattr(tree, 'is_planted') else False
+        
+        # Create individual tree rows
+        for i in range(total_trees):
+            # Determine if this tree is healthy or not healthy
+            # First healthy_count trees are healthy, rest are not healthy
+            is_healthy_tree = i < healthy_count
+            
+            # Set planted/existing values
+            if is_planted_flag:
+                planted_value = 1
+                existing_value = 0
+            else:
+                planted_value = 0
+                existing_value = 1
+            
+            # Set healthy/not healthy values
+            if is_healthy_tree:
+                healthy_value = 1
+                not_healthy_value = 0
+            else:
+                healthy_value = 0
+                not_healthy_value = 1
+            
+            expanded_trees.append({
+                'id': tree.id,
+                'common_name': tree.species.common_name,
+                'scientific_name': tree.species.scientific_name,
+                'family': tree.species.genus.family.name if tree.species.genus and tree.species.genus.family else '',
+                'genus': tree.species.genus.name if tree.species.genus else '',
+                'hectars': tree.hectares,
+                'planted': planted_value,
+                'existing': existing_value,
+                'height': tree.height_meters,
+                'diameter_breast': tree.diameter_cm,
+                'healthy': healthy_value,
+                'not_healthy': not_healthy_value,
+                'latitude': tree.location.latitude,
+                'longitude': tree.location.longitude,
+                'address': tree.location.address or '',
+                'year': tree.year,
+            })
 
     context = {
         'active_page': 'datasets',
-        'trees': trees,
-        'seeds': seeds,
+        'trees': expanded_trees,
         'species_list': species_list,
     }
     return render(request, 'app/datasets.html', context)
@@ -605,32 +690,12 @@ def upload_data(request):
                     }
                     request.session.save()
                     
-                    # Process each row and aggregate trees with same species/location/year
-                    # Since each row = 1 tree, we need to aggregate duplicates
-                    from collections import defaultdict
-                    tree_aggregates = defaultdict(lambda: {
-                        'species': None,
-                        'location': None,
-                        'year': None,
-                        'count': 0,
-                        'healthy_count': 0,
-                        'good_count': 0,
-                        'bad_count': 0,
-                        'deceased_count': 0,
-                        'is_planted_count': 0,
-                        'is_existing_count': 0,
-                        'hectares': None,
-                        'height_meters': None,
-                        'diameter_cm': None,
-                        'notes': '',
-                        'health_status': 'good',
-                        'is_healthy': True,
-                    })
-                    
+                    # Process each row - each row represents one tree
+                    # Create individual tree records (no aggregation)
                     success_count = 0
                     error_count = 0
                     
-                    # First pass: aggregate all rows
+                    # Process each row and create individual tree records
                     for idx, row in df.iterrows():
                         # Check for cancellation flag
                         if request.session.get('csv_upload_cancelled'):
@@ -807,32 +872,30 @@ def upload_data(request):
                                     raise
                                 raise ValueError(f"Row {idx + 1}: invalid hectares value: {hectares_value}")
                             
-                            # Create a unique key for aggregation (species, location, year)
-                            agg_key = (species.id, location.id, int(row['year']))
+                            # Get year
+                            year = int(row['year'])
                             
-                            # Initialize aggregate if first time seeing this combination
-                            if tree_aggregates[agg_key]['species'] is None:
-                                tree_aggregates[agg_key]['species'] = species
-                                tree_aggregates[agg_key]['location'] = location
-                                tree_aggregates[agg_key]['year'] = int(row['year'])
-                                tree_aggregates[agg_key]['hectares'] = hectares
-                                tree_aggregates[agg_key]['height_meters'] = height_meters
-                                tree_aggregates[agg_key]['diameter_cm'] = diameter_cm
-                                tree_aggregates[agg_key]['health_status'] = health_status
-                                tree_aggregates[agg_key]['is_healthy'] = is_healthy
-                                tree_aggregates[agg_key]['notes'] = notes
-                            
-                            # Aggregate counts (each row = 1 tree)
-                            tree_aggregates[agg_key]['count'] += 1
-                            tree_aggregates[agg_key]['healthy_count'] += healthy_count
-                            tree_aggregates[agg_key]['good_count'] += good_count
-                            tree_aggregates[agg_key]['bad_count'] += bad_count
-                            tree_aggregates[agg_key]['deceased_count'] += deceased_count
-                            
-                            if is_planted:
-                                tree_aggregates[agg_key]['is_planted_count'] += 1
-                            else:
-                                tree_aggregates[agg_key]['is_existing_count'] += 1
+                            # Create individual tree record (each row = 1 tree)
+                            # Duplicates with same species, location, and year are allowed
+                            tree = EndemicTree(
+                                species=species,
+                                location=location,
+                                year=year,
+                                population=population,  # Always 1 for each row
+                                health_status=health_status,
+                                healthy_count=healthy_count,
+                                good_count=good_count,
+                                bad_count=bad_count,
+                                deceased_count=deceased_count,
+                                hectares=hectares,
+                                height_meters=height_meters,
+                                diameter_cm=diameter_cm,
+                                is_healthy=is_healthy,
+                                is_planted=is_planted,
+                                notes=notes,
+                                user=request.user
+                            )
+                            tree.save()
                             
                             success_count += 1
                             
@@ -854,50 +917,6 @@ def upload_data(request):
                             request.session['csv_upload_progress']['last_error'] = error_msg
                             if (success_count + error_count) % 10 == 0:
                                 request.session.save()
-                    
-                    # Second pass: Save aggregated trees to database
-                    aggregated_success_count = 0
-                    for agg_key, agg_data in tree_aggregates.items():
-                        try:
-                            # Check if tree already exists (update or create)
-                            tree, created = EndemicTree.objects.get_or_create(
-                                species=agg_data['species'],
-                                location=agg_data['location'],
-                                year=agg_data['year'],
-                                user=request.user,
-                                defaults={
-                                    'population': agg_data['count'],
-                                    'health_status': agg_data['health_status'],
-                                    'healthy_count': agg_data['healthy_count'],
-                                    'good_count': agg_data['good_count'],
-                                    'bad_count': agg_data['bad_count'],
-                                    'deceased_count': agg_data['deceased_count'],
-                                    'hectares': agg_data['hectares'],
-                                    'height_meters': agg_data['height_meters'],
-                                    'diameter_cm': agg_data['diameter_cm'],
-                                    'is_healthy': agg_data['is_healthy'],
-                                    'is_planted': agg_data['is_planted_count'] > agg_data['is_existing_count'],
-                                    'notes': agg_data['notes'],
-                                }
-                            )
-                            
-                            # If tree already exists, update it with aggregated counts
-                            if not created:
-                                tree.population = agg_data['count']
-                                tree.healthy_count = agg_data['healthy_count']
-                                tree.good_count = agg_data['good_count']
-                                tree.bad_count = agg_data['bad_count']
-                                tree.deceased_count = agg_data['deceased_count']
-                                tree.is_planted = agg_data['is_planted_count'] > agg_data['is_existing_count']
-                                tree.save()
-                            
-                            aggregated_success_count += 1
-                        except Exception as e:
-                            import traceback
-                            error_msg = f"Error saving aggregated tree: {str(e)}"
-                            print(error_msg)
-                            traceback.print_exc()
-                            error_count += 1
 
                     # Mark upload as completed
                     request.session['csv_upload_progress'] = {
@@ -909,8 +928,8 @@ def upload_data(request):
                     }
                     request.session.save()
                     
-                    if aggregated_success_count > 0:
-                        messages.success(request, f'Successfully imported {success_count} trees aggregated into {aggregated_success_count} records. {error_count} errors occurred.')
+                    if success_count > 0:
+                        messages.success(request, f'Successfully imported {success_count} tree records. {error_count} errors occurred.')
                         # Redirect to GIS page to see the newly added data
                         return redirect('app:gis')
                     else:
@@ -938,7 +957,8 @@ def upload_data(request):
                 scientific_name = request.POST.get('scientific_name')
                 family_name = request.POST.get('family')
                 genus_name = request.POST.get('genus')
-                population = int(request.POST.get('population'))
+                # Each manual entry represents one tree, so population is always 1
+                population = 1
 
                 # Get tree health and type from radio buttons
                 tree_health = request.POST.get('tree_health')
@@ -954,9 +974,10 @@ def upload_data(request):
                 is_planted = (tree_type == 'planted')
 
                 # Map tree health to health_status (for backward compatibility)
+                # Since each entry is one tree, health counts are 1 or 0
                 if tree_health == 'healthy':
                     health_status = 'excellent'
-                    healthy_count = population
+                    healthy_count = 1
                     good_count = 0
                     bad_count = 0
                     deceased_count = 0
@@ -964,7 +985,7 @@ def upload_data(request):
                     health_status = 'poor'
                     healthy_count = 0
                     good_count = 0
-                    bad_count = population
+                    bad_count = 1
                     deceased_count = 0
 
                 # Optional physical measurements
@@ -1395,6 +1416,342 @@ def reports(request):
 
 
 @login_required(login_url='app:login')
+def api_dashboard_data(request):
+    """API endpoint to get comprehensive dashboard data with filters."""
+    try:
+        # Get filter parameters
+        year_filter = request.GET.get('year', None)
+        area_filter = request.GET.get('area', None)
+        species_filter = request.GET.get('species_id', None)
+        
+        # Base query
+        trees_query = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family')
+        
+        # Apply filters
+        if year_filter and year_filter != 'all':
+            try:
+                trees_query = trees_query.filter(year=int(year_filter))
+            except (ValueError, TypeError):
+                pass
+        
+        if species_filter and species_filter != 'all':
+            try:
+                trees_query = trees_query.filter(species_id=int(species_filter))
+            except (ValueError, TypeError):
+                pass
+        
+        # Get all trees
+        trees = trees_query.exclude(location__address__isnull=True).exclude(location__address='')
+        
+        # Helper function to parse administrative area from address
+        def parse_administrative_area(address):
+            """Parse address to extract administrative area (City/Municipality, Province)"""
+            if not address:
+                return None
+            parts = [p.strip() for p in address.split(',')]
+            if len(parts) >= 2:
+                return f"{parts[-2]}, {parts[-1]}"
+            elif len(parts) == 1:
+                return parts[0]
+            return None
+        
+        # Aggregate by administrative area
+        area_data = {}
+        all_heights = []
+        all_diameters = []
+        all_health_statuses = []
+        species_distribution = {}
+        
+        total_trees = 0
+        total_hectares = 0
+        total_healthy = 0
+        total_not_healthy = 0
+        total_planted = 0
+        total_existing = 0
+        
+        for tree in trees:
+            if not tree.location or not tree.location.address:
+                continue
+                
+            area = parse_administrative_area(tree.location.address)
+            if area_filter and area_filter != 'all' and area != area_filter:
+                continue
+            
+            if not area:
+                continue
+            
+            # Update totals
+            total_trees += tree.population
+            total_hectares += tree.hectares or 0
+            total_healthy += tree.healthy_count or 0
+            total_not_healthy += tree.bad_count or 0
+            if tree.is_planted:
+                total_planted += tree.population
+            else:
+                total_existing += tree.population
+            
+            # Aggregate by area
+            if area not in area_data:
+                area_data[area] = {
+                    'area': area,
+                    'total_trees': 0,
+                    'total_hectares': 0,
+                    'healthy_count': 0,
+                    'not_healthy_count': 0,
+                    'heights': [],
+                    'diameters': [],
+                    'health_statuses': []
+                }
+            
+            area_data[area]['total_trees'] += tree.population
+            area_data[area]['total_hectares'] += tree.hectares or 0
+            area_data[area]['healthy_count'] += tree.healthy_count or 0
+            area_data[area]['not_healthy_count'] += tree.bad_count or 0
+            
+            # Collect height and diameter data
+            if tree.height_meters:
+                for _ in range(tree.population):
+                    area_data[area]['heights'].append(float(tree.height_meters))
+                    all_heights.append(float(tree.height_meters))
+            
+            if tree.diameter_cm:
+                for _ in range(tree.population):
+                    area_data[area]['diameters'].append(float(tree.diameter_cm))
+                    all_diameters.append(float(tree.diameter_cm))
+            
+            # Collect health status data for scatter plot
+            if tree.height_meters and tree.diameter_cm:
+                health_status = 'healthy' if tree.is_healthy else 'not_healthy'
+                for _ in range(tree.population):
+                    area_data[area]['health_statuses'].append({
+                        'height': float(tree.height_meters),
+                        'diameter': float(tree.diameter_cm),
+                        'health': health_status
+                    })
+                    all_health_statuses.append({
+                        'height': float(tree.height_meters),
+                        'diameter': float(tree.diameter_cm),
+                        'health': health_status
+                    })
+            
+            # Species distribution
+            species_key = tree.species.common_name
+            if species_key not in species_distribution:
+                species_distribution[species_key] = {
+                    'name': species_key,
+                    'scientific_name': tree.species.scientific_name,
+                    'count': 0
+                }
+            species_distribution[species_key]['count'] += tree.population
+        
+        # Calculate metrics
+        avg_trees_per_hectare = total_trees / total_hectares if total_hectares > 0 else 0
+        health_ratio = total_healthy / (total_healthy + total_not_healthy) if (total_healthy + total_not_healthy) > 0 else 0
+        
+        # Process area data
+        area_list = []
+        for area, data in area_data.items():
+            trees_per_hectare = data['total_trees'] / data['total_hectares'] if data['total_hectares'] > 0 else 0
+            total_health = data['healthy_count'] + data['not_healthy_count']
+            area_health_ratio = data['healthy_count'] / total_health if total_health > 0 else 0
+            
+            area_list.append({
+                'area': area,
+                'total_trees': data['total_trees'],
+                'total_hectares': round(data['total_hectares'], 2),
+                'trees_per_hectare': round(trees_per_hectare, 2),
+                'healthy_count': data['healthy_count'],
+                'not_healthy_count': data['not_healthy_count'],
+                'health_ratio': round(area_health_ratio, 3),
+                'heights': data['heights'],
+                'diameters': data['diameters'],
+                'health_statuses': data['health_statuses']
+            })
+        
+        # Sort areas by trees per hectare (for ranked chart)
+        area_list.sort(key=lambda x: x['trees_per_hectare'], reverse=True)
+        
+        # Identify critical areas (low density or poor health)
+        critical_areas = []
+        if area_list:
+            # Calculate thresholds
+            all_densities = [a['trees_per_hectare'] for a in area_list]
+            all_health_ratios = [a['health_ratio'] for a in area_list]
+            
+            density_threshold = sum(all_densities) / len(all_densities) * 0.5 if all_densities else 0  # Below 50% of average
+            health_threshold = 0.5  # Below 50% health ratio
+            
+            for area in area_list:
+                is_critical = False
+                issues = []
+                
+                if area['trees_per_hectare'] < density_threshold:
+                    is_critical = True
+                    issues.append('low_density')
+                
+                if area['health_ratio'] < health_threshold:
+                    is_critical = True
+                    issues.append('poor_health')
+                
+                if is_critical:
+                    critical_areas.append({
+                        'area': area['area'],
+                        'trees_per_hectare': area['trees_per_hectare'],
+                        'health_ratio': area['health_ratio'],
+                        'total_trees': area['total_trees'],
+                        'issues': issues
+                    })
+        
+        # Sort species distribution
+        species_list = sorted(species_distribution.values(), key=lambda x: x['count'], reverse=True)
+        
+        return JsonResponse({
+            'success': True,
+            'kpis': {
+                'total_trees': total_trees,
+                'avg_trees_per_hectare': round(avg_trees_per_hectare, 2),
+                'total_healthy': total_healthy,
+                'total_not_healthy': total_not_healthy,
+                'health_ratio': round(health_ratio, 3),
+                'total_planted': total_planted,
+                'total_existing': total_existing
+            },
+            'area_data': area_list,
+            'critical_areas': critical_areas,
+            'species_distribution': species_list,
+            'all_heights': all_heights,
+            'all_diameters': all_diameters,
+            'all_health_statuses': all_health_statuses
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_analytics_by_area(request):
+    """API endpoint to get analytics data aggregated by administrative area."""
+    try:
+        species_id = request.GET.get('species_id', None)
+        
+        # Base query
+        trees_query = EndemicTree.objects.filter(user=request.user).select_related('location', 'species')
+        
+        # Filter by species if provided
+        if species_id and species_id != 'all':
+            try:
+                species_id_int = int(species_id)
+                trees_query = trees_query.filter(species_id=species_id_int)
+            except (ValueError, TypeError):
+                pass
+        
+        # Get all trees with addresses
+        trees = trees_query.exclude(location__address__isnull=True).exclude(location__address='')
+        
+        # Helper function to parse administrative area from address
+        def parse_administrative_area(address):
+            """Parse address to extract administrative area (City/Municipality, Province)"""
+            if not address:
+                return None
+            # Address format: "Barangay, City or Municipality, Province"
+            parts = [p.strip() for p in address.split(',')]
+            if len(parts) >= 2:
+                # Return City/Municipality, Province
+                return f"{parts[-2]}, {parts[-1]}"
+            elif len(parts) == 1:
+                return parts[0]
+            return None
+        
+        # Aggregate by administrative area
+        area_data = {}
+        
+        for tree in trees:
+            if not tree.location or not tree.location.address:
+                continue
+                
+            area = parse_administrative_area(tree.location.address)
+            if not area:
+                continue
+            
+            if area not in area_data:
+                area_data[area] = {
+                    'area': area,
+                    'total_trees': 0,
+                    'total_hectares': 0,
+                    'healthy_count': 0,
+                    'not_healthy_count': 0,
+                    'heights': [],
+                    'diameters': [],
+                    'health_statuses': []
+                }
+            
+            area_data[area]['total_trees'] += tree.population
+            area_data[area]['total_hectares'] += tree.hectares or 0
+            area_data[area]['healthy_count'] += tree.healthy_count or 0
+            area_data[area]['not_healthy_count'] += tree.bad_count or 0
+            
+            # Collect height and diameter data for histograms
+            if tree.height_meters:
+                # Add multiple entries based on population
+                for _ in range(tree.population):
+                    area_data[area]['heights'].append(float(tree.height_meters))
+            
+            if tree.diameter_cm:
+                # Add multiple entries based on population
+                for _ in range(tree.population):
+                    area_data[area]['diameters'].append(float(tree.diameter_cm))
+            
+            # Collect health status data for scatter plot
+            if tree.height_meters and tree.diameter_cm:
+                health_status = 'healthy' if tree.is_healthy else 'not_healthy'
+                for _ in range(tree.population):
+                    area_data[area]['health_statuses'].append({
+                        'height': float(tree.height_meters),
+                        'diameter': float(tree.diameter_cm),
+                        'health': health_status
+                    })
+        
+        # Calculate metrics for each area
+        result = []
+        for area, data in area_data.items():
+            trees_per_hectare = data['total_trees'] / data['total_hectares'] if data['total_hectares'] > 0 else 0
+            total_health = data['healthy_count'] + data['not_healthy_count']
+            health_ratio = data['healthy_count'] / total_health if total_health > 0 else 0
+            
+            result.append({
+                'area': area,
+                'total_trees': data['total_trees'],
+                'total_hectares': round(data['total_hectares'], 2),
+                'trees_per_hectare': round(trees_per_hectare, 2),
+                'healthy_count': data['healthy_count'],
+                'not_healthy_count': data['not_healthy_count'],
+                'health_ratio': round(health_ratio, 3),
+                'heights': data['heights'],
+                'diameters': data['diameters'],
+                'health_statuses': data['health_statuses']
+            })
+        
+        # Sort by trees per hectare (descending) for ranked chart
+        result.sort(key=lambda x: x['trees_per_hectare'], reverse=True)
+        
+        return JsonResponse({
+            'success': True,
+            'data': result
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
 def api_species_list(request):
     """API endpoint to get current list of species for dropdown updates."""
     try:
@@ -1605,15 +1962,21 @@ def generate_report(request):
         return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
 
     try:
-        # Get selected trees and addresses
+        # Get selected trees and address
         selected_trees = request.POST.getlist('selected_trees')
+        # Handle both dropdown (single value) and checkbox (multiple values) formats
+        selected_address = request.POST.get('selected_address', '')
         selected_addresses = request.POST.getlist('selected_addresses')
+        
+        # If dropdown is used, convert single value to list
+        if selected_address:
+            selected_addresses = [selected_address]
+        # If no address selected from dropdown, allow all addresses (empty list means no filter)
         
         if not selected_trees:
             return JsonResponse({'success': False, 'error': 'Please select at least one tree.'}, status=400)
         
-        if not selected_addresses:
-            return JsonResponse({'success': False, 'error': 'Please select at least one address.'}, status=400)
+        # Address is optional - if empty, show all addresses
 
         # Get the current date and time in local timezone
         from django.utils.timezone import localtime
@@ -1647,10 +2010,11 @@ def generate_report(request):
                 species__id__in=species_ids
             ).select_related('species', 'location')
             
-            # Filter by selected addresses
-            trees_query = trees_query.filter(
-                location__address__in=selected_addresses
-            )
+            # Filter by selected address if provided
+            if selected_addresses:
+                trees_query = trees_query.filter(
+                    location__address__in=selected_addresses
+                )
             
             # Calculate actual statistics with error handling
             total_trees = trees_query.count()
@@ -1729,7 +2093,11 @@ def generate_report(request):
             'existing': 0,
             'healthy_count': 0,
             'not_healthy_count': 0,
-            'total_population': 0
+            'total_population': 0,
+            'total_height': 0,
+            'height_count': 0,
+            'total_diameter': 0,
+            'diameter_count': 0
         })
         
         for tree in trees:
@@ -1760,6 +2128,17 @@ def generate_report(request):
                     if tree.is_healthy:
                         species_data[species_id]['healthy_count'] += population
                 
+                # Calculate height and diameter averages
+                if tree.height_meters is not None:
+                    height_value = float(tree.height_meters)
+                    species_data[species_id]['total_height'] += height_value * population
+                    species_data[species_id]['height_count'] += population
+                
+                if tree.diameter_cm is not None:
+                    diameter_value = float(tree.diameter_cm)
+                    species_data[species_id]['total_diameter'] += diameter_value * population
+                    species_data[species_id]['diameter_count'] += population
+                
                 # Not healthy count will be calculated as: total - healthy_count
                         
             except Exception as e:
@@ -1767,10 +2146,17 @@ def generate_report(request):
                 traceback.print_exc()
                 continue
         
+        # Get address display text
+        address_display = "Not specified"
+        if selected_addresses:
+            address_display = selected_addresses[0] if len(selected_addresses) == 1 else ", ".join(selected_addresses)
+        
         # Generate table HTML
-        html += '''
+        html += f'''
         <div class="report-section">
-            <h2 class="report-section-title">Tree Species Report</h2>
+            <div style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 4px;">
+                <strong>Address:</strong> {address_display}
+            </div>
             <div class="report-table-container">
                 <table class="report-table" style="width: 100%; border-collapse: collapse;">
                     <thead>
@@ -1779,6 +2165,8 @@ def generate_report(request):
                             <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Total No. Tree</th>
                             <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Planted</th>
                             <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Existing</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Avg Height (m)</th>
+                            <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">Avg Diameter (cm)</th>
                             <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">No. of Healthy Tree</th>
                             <th style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">No. of Not Healthy Tree</th>
                         </tr>
@@ -1805,6 +2193,13 @@ def generate_report(request):
                     # Percentage of not healthy tree = 100% - healthy percentage
                     not_healthy_percentage = 100 - healthy_percentage
                     
+                    # Calculate average height and diameter
+                    avg_height = (data['total_height'] / data['height_count']) if data['height_count'] > 0 else None
+                    avg_diameter = (data['total_diameter'] / data['diameter_count']) if data['diameter_count'] > 0 else None
+                    
+                    height_display = f"{avg_height:.2f}" if avg_height is not None else "N/A"
+                    diameter_display = f"{avg_diameter:.2f}" if avg_diameter is not None else "N/A"
+                    
                     html += f'''
                         <tr>
                             <td style="padding: 0.75rem; border: 1px solid #dee2e6;">
@@ -1813,6 +2208,8 @@ def generate_report(request):
                             <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{total:,}</td>
                             <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{planted:,}</td>
                             <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{existing:,}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{height_display}</td>
+                            <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">{diameter_display}</td>
                             <td style="padding: 0.75rem; border: 1px solid #dee2e6; text-align: right;">
                                 {healthy_count:,} ({healthy_percentage:.2f}%)
                             </td>
@@ -1828,7 +2225,7 @@ def generate_report(request):
         else:
             html += '''
                 <tr>
-                    <td colspan="6" style="text-align: center; padding: 20px;">No tree data available for the selected trees and addresses.</td>
+                    <td colspan="8" style="text-align: center; padding: 20px;">No tree data available for the selected trees and addresses.</td>
                 </tr>
             '''
         

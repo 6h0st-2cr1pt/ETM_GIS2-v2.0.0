@@ -55,17 +55,21 @@
                         <th style="width: 40px;">
                             <input type="checkbox" id="selectAllCheckbox" title="Select All">
                         </th>
-                        <th data-sort="common_name">Common Name</th>
-                        <th data-sort="scientific_name">Scientific Name</th>
-                        <th data-sort="species">Species</th>
-                        <th data-sort="family">Family</th>
-                        <th data-sort="genus">Genus</th>
-                        <th data-sort="population">Population</th>
-                        <th data-sort="hectares">Hectares</th>
-                        <th data-sort="health_status">Health Status</th>
-                        <th data-sort="coordinates">Coordinates</th>
-                        <th data-sort="year">Year</th>
-                        <th data-sort="notes">Notes</th>
+                        <th data-sort="common_name">COMMON NAME</th>
+                        <th data-sort="scientific_name">SCIENTIFIC NAME</th>
+                        <th data-sort="family">FAMILY</th>
+                        <th data-sort="genus">GENUS</th>
+                        <th data-sort="hectars">HECTARS</th>
+                        <th data-sort="planted">PLANTED</th>
+                        <th data-sort="existing">EXISTING</th>
+                        <th data-sort="height">HEIGHT</th>
+                        <th data-sort="diameter_breast">DIAMETER BREAST</th>
+                        <th data-sort="healthy">HEALTHY</th>
+                        <th data-sort="not_healthy">NOT HEALTHY</th>
+                        <th data-sort="latitude">LATITUDE</th>
+                        <th data-sort="longitude">LONGITUDE</th>
+                        <th data-sort="address">ADDRESS</th>
+                        <th data-sort="year">YEAR</th>
                         <th style="min-width: 120px;">Actions</th>
                     </tr>
                 </thead>
@@ -75,44 +79,27 @@
                         <td>
                             <input type="checkbox" class="row-checkbox" data-tree-id="{{ tree.id }}">
                         </td>
-                        <td data-common_name="{{ tree.species.common_name }}">{{ tree.species.common_name }}</td>
-                        <td data-scientific_name="{{ tree.species.scientific_name }}"><em>{{ tree.species.scientific_name }}</em></td>
-                        <td data-species="{{ tree.species }}">{{ tree.species }}</td>
-                        <td data-family="{{ tree.species.genus.family.name }}">{{ tree.species.genus.family.name }}</td>
-                        <td data-genus="{{ tree.species.genus.name }}">{{ tree.species.genus.name }}</td>
-                        <td data-population="{{ tree.population }}">{{ tree.population }}</td>
-                        <td data-hectares="{{ tree.hectares }}">{{ tree.hectares|floatformat:2 }} ha</td>
-                        <td data-health_status="{{ tree.health_status }}">
-                            {% if tree.health_status == 'very_poor' %}
-                                <span class="badge bg-danger">Very Poor</span>
-                            {% elif tree.health_status == 'poor' %}
-                                <span class="badge bg-warning text-dark">Poor</span>
-                            {% elif tree.health_status == 'good' %}
-                                <span class="badge bg-success">Good</span>
-                            {% elif tree.health_status == 'very_good' %}
-                                <span class="badge bg-primary">Very Good</span>
-                            {% elif tree.health_status == 'excellent' %}
-                                <span class="badge bg-info">Excellent</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Unknown</span>
-                            {% endif %}
-                        </td>
-                        <td data-coordinates="{{ tree.location.latitude }},{{ tree.location.longitude }}">{{ tree.location.latitude }}, {{ tree.location.longitude }}</td>
+                        <td data-common_name="{{ tree.common_name }}">{{ tree.common_name }}</td>
+                        <td data-scientific_name="{{ tree.scientific_name }}"><em>{{ tree.scientific_name }}</em></td>
+                        <td data-family="{{ tree.family }}">{{ tree.family }}</td>
+                        <td data-genus="{{ tree.genus }}">{{ tree.genus }}</td>
+                        <td data-hectars="{{ tree.hectars }}">{{ tree.hectars|floatformat:2 }}</td>
+                        <td data-planted="{{ tree.planted }}">{{ tree.planted }}</td>
+                        <td data-existing="{{ tree.existing }}">{{ tree.existing }}</td>
+                        <td data-height="{{ tree.height|default:'' }}">{% if tree.height %}{{ tree.height|floatformat:1 }}{% else %}-{% endif %}</td>
+                        <td data-diameter_breast="{{ tree.diameter_breast|default:'' }}">{% if tree.diameter_breast %}{{ tree.diameter_breast|floatformat:1 }}{% else %}-{% endif %}</td>
+                        <td data-healthy="{{ tree.healthy }}">{{ tree.healthy }}</td>
+                        <td data-not_healthy="{{ tree.not_healthy }}">{{ tree.not_healthy }}</td>
+                        <td data-latitude="{{ tree.latitude }}">{{ tree.latitude }}</td>
+                        <td data-longitude="{{ tree.longitude }}">{{ tree.longitude }}</td>
+                        <td data-address="{{ tree.address }}">{% if tree.address %}{{ tree.address }}{% else %}-{% endif %}</td>
                         <td data-year="{{ tree.year }}">{{ tree.year }}</td>
-                        <td data-notes="{{ tree.notes }}">
-                            {% if tree.notes %}
-                                <span class="notes-preview">{{ tree.notes|truncatechars:20 }}</span>
-                                <span class="notes-tooltip d-none">{{ tree.notes }}</span>
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
                         <td>
                             <div class="table-actions">
                                 <button class="action-button action-view" title="View Details" data-id="{{ tree.id }}">
                                     <i class="fas fa-eye"></i>
                                 </button>
-                                <button class="action-button action-image" title="Preview Image" data-id="{{ tree.id }}" data-image-url="{% if tree.species.image %}/species-image/{{ tree.species.id }}/{% endif %}">
+                                <button class="action-button action-image" title="Preview Image" data-id="{{ tree.id }}" data-image-url="">
                                     <i class="fas fa-image"></i>
                                 </button>
                                 <button class="action-button action-edit" title="Edit" data-id="{{ tree.id }}">
@@ -126,7 +113,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="13" class="text-center">No data available</td>
+                        <td colspan="17" class="text-center">No data available</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -141,255 +128,6 @@
                 <button class="pagination-button" id="prev-page" disabled>&laquo; Previous</button>
                 <button class="pagination-button active">1</button>
                 <button class="pagination-button" id="next-page" disabled>Next &raquo;</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Tree Seeds Section -->
-    <h2 class="page-title mt-5 mb-3">Tree Seeds</h2>
-    
-    <div class="datasets-actions">
-        <div class="bulk-actions" id="bulkActionsSeeds" style="display: none;">
-            <button id="deleteSelectedSeedsBtn" class="btn btn-danger btn-sm">
-                <i class="fas fa-trash-alt"></i> Delete Selected
-            </button>
-            <button id="deleteAllSeedsBtn" class="btn btn-danger btn-sm">
-                <i class="fas fa-trash"></i> Delete All
-            </button>
-        </div>
-        
-        <div class="datasets-search">
-            <div class="input-group">
-                <input type="text" id="seedsSearch" class="form-control" placeholder="Search seeds...">
-                <button class="btn btn-outline-secondary" type="button">
-                    <i class="fas fa-search"></i>
-                </button>
-            </div>
-        </div>
-        
-        <div class="export-dropdown">
-            <select id="exportSeedsFormat" class="form-select form-select-sm">
-                <option value="csv">CSV</option>
-                <option value="json">JSON</option>
-                <option value="excel">Excel</option>
-            </select>
-            <button id="exportSeedsBtn" class="btn btn-outline-primary btn-sm ms-2">
-                <i class="fas fa-download"></i> Export
-            </button>
-        </div>
-    </div>
-    
-    <div class="datasets-table-container">
-        <div class="table-responsive">
-            <table class="table datasets-table" id="seedsTable">
-                <thead>
-                    <tr>
-                        <th style="width: 40px;">
-                            <input type="checkbox" id="selectAllSeedsCheckbox" title="Select All">
-                        </th>
-                        <th data-sort="common_name">Common Name</th>
-                        <th data-sort="scientific_name">Scientific Name</th>
-                        <th data-sort="quantity">Quantity</th>
-                        <th data-sort="planting_date">Planting Date</th>
-                        <th data-sort="germination_status">Germination Status</th>
-                        <th data-sort="germination_date">Germination Date</th>
-                        <th data-sort="survival_rate">Survival Rate</th>
-                        <th data-sort="hectares">Hectares</th>
-                        <th data-sort="expected_maturity_date">Expected Maturity</th>
-                        <th data-sort="coordinates">Coordinates</th>
-                        <th data-sort="notes">Notes</th>
-                        <th style="min-width: 120px;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for seed in seeds %}
-                    <tr>
-                        <td>
-                            <input type="checkbox" class="row-checkbox-seed" data-seed-id="{{ seed.id }}">
-                        </td>
-                        <td data-common_name="{{ seed.species.common_name }}" data-species="{{ seed.species.id }}">{{ seed.species.common_name }}</td>
-                        <td data-scientific_name="{{ seed.species.scientific_name }}"><em>{{ seed.species.scientific_name }}</em></td>
-                        <td data-quantity="{{ seed.quantity }}">{{ seed.quantity }}</td>
-                        <td data-planting_date="{{ seed.planting_date }}">{{ seed.planting_date }}</td>
-                        <td data-germination_status="{{ seed.germination_status }}">
-                            {% if seed.germination_status == 'not_germinated' %}
-                                <span class="badge bg-secondary">Not Germinated</span>
-                            {% elif seed.germination_status == 'germinating' %}
-                                <span class="badge bg-info">Germinating</span>
-                            {% elif seed.germination_status == 'partially_germinated' %}
-                                <span class="badge bg-warning text-dark">Partially Germinated</span>
-                            {% elif seed.germination_status == 'fully_germinated' %}
-                                <span class="badge bg-success">Fully Germinated</span>
-                            {% elif seed.germination_status == 'failed' %}
-                                <span class="badge bg-danger">Failed</span>
-                            {% else %}
-                                <span class="badge bg-secondary">Unknown</span>
-                            {% endif %}
-                        </td>
-                        <td data-germination_date="{{ seed.germination_date|default:'' }}">{{ seed.germination_date|default:"-" }}</td>
-                        <td data-survival_rate="{{ seed.survival_rate|default:'' }}">{{ seed.survival_rate|default:"-" }}{% if seed.survival_rate %}%{% endif %}</td>
-                        <td data-hectares="{{ seed.hectares }}">{{ seed.hectares|floatformat:2 }} ha</td>
-                        <td data-expected_maturity_date="{{ seed.expected_maturity_date|default:'' }}">{{ seed.expected_maturity_date|default:"-" }}</td>
-                        <td data-coordinates="{{ seed.location.latitude }},{{ seed.location.longitude }}">{{ seed.location.latitude }}, {{ seed.location.longitude }}</td>
-                        <td data-notes="{{ seed.notes }}">
-                            {% if seed.notes %}
-                                <span class="notes-preview">{{ seed.notes|truncatechars:20 }}</span>
-                                <span class="notes-tooltip d-none">{{ seed.notes }}</span>
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>
-                            <div class="table-actions">
-                                <button class="action-button action-view-seed" title="View Details" data-id="{{ seed.id }}">
-                                    <i class="fas fa-eye"></i>
-                                </button>
-                                <button class="action-button action-edit-seed" title="Edit" data-id="{{ seed.id }}">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="action-button action-delete-seed" title="Delete" data-id="{{ seed.id }}">
-                                    <i class="fas fa-trash-alt"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="13" class="text-center">No seed data available</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        
-        <div class="datasets-pagination">
-            <div class="pagination-info">
-                Showing <span id="showing-seeds-start">1</span> to <span id="showing-seeds-end">{{ seeds|length }}</span> of <span id="total-seeds-entries">{{ seeds|length }}</span> entries
-            </div>
-            <div class="pagination-controls">
-                <button class="pagination-button" id="prev-seeds-page" disabled>&laquo; Previous</button>
-                <button class="pagination-button active">1</button>
-                <button class="pagination-button" id="next-seeds-page" disabled>Next &raquo;</button>
-            </div>
-        </div>
-    </div>
-    
-    <!-- Seed Details Modal -->
-    <div class="modal fade" id="seedDetailsModal" tabindex="-1" aria-labelledby="seedDetailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="seedDetailsModalLabel">Seed Details</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <p><strong>Common Name:</strong> <span id="view-seed-common-name"></span></p>
-                            <p><strong>Scientific Name:</strong> <span id="view-seed-scientific-name"></span></p>
-                            <p><strong>Quantity:</strong> <span id="view-seed-quantity"></span></p>
-                            <p><strong>Planting Date:</strong> <span id="view-seed-planting-date"></span></p>
-                            <p><strong>Germination Status:</strong> <span id="view-seed-germination-status"></span></p>
-                            <p><strong>Germination Date:</strong> <span id="view-seed-germination-date"></span></p>
-                        </div>
-                        <div class="col-md-6">
-                            <p><strong>Survival Rate:</strong> <span id="view-seed-survival-rate"></span></p>
-                            <p><strong>Hectares:</strong> <span id="view-seed-hectares"></span></p>
-                            <p><strong>Expected Maturity Date:</strong> <span id="view-seed-expected-maturity-date"></span></p>
-                            <p><strong>Latitude:</strong> <span id="view-seed-latitude"></span></p>
-                            <p><strong>Longitude:</strong> <span id="view-seed-longitude"></span></p>
-                            <p><strong>Notes:</strong></p>
-                            <div id="view-seed-notes" class="p-2 border rounded bg-light"></div>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Seed Modal -->
-    <div class="modal fade" id="editSeedModal" tabindex="-1" aria-labelledby="editSeedModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="editSeedModalLabel">Edit Seed Record</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="editSeedForm">
-                        {% csrf_token %}
-                        <input type="hidden" id="edit-seed-id" name="seed_id">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="edit-seed-species" class="form-label">Species</label>
-                                    <select class="form-control" id="edit-seed-species" name="species" required>
-                                        {% for species in species_list %}
-                                        <option value="{{ species.id }}">{{ species.common_name }} ({{ species.scientific_name }})</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-quantity" class="form-label">Quantity</label>
-                                    <input type="number" class="form-control" id="edit-seed-quantity" name="quantity" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-planting-date" class="form-label">Planting Date</label>
-                                    <input type="date" class="form-control" id="edit-seed-planting-date" name="planting_date" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-germination-status" class="form-label">Germination Status</label>
-                                    <select class="form-control" id="edit-seed-germination-status" name="germination_status" required>
-                                        <option value="not_germinated">Not Germinated</option>
-                                        <option value="germinating">Germinating</option>
-                                        <option value="partially_germinated">Partially Germinated</option>
-                                        <option value="fully_germinated">Fully Germinated</option>
-                                        <option value="failed">Failed</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="edit-seed-germination-date" class="form-label">Germination Date</label>
-                                    <input type="date" class="form-control" id="edit-seed-germination-date" name="germination_date">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-survival-rate" class="form-label">Survival Rate (%)</label>
-                                    <input type="number" step="0.1" min="0" max="100" class="form-control" id="edit-seed-survival-rate" name="survival_rate">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-hectares" class="form-label">Hectares *</label>
-                                    <input type="number" step="0.01" min="0" class="form-control" id="edit-seed-hectares" name="hectares" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-expected-maturity-date" class="form-label">Expected Maturity Date</label>
-                                    <input type="date" class="form-control" id="edit-seed-expected-maturity-date" name="expected_maturity_date">
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-latitude" class="form-label">Latitude</label>
-                                    <input type="number" step="any" class="form-control" id="edit-seed-latitude" name="latitude" required>
-                                </div>
-                                <div class="mb-3">
-                                    <label for="edit-seed-longitude" class="form-label">Longitude</label>
-                                    <input type="number" step="any" class="form-control" id="edit-seed-longitude" name="longitude" required>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="mb-3">
-                                    <label for="edit-seed-notes" class="form-label">Notes</label>
-                                    <textarea class="form-control" id="edit-seed-notes" name="notes" rows="3"></textarea>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="saveSeedChanges">Save Changes</button>
-                </div>
             </div>
         </div>
     </div>

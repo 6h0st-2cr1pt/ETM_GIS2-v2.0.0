@@ -24,6 +24,8 @@ urlpatterns = [
     path('api/seed-data/', views.seed_data, name='seed_data'),
     path('api/filter-trees/<int:species_id>/', views.filter_trees, name='filter_trees'),
     path('api/analytics-data/', views.analytics_data, name='analytics_data'),
+    path('api/analytics-by-area/', views.api_analytics_by_area, name='api_analytics_by_area'),
+    path('api/dashboard-data/', views.api_dashboard_data, name='api_dashboard_data'),
     # Map layer APIs
     path('api/layers/', views.api_layers, name='api_layers'),
     path('api/layers/<int:layer_id>/', views.api_layers_detail, name='api_layers_detail'),

@@ -12,10 +12,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // Tab switching functionality
   const tabButtons = document.querySelectorAll(".tab-button")
   const tabContents = document.querySelectorAll(".tab-content")
-  
+
   // Function to switch tabs
   function switchTab(tabId) {
-    // Update active tab button
+      // Update active tab button
     tabButtons.forEach((btn) => {
       if (btn.getAttribute("data-tab") === tabId) {
         btn.classList.add("active")
@@ -24,19 +24,19 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     })
 
-    // Show selected tab content, hide others
-    tabContents.forEach((content) => {
-      if (content.id === tabId) {
-        content.style.display = "block"
-        // Add a small delay before showing for animation effect
-        setTimeout(() => {
-          content.style.opacity = "1"
-        }, 50)
-      } else {
-        content.style.display = "none"
-        content.style.opacity = "0"
-      }
-    })
+      // Show selected tab content, hide others
+      tabContents.forEach((content) => {
+        if (content.id === tabId) {
+          content.style.display = "block"
+          // Add a small delay before showing for animation effect
+          setTimeout(() => {
+            content.style.opacity = "1"
+          }, 50)
+        } else {
+          content.style.display = "none"
+          content.style.opacity = "0"
+        }
+      })
     
     // Update URL hash without scrolling
     if (history.pushState) {

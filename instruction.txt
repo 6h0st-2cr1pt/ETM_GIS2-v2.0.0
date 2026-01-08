@@ -30,6 +30,8 @@ python manage.py collectstatic
 
 .venv\Scripts\python.exe -m pip install django-jazzmin
 
+.venv\Scripts\python.exe -m pip install scipy
+
 python manage.py runserver
             To Run the Software
 

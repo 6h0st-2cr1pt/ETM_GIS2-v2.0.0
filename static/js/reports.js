@@ -105,8 +105,6 @@ document.addEventListener("DOMContentLoaded", () => {
   // Select all/deselect all buttons
   const selectAllTreesBtn = document.getElementById("selectAllTreesBtn")
   const deselectAllTreesBtn = document.getElementById("deselectAllTreesBtn")
-  const selectAllAddressesBtn = document.getElementById("selectAllAddressesBtn")
-  const deselectAllAddressesBtn = document.getElementById("deselectAllAddressesBtn")
   
   // Debug: Log element availability
   console.log('Reports.js loaded. Elements found:', {
@@ -142,23 +140,8 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
   
-  // Select all/deselect all functionality for addresses
-  if (selectAllAddressesBtn) {
-    selectAllAddressesBtn.addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.address-checkbox');
-      checkboxes.forEach(cb => cb.checked = true);
-    });
-  }
-  
-  if (deselectAllAddressesBtn) {
-    deselectAllAddressesBtn.addEventListener('click', () => {
-      const checkboxes = document.querySelectorAll('.address-checkbox');
-      checkboxes.forEach(cb => cb.checked = false);
-    });
-  }
-
-  // Address filtering functionality
-  let selectedAddresses = new Set();
+  // Address filtering functionality - using dropdown
+  let selectedAddress = '';
 
   // Function to normalize address for comparison (trim whitespace and handle empty)
   function normalizeAddress(address) {
@@ -166,24 +149,24 @@ document.addEventListener("DOMContentLoaded", () => {
     return String(address).trim();
   }
 
-  // Function to filter trees by selected addresses
-  function filterTreesByAddresses() {
+  // Function to filter trees by selected address
+  function filterTreesByAddress() {
     const treeItems = document.querySelectorAll('.tree-item');
     let visibleCount = 0;
-    const selectedAddressesArray = Array.from(selectedAddresses);
+    const normalizedSelected = normalizeAddress(selectedAddress);
 
-    console.log('Filtering trees. Selected addresses:', selectedAddressesArray);
+    console.log('Filtering trees. Selected address:', selectedAddress);
 
     treeItems.forEach((item, index) => {
       const treeAddressesStr = item.getAttribute('data-address') || '';
       
-      // Show tree if no addresses selected OR if tree exists at any selected address
-      if (selectedAddresses.size === 0) {
+      // Show tree if no address selected OR if tree exists at selected address
+      if (!selectedAddress || selectedAddress === '') {
         item.style.display = '';
         item.style.visibility = 'visible';
         visibleCount++;
       } else {
-        // Check if any of the tree's addresses match any selected address
+        // Check if any of the tree's addresses match the selected address
         // Tree addresses are stored as pipe-separated values (|)
         let matches = false;
         
@@ -191,18 +174,12 @@ document.addEventListener("DOMContentLoaded", () => {
           // Split addresses by | separator
           const treeAddresses = treeAddressesStr.split('|').map(addr => normalizeAddress(addr));
           
-          // Check if any tree address matches any selected address
-          for (const selectedAddr of selectedAddressesArray) {
-            const normalizedSelected = normalizeAddress(selectedAddr);
-            
-            for (const treeAddr of treeAddresses) {
-              if (normalizedSelected === treeAddr && treeAddr !== '') {
-                matches = true;
-                break;
-              }
+          // Check if any tree address matches the selected address
+          for (const treeAddr of treeAddresses) {
+            if (normalizedSelected === treeAddr && treeAddr !== '') {
+              matches = true;
+              break;
             }
-            
-            if (matches) break;
           }
         }
         
@@ -224,14 +201,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!treeContainer) return;
     
     let noMatchMessage = treeContainer.querySelector('.no-match-message');
-    if (visibleCount === 0 && selectedAddresses.size > 0) {
+    if (visibleCount === 0 && selectedAddress && selectedAddress !== '') {
       if (!noMatchMessage) {
         noMatchMessage = document.createElement('p');
         noMatchMessage.className = 'no-match-message';
         noMatchMessage.style.color = 'rgba(255, 255, 255, 0.7)';
         noMatchMessage.style.margin = '10px 0';
         noMatchMessage.style.textAlign = 'center';
-        noMatchMessage.textContent = 'No trees found for the selected address(es).';
+        noMatchMessage.textContent = 'No trees found for the selected address.';
         treeContainer.appendChild(noMatchMessage);
       }
     } else if (noMatchMessage) {
@@ -239,103 +216,17 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Function to clear all address filters
-  function clearAddressFilter() {
-    selectedAddresses.clear();
-    filterTreesByAddresses();
-    
-    // Remove active state from all address labels
-    document.querySelectorAll('.address-label').forEach(label => {
-      label.style.backgroundColor = '';
-      label.style.color = '#ffffff';
-      label.style.fontWeight = '';
-    });
-  }
-
-  // Initialize address filtering after DOM is ready
+  // Initialize address filtering with dropdown
   function initializeAddressFiltering() {
-    // Add click handlers to address items (both label and container)
-    const addressItems = document.querySelectorAll('.address-item');
-    console.log(`Found ${addressItems.length} address items`);
+    const addressDropdown = document.getElementById('addressDropdown');
+    if (!addressDropdown) return;
     
-    addressItems.forEach((item) => {
-      const label = item.querySelector('.address-label');
-      const checkbox = item.querySelector('.address-checkbox');
-      const address = item.getAttribute('data-address');
-      const normalizedAddress = normalizeAddress(address);
-      
-      if (!label || !checkbox) return;
-      
-      // Handle checkbox change event (works for both click and keyboard)
-      checkbox.addEventListener('change', function(e) {
-        e.stopPropagation();
-        updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
-      });
-      
-      // Handle checkbox click
-      checkbox.addEventListener('click', function(e) {
-        e.stopPropagation();
-        // The change event will handle the filtering, but we need to sync the visual state
-        setTimeout(() => {
-          updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
-        }, 10);
-      });
-      
-      // Handle label click
-      label.addEventListener('click', function(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        // Toggle checkbox state
-        checkbox.checked = !checkbox.checked;
-        updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
-      });
-      
-      // Also handle clicking on the address item container (but not the checkbox)
-      item.addEventListener('click', function(e) {
-        // Only handle if not clicking directly on checkbox
-        if (e.target === checkbox) return;
-        e.preventDefault();
-        e.stopPropagation();
-        // Toggle checkbox state
-        checkbox.checked = !checkbox.checked;
-        updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox);
-      });
+    // Handle dropdown change
+    addressDropdown.addEventListener('change', function(e) {
+      selectedAddress = this.value || '';
+      console.log('Address dropdown changed to:', selectedAddress);
+      filterTreesByAddress();
     });
-  }
-  
-  // Function to update filter based on checkbox state
-  function updateAddressFilterFromCheckbox(normalizedAddress, label, checkbox) {
-    console.log(`Updating filter for address: "${normalizedAddress}", checked: ${checkbox.checked}`);
-    
-    if (checkbox.checked) {
-      selectedAddresses.add(normalizedAddress);
-      console.log('Added address to selection');
-      // Add active state
-      label.style.backgroundColor = 'rgba(78, 115, 223, 0.5)';
-      label.style.color = '#ffffff';
-      label.style.fontWeight = 'bold';
-    } else {
-      selectedAddresses.delete(normalizedAddress);
-      console.log('Removed address from selection');
-      // Remove active state
-      label.style.backgroundColor = '';
-      label.style.color = '#ffffff';
-      label.style.fontWeight = '';
-    }
-    
-    console.log('Current selected addresses:', Array.from(selectedAddresses));
-    
-    // Apply filter
-    filterTreesByAddresses();
-    
-    // If no addresses selected, clear all active states
-    if (selectedAddresses.size === 0) {
-      document.querySelectorAll('.address-label').forEach(l => {
-        l.style.backgroundColor = '';
-        l.style.color = '#ffffff';
-        l.style.fontWeight = '';
-      });
-    }
   }
   
   // Function to toggle address filter (kept for backward compatibility)
@@ -556,20 +447,19 @@ document.addEventListener("DOMContentLoaded", () => {
       // Get form data
       const formData = new FormData(form);
       const selectedTrees = formData.getAll("selected_trees");
-      const selectedAddresses = formData.getAll("selected_addresses");
+      const addressDropdown = document.getElementById('addressDropdown');
+      const selectedAddressValue = addressDropdown ? addressDropdown.value : '';
       
       console.log('Selected trees:', selectedTrees);
-      console.log('Selected addresses:', selectedAddresses);
+      console.log('Selected address:', selectedAddressValue);
 
       if (!selectedTrees || selectedTrees.length === 0) {
         alert("Please select at least one tree.");
         return;
       }
       
-      if (!selectedAddresses || selectedAddresses.length === 0) {
-        alert("Please select at least one address.");
-        return;
-      }
+      // Address is optional - if empty, it means "All Addresses"
+      // No need to validate address selection
 
       // Get CSRF token - try multiple ways
       let token = csrfToken;
