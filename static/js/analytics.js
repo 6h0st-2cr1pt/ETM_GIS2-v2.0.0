@@ -12,19 +12,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return
     }
 
-    // Sort species within each address from high to low
+    // Sort species within each address from high to low (this affects data structure only)
     addressSpeciesData.forEach(item => {
       item.species.sort((a, b) => b.population - a.population)
     })
 
-    // Get all unique species across all addresses (for per-address grouped bars)
+    // Get all unique species across all addresses
     const allSpecies = new Set()
     addressSpeciesData.forEach(item => {
       item.species.forEach(s => {
         allSpecies.add(s.species_name)
       })
     })
-    const speciesList = Array.from(allSpecies).sort()
+    const speciesList = Array.from(allSpecies)
 
     // Generate colors for each species
     const colors = [
@@ -42,17 +42,19 @@ document.addEventListener("DOMContentLoaded", () => {
     // Prepare data for grouped bars per address
     const addresses = addressSpeciesData.map(item => item.address)
     
-    // Sort species by their maximum population across all addresses (descending)
-    // This ensures bars are ordered from high to low within each address group
-    const speciesWithMaxPop = speciesList.map(species => {
-      const maxPop = Math.max(...addressSpeciesData.map(item => {
+    // Sort species by their TOTAL population across all addresses (descending)
+    // This provides a generally good ordering for all address groups
+    const speciesWithTotalPop = speciesList.map(species => {
+      const totalPop = addressSpeciesData.reduce((sum, item) => {
         const speciesData = item.species.find(s => s.species_name === species)
-        return speciesData ? speciesData.population : 0
-      }))
-      return { species, maxPop }
+        return sum + (speciesData ? speciesData.population : 0)
+      }, 0)
+      return { species, totalPop }
     })
-    speciesWithMaxPop.sort((a, b) => b.maxPop - a.maxPop)
-    const sortedSpeciesList = speciesWithMaxPop.map(s => s.species)
+    speciesWithTotalPop.sort((a, b) => b.totalPop - a.totalPop)
+    const sortedSpeciesList = speciesWithTotalPop.map(s => s.species)
+    
+    console.log("Species sorted by total population:", sortedSpeciesList.slice(0, 10))
     
     // Create datasets in sorted order
     const datasets = sortedSpeciesList.map(species => {
@@ -130,14 +132,23 @@ document.addEventListener("DOMContentLoaded", () => {
             }
           },
           tooltip: {
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            titleColor: '#fff',
+            bodyColor: '#fff',
+            borderColor: 'rgba(255, 255, 255, 0.3)',
+            borderWidth: 1,
+            padding: 12,
+            displayColors: true,
             callbacks: {
               title: function(context) {
-                return context[0].label
+                // Show the address as the title
+                return 'Address: ' + context[0].label
               },
               label: function(context) {
+                // Show the tree species name and population
                 const species = context.dataset.label || ''
                 const value = context.parsed.x
-                return `${species}: ${value.toLocaleString()}`
+                return `${species}: ${value.toLocaleString()} trees`
               }
             }
           }
