@@ -837,8 +837,8 @@ document.addEventListener("DOMContentLoaded", () => {
           throw new Error(data.error)
         }
         
-        // Aggregate trees by address
-        addTreesByAddressToMap(data)
+        // Aggregate trees by address (showStats = false for "All Trees")
+        addTreesByAddressToMap(data, false)
 
         // Also update heatmap if active
         if (map.hasLayer(additionalLayers.heatmap)) {
@@ -1060,7 +1060,8 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .then((data) => {
         console.log("Filtered tree data received:", data)
-        addTreesToMap(data)
+        // Use location aggregation for filtered trees (showStats = true for filtered species)
+        addTreesByAddressToMap(data, true)
 
         // Also update heatmap if active
         if (map.hasLayer(additionalLayers.heatmap)) {
@@ -1334,60 +1335,156 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLegend()
   }
 
-  // Function to add trees aggregated by address to the map
-  function addTreesByAddressToMap(geojson) {
+  // Function to add trees aggregated by location to the map
+  // showStats: if true, show detailed statistics (height, diameter, existing/planted, healthy/not healthy)
+  function addTreesByAddressToMap(geojson, showStats = false) {
     if (!geojson.features || geojson.features.length === 0) {
       console.log("No tree data found in the response")
       return
     }
 
-    // Aggregate trees by address
-    const addressMap = new Map()
+    // Aggregate trees by location (same location = same pin)
+    // Use location_id if available, otherwise fall back to coordinates
+    const locationMap = new Map()
+    
+    console.log(`[GIS] Aggregating ${geojson.features.length} tree features by location...`)
     
     geojson.features.forEach((feature) => {
       const address = feature.properties.address || ''
       const lat = feature.geometry.coordinates[1]
       const lng = feature.geometry.coordinates[0]
+      const locationId = feature.properties.location_id || null
+      const population = feature.properties.population || 0
+      const commonName = feature.properties.common_name || 'Unknown'
+      const height = feature.properties.height_meters || null
+      const diameter = feature.properties.diameter_cm || null
+      const isHealthy = feature.properties.is_healthy !== undefined ? feature.properties.is_healthy : true
+      const isPlanted = feature.properties.is_planted !== undefined ? feature.properties.is_planted : false
+      const healthyCount = feature.properties.healthy_count || 0
+      const badCount = feature.properties.bad_count || 0
+      const deceasedCount = feature.properties.deceased_count || 0
       
-      // Use address as key, or coordinates if no address
-      const key = address || `${lat.toFixed(6)},${lng.toFixed(6)}`
+      // Use location_id as primary key (most reliable), fall back to coordinates
+      const key = locationId ? `loc_${locationId}` : `${lat.toFixed(6)},${lng.toFixed(6)}`
       
-      if (!addressMap.has(key)) {
-        addressMap.set(key, {
+      if (!locationMap.has(key)) {
+        locationMap.set(key, {
           address: address,
           lat: lat,
           lng: lng,
-          trees: []
+          location_id: locationId,
+          trees: [],
+          heights: [],
+          diameters: [],
+          totalExisting: 0,
+          totalPlanted: 0,
+          totalHealthy: 0,
+          totalNotHealthy: 0,
+          images: [] // Store image URLs for species at this location
         })
       }
       
-      // Add tree to this address
-      const addressData = addressMap.get(key)
-      const treeKey = `${feature.properties.common_name}|${feature.properties.scientific_name}`
-      const existingTree = addressData.trees.find(t => t.key === treeKey)
+      // Add tree to this location
+      const locationData = locationMap.get(key)
+      const treeKey = `${commonName}|${feature.properties.scientific_name || 'Unknown'}`
+      const existingTree = locationData.trees.find(t => t.key === treeKey)
+      
+      // Collect image URL if available
+      const imageUrl = feature.properties.image_url || null
+      if (imageUrl && !locationData.images.includes(imageUrl)) {
+        locationData.images.push(imageUrl)
+      }
       
       if (existingTree) {
-        // Aggregate population for same species at same address
-        existingTree.population += feature.properties.population || 0
+        // Aggregate population for same species at same location
+        const oldPop = existingTree.population
+        existingTree.population += population
+        // Ensure image URL is stored for existing tree too
+        if (imageUrl && !existingTree.image_url) {
+          existingTree.image_url = imageUrl
+        }
+        console.log(`[GIS] Aggregating ${commonName} at location ${key}: ${oldPop} + ${population} = ${existingTree.population}`)
       } else {
-        addressData.trees.push({
+        locationData.trees.push({
           key: treeKey,
-          common_name: feature.properties.common_name || 'Unknown',
+          common_name: commonName,
           scientific_name: feature.properties.scientific_name || 'Unknown',
-          population: feature.properties.population || 0
+          population: population,
+          image_url: imageUrl // Store image URL for this species
         })
+        console.log(`[GIS] Adding ${commonName} at location ${key}: population = ${population}, image_url: ${imageUrl ? 'yes' : 'no'}`)
+      }
+      
+      // Collect height and diameter values for averaging
+      if (height !== null && !isNaN(height)) {
+        locationData.heights.push(height)
+      }
+      if (diameter !== null && !isNaN(diameter)) {
+        locationData.diameters.push(diameter)
+      }
+      
+      // Aggregate existing/planted counts (based on population)
+      if (isPlanted) {
+        locationData.totalPlanted += population
+      } else {
+        locationData.totalExisting += population
+      }
+      
+      // Aggregate healthy/not healthy counts
+      // Use healthy_count if available, otherwise use is_healthy flag
+      if (healthyCount > 0) {
+        locationData.totalHealthy += healthyCount
+      } else if (isHealthy) {
+        locationData.totalHealthy += population
+      }
+      
+      if (badCount > 0 || deceasedCount > 0) {
+        locationData.totalNotHealthy += (badCount + deceasedCount)
+      } else if (!isHealthy) {
+        locationData.totalNotHealthy += population
+      }
+      
+      // Update address if we have a better one (non-empty)
+      if (address && !locationData.address) {
+        locationData.address = address
       }
     })
+    
+    console.log(`[GIS] Aggregated to ${locationMap.size} unique locations`)
 
-    // Create markers for each address
+    // Create markers for each location
     const markers = []
-    addressMap.forEach((addressData, key) => {
-      const latlng = [addressData.lat, addressData.lng]
+    locationMap.forEach((locationData, key) => {
+      const latlng = [locationData.lat, locationData.lng]
       
-      // Create marker
+      // Calculate total population for this location
+      const totalPopulation = locationData.trees.reduce((sum, tree) => sum + tree.population, 0)
+      
+      // Calculate average height and diameter
+      const avgHeight = locationData.heights.length > 0 
+        ? (locationData.heights.reduce((sum, h) => sum + h, 0) / locationData.heights.length).toFixed(2)
+        : 'N/A'
+      const avgDiameter = locationData.diameters.length > 0
+        ? (locationData.diameters.reduce((sum, d) => sum + d, 0) / locationData.diameters.length).toFixed(2)
+        : 'N/A'
+      
+      // Get color for the marker
+      // If showStats is false (All Trees filter), use a special color
+      // Otherwise, use the species-specific color
+      let markerColor
+      if (!showStats) {
+        // Special color for "All Trees" filter - use a distinct color like teal/cyan
+        markerColor = "#17a2b8" // Bootstrap info color (teal/cyan)
+      } else {
+        // Use species-specific color when filtering by specific species
+        const primarySpecies = locationData.trees.length > 0 ? locationData.trees[0].common_name : 'Unknown'
+        markerColor = getColorForSpecies(primarySpecies)
+      }
+      
+      // Create marker with size based on total population
       const marker = L.circleMarker(latlng, {
-        radius: 10,
-        fillColor: "#4CAF50",
+        radius: Math.min(15, Math.max(8, Math.sqrt(totalPopulation) * 0.5)),
+        fillColor: markerColor,
         color: "#fff",
         weight: 2,
         opacity: 1,
@@ -1396,7 +1493,7 @@ document.addEventListener("DOMContentLoaded", () => {
       
       // Create popup content with table
       let tableRows = ''
-      addressData.trees.forEach(tree => {
+      locationData.trees.forEach(tree => {
         tableRows += `
           <tr>
             <td>${tree.common_name} <em>(${tree.scientific_name})</em></td>
@@ -1405,9 +1502,64 @@ document.addEventListener("DOMContentLoaded", () => {
         `
       })
       
+      // Debug log for this location
+      console.log(`[GIS] Creating marker for location ${key}:`, {
+        address: locationData.address,
+        trees: locationData.trees.map(t => `${t.common_name}: ${t.population}`),
+        totalPopulation: totalPopulation,
+        avgHeight: avgHeight,
+        avgDiameter: avgDiameter,
+        totalExisting: locationData.totalExisting,
+        totalPlanted: locationData.totalPlanted,
+        totalHealthy: locationData.totalHealthy,
+        totalNotHealthy: locationData.totalNotHealthy,
+        images: locationData.images
+      })
+      
+      // Build image section - show first available image or images for each species
+      let imageSection = ''
+      if (locationData.images.length > 0) {
+        // If only one image, show it prominently
+        if (locationData.images.length === 1) {
+          imageSection = `<div style="margin: 8px 0;"><img src="${locationData.images[0]}" alt="Tree Image" style="max-width: 220px; max-height: 150px; border-radius: 6px; object-fit: cover;" onerror="this.style.display='none'"></div>`
+        } else {
+          // Multiple images - show first one (or could show a gallery)
+          imageSection = `<div style="margin: 8px 0;"><img src="${locationData.images[0]}" alt="Tree Image" style="max-width: 220px; max-height: 150px; border-radius: 6px; object-fit: cover;" onerror="this.style.display='none'"></div>`
+        }
+      }
+      
+      // Build statistics section only if showStats is true
+      const statsSection = showStats ? `
+          <div style="margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 6px;">
+            <table style="width: 100%; font-size: 13px;">
+              <tr>
+                <td style="padding: 4px 8px;"><strong>Avg Height:</strong></td>
+                <td style="padding: 4px 8px;">${avgHeight} m</td>
+                <td style="padding: 4px 8px;"><strong>Avg Diameter:</strong></td>
+                <td style="padding: 4px 8px;">${avgDiameter} cm</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 8px;"><strong>Existing:</strong></td>
+                <td style="padding: 4px 8px;">${locationData.totalExisting}</td>
+                <td style="padding: 4px 8px;"><strong>Planted:</strong></td>
+                <td style="padding: 4px 8px;">${locationData.totalPlanted}</td>
+              </tr>
+              <tr>
+                <td style="padding: 4px 8px;"><strong>Healthy:</strong></td>
+                <td style="padding: 4px 8px; color: #4CAF50;">${locationData.totalHealthy}</td>
+                <td style="padding: 4px 8px;"><strong>Not Healthy:</strong></td>
+                <td style="padding: 4px 8px; color: #f44336;">${locationData.totalNotHealthy}</td>
+              </tr>
+            </table>
+          </div>
+      ` : ''
+      
       const popupContent = `
         <div class="tree-popup">
-          <h3>${addressData.address || 'Location'}</h3>
+          <h3>${locationData.address || `Location (${locationData.lat.toFixed(6)}, ${locationData.lng.toFixed(6)})`}</h3>
+          <p style="margin: 8px 0; font-weight: bold; color: #4CAF50;">Total Population: ${totalPopulation}</p>
+          ${imageSection}
+          ${statsSection}
           <table class="popup-table" style="width: 100%; margin-top: 10px;">
             <thead>
               <tr>

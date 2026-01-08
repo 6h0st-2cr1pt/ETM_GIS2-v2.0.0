@@ -7,6 +7,181 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     const csrfToken = csrfTokenElement.value;
 
+    // ========== PAGINATION FUNCTIONALITY ==========
+    const itemsPerPage = 10;
+    let currentPage = 1;
+    const table = document.getElementById("datasetsTable");
+    const tbody = table ? table.getElementsByTagName("tbody")[0] : null;
+    const allRows = tbody ? Array.from(tbody.getElementsByTagName("tr")) : [];
+    const totalRows = allRows.length;
+    
+    // Only enable pagination if there are 10 or more rows
+    if (totalRows >= itemsPerPage) {
+        initializePagination();
+    } else {
+        // Hide pagination controls if less than 10 rows
+        const paginationContainer = document.querySelector('.datasets-pagination');
+        if (paginationContainer) {
+            paginationContainer.style.display = 'none';
+        }
+    }
+    
+    function initializePagination() {
+        const totalPages = Math.ceil(totalRows / itemsPerPage);
+        
+        // Update pagination info
+        updatePaginationInfo();
+        
+        // Create page buttons
+        createPageButtons(totalPages);
+        
+        // Show first page
+        showPage(1);
+        
+        // Event listeners for navigation
+        const prevButton = document.getElementById('prev-page');
+        const nextButton = document.getElementById('next-page');
+        
+        if (prevButton) {
+            prevButton.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    showPage(currentPage - 1);
+                }
+            });
+        }
+        
+        if (nextButton) {
+            nextButton.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    showPage(currentPage + 1);
+                }
+            });
+        }
+    }
+    
+    function showPage(page) {
+        currentPage = page;
+        const startIndex = (page - 1) * itemsPerPage;
+        const endIndex = startIndex + itemsPerPage;
+        
+        // Hide all rows first
+        allRows.forEach((row, index) => {
+            if (index >= startIndex && index < endIndex) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+        
+        // Update pagination info
+        updatePaginationInfo();
+        
+        // Update page buttons
+        updatePageButtons();
+        
+        // Update navigation buttons
+        updateNavigationButtons();
+    }
+    
+    function updatePaginationInfo() {
+        const startIndex = (currentPage - 1) * itemsPerPage + 1;
+        const endIndex = Math.min(currentPage * itemsPerPage, totalRows);
+        
+        const showingStart = document.getElementById('showing-start');
+        const showingEnd = document.getElementById('showing-end');
+        const totalEntries = document.getElementById('total-entries');
+        
+        if (showingStart) showingStart.textContent = startIndex;
+        if (showingEnd) showingEnd.textContent = endIndex;
+        if (totalEntries) totalEntries.textContent = totalRows;
+    }
+    
+    function createPageButtons(totalPages) {
+        const paginationControls = document.querySelector('.pagination-controls');
+        if (!paginationControls) return;
+        
+        // Clear existing page buttons (keep prev/next)
+        const prevButton = document.getElementById('prev-page');
+        const nextButton = document.getElementById('next-page');
+        paginationControls.innerHTML = '';
+        
+        // Re-add prev button
+        if (prevButton) {
+            paginationControls.appendChild(prevButton);
+        } else {
+            const prev = document.createElement('button');
+            prev.className = 'pagination-button';
+            prev.id = 'prev-page';
+            prev.textContent = '« Previous';
+            prev.disabled = true;
+            prev.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    showPage(currentPage - 1);
+                }
+            });
+            paginationControls.appendChild(prev);
+        }
+        
+        // Create page number buttons
+        for (let i = 1; i <= totalPages; i++) {
+            const pageButton = document.createElement('button');
+            pageButton.className = 'pagination-button';
+            pageButton.textContent = i;
+            if (i === 1) {
+                pageButton.classList.add('active');
+            }
+            pageButton.addEventListener('click', () => {
+                showPage(i);
+            });
+            paginationControls.appendChild(pageButton);
+        }
+        
+        // Re-add next button
+        if (nextButton) {
+            paginationControls.appendChild(nextButton);
+        } else {
+            const next = document.createElement('button');
+            next.className = 'pagination-button';
+            next.id = 'next-page';
+            next.textContent = 'Next »';
+            next.disabled = totalPages <= 1;
+            next.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    showPage(currentPage + 1);
+                }
+            });
+            paginationControls.appendChild(next);
+        }
+    }
+    
+    function updatePageButtons() {
+        const totalPages = Math.ceil(totalRows / itemsPerPage);
+        const pageButtons = document.querySelectorAll('.pagination-controls .pagination-button:not(#prev-page):not(#next-page)');
+        
+        pageButtons.forEach((button, index) => {
+            const pageNum = index + 1;
+            if (pageNum === currentPage) {
+                button.classList.add('active');
+            } else {
+                button.classList.remove('active');
+            }
+        });
+    }
+    
+    function updateNavigationButtons() {
+        const totalPages = Math.ceil(totalRows / itemsPerPage);
+        const prevButton = document.getElementById('prev-page');
+        const nextButton = document.getElementById('next-page');
+        
+        if (prevButton) {
+            prevButton.disabled = currentPage === 1;
+        }
+        
+        if (nextButton) {
+            nextButton.disabled = currentPage === totalPages;
+        }
+    }
+    
     // View and Edit button handlers
     const viewButtons = document.querySelectorAll('.action-view');
     const imageButtons = document.querySelectorAll('.action-image');
@@ -370,28 +545,42 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Simple table search functionality
     const searchInput = document.getElementById("datasetSearch")
-    const table = document.getElementById("datasetsTable")
   
     if (searchInput && table) {
-      const tbody = table.getElementsByTagName("tbody")[0]
-      const rows = tbody.getElementsByTagName("tr")
-  
       searchInput.addEventListener("keyup", () => {
         const searchTerm = searchInput.value.toLowerCase()
+        const paginationContainer = document.querySelector('.datasets-pagination')
   
-        for (let i = 0; i < rows.length; i++) {
-          const rowText = rows[i].textContent.toLowerCase()
-          if (rowText.indexOf(searchTerm) > -1) {
-            rows[i].style.display = ""
-          } else {
-            rows[i].style.display = "none"
-            // Uncheck hidden rows
-            const checkbox = rows[i].querySelector('.row-checkbox')
-            if (checkbox) {
-              checkbox.checked = false
+        if (searchTerm.trim() === '') {
+          // No search term - re-enable pagination if there are 10+ rows
+          if (totalRows >= itemsPerPage) {
+            showPage(1)
+            if (paginationContainer) {
+              paginationContainer.style.display = ''
             }
           }
+        } else {
+          // Search active - show all matching results, temporarily disable pagination
+          if (paginationContainer) {
+            paginationContainer.style.display = 'none'
+          }
+          
+          // Show/hide rows based on search
+          allRows.forEach((row) => {
+            const rowText = row.textContent.toLowerCase()
+            if (rowText.indexOf(searchTerm) > -1) {
+              row.style.display = ""
+            } else {
+              row.style.display = "none"
+              // Uncheck hidden rows
+              const checkbox = row.querySelector('.row-checkbox')
+              if (checkbox) {
+                checkbox.checked = false
+              }
+            }
+          })
         }
+        
         // Update bulk actions visibility and select all state after search
         updateBulkActionsVisibility()
         updateSelectAllState()

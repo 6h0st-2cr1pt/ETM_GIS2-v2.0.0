@@ -2321,6 +2321,8 @@ def tree_data(request):
                     'is_healthy': tree.is_healthy,
                     'is_planted': tree.is_planted,
                     'hectares': tree.hectares,
+                    'height_meters': tree.height_meters,
+                    'diameter_cm': tree.diameter_cm,
                     # Include species image URL if available (shared by all trees with same common_name and scientific_name)
                     'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None,
                     'data_source': 'app',  # Mark as app data
@@ -2472,6 +2474,8 @@ def filter_trees(request, species_id):
                     'is_healthy': tree.is_healthy,
                     'is_planted': tree.is_planted,
                     'hectares': tree.hectares,
+                    'height_meters': tree.height_meters,
+                    'diameter_cm': tree.diameter_cm,
                     # Include species image URL if available (shared by all trees with same common_name and scientific_name)
                     'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None,
                 }

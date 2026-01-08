@@ -86,7 +86,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     charts.speciesTreemap = new Chart(ctx.getContext("2d"), {
       type: "bar",
-      data: {
+    data: {
         labels: topSpecies.map(s => s.name),
         datasets: [{
           label: "Tree Count",
@@ -95,31 +95,31 @@ document.addEventListener("DOMContentLoaded", () => {
           borderColor: topSpecies.map((s, i) => colors[i % colors.length].replace('0.7', '1')),
           borderWidth: 1,
         }]
-      },
-      options: {
+    },
+    options: {
         indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
           x: {
-            beginAtZero: true,
+          beginAtZero: true,
             title: {
               display: true,
               text: 'Number of Trees',
               color: "rgba(255, 255, 255, 0.7)"
             },
-            grid: {
-              color: "rgba(255, 255, 255, 0.1)",
-            },
-          },
-          y: {
-            grid: {
-              color: "rgba(255, 255, 255, 0.1)",
-            },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)",
           },
         },
-        plugins: {
-          legend: {
+          y: {
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)",
+          },
+        },
+      },
+      plugins: {
+        legend: {
             display: false
         },
               tooltip: {

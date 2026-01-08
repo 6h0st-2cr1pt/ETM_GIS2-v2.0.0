@@ -213,7 +213,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     } else if (noMatchMessage) {
       noMatchMessage.remove();
-    }
+  }
   }
 
   // Initialize address filtering with dropdown
