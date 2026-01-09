@@ -478,27 +478,21 @@ def datasets(request):
 @login_required(login_url='app:login')
 def upload_species_images(request):
     """
-    Display species without images and allow uploading images for them
+    Display all species (with and without images) and allow uploading/changing images for them
     """
     # Get all species for the user
     all_species = TreeSpecies.objects.filter(user=request.user)
     
-    # Get unique combinations of common_name and scientific_name that don't have images
-    # We need to check if ANY species with the same common_name and scientific_name has an image
-    species_with_images = set()
-    for species in all_species.filter(image__isnull=False):
-        key = (species.common_name.lower(), species.scientific_name.lower())
-        species_with_images.add(key)
-    
-    # Get species without images (unique by common_name and scientific_name)
+    # Track unique combinations of common_name and scientific_name
     species_data = []
     seen_combinations = set()
     
-    for species in all_species.filter(image__isnull=True).order_by('common_name', 'scientific_name'):
+    # Process all species (both with and without images)
+    for species in all_species.order_by('common_name', 'scientific_name'):
         key = (species.common_name.lower(), species.scientific_name.lower())
         
-        # Skip if we've already seen this combination or if it has an image
-        if key in seen_combinations or key in species_with_images:
+        # Skip if we've already seen this combination
+        if key in seen_combinations:
             continue
         
         seen_combinations.add(key)
@@ -511,11 +505,30 @@ def upload_species_images(request):
         ).count()
         
         if tree_count > 0:  # Only show if there are trees
+            # Check if this species has an image (check any species with same common_name and scientific_name)
+            has_image = TreeSpecies.objects.filter(
+                common_name=species.common_name,
+                scientific_name=species.scientific_name,
+                user=request.user,
+                image__isnull=False
+            ).exists()
+            
+            # Get the species instance that has the image (if any)
+            species_with_image = None
+            if has_image:
+                species_with_image = TreeSpecies.objects.filter(
+                    common_name=species.common_name,
+                    scientific_name=species.scientific_name,
+                    user=request.user,
+                    image__isnull=False
+                ).first()
+            
             species_data.append({
-                'species': species,
+                'species': species_with_image if species_with_image else species,
                 'tree_count': tree_count,
                 'common_name': species.common_name,
                 'scientific_name': species.scientific_name,
+                'has_image': has_image,
             })
     
     context = {
@@ -544,13 +557,6 @@ def upload_species_image_api(request):
         except TreeSpecies.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Species not found'}, status=404)
         
-        # Check if species already has an image
-        if species.image:
-            return JsonResponse({
-                'success': False,
-                'error': f'Image already exists for {species.common_name} ({species.scientific_name})'
-            }, status=400)
-        
         # Check if image file is provided
         if 'image' not in request.FILES:
             return JsonResponse({'success': False, 'error': 'No image file provided'}, status=400)
@@ -561,28 +567,26 @@ def upload_species_image_api(request):
         image_file.seek(0)
         image_data = image_file.read()
         
-        # Store binary data in species
-        species.image = image_data
-        
         # Determine and store image format
         content_type = image_file.content_type
         if 'jpeg' in content_type or 'jpg' in content_type:
-            species.image_format = 'JPEG'
+            image_format = 'JPEG'
         elif 'png' in content_type:
-            species.image_format = 'PNG'
+            image_format = 'PNG'
         else:
             return JsonResponse({'success': False, 'error': 'Unsupported image format. Only JPEG and PNG are allowed.'}, status=400)
         
-        # Save species with image
+        # Store binary data in species (update if exists, create if not)
+        species.image = image_data
+        species.image_format = image_format
         species.save()
         
         # Update all species with same common_name and scientific_name to have the same image
         TreeSpecies.objects.filter(
             common_name=species.common_name,
             scientific_name=species.scientific_name,
-            user=request.user,
-            image__isnull=True
-        ).update(image=image_data, image_format=species.image_format)
+            user=request.user
+        ).update(image=image_data, image_format=image_format)
         
         return JsonResponse({
             'success': True,
@@ -1784,34 +1788,49 @@ def api_species_list(request):
 
 
 def api_endemic_trees_list(request):
-    """API endpoint to get endemic trees data from CSV for auto-population."""
-    import os
+    """API endpoint to get endemic trees data for auto-population."""
     try:
-        # Path to the CSV file
-        csv_path = r'c:\Users\ASUS\Documents\EndemicTreesList.csv'
+        # Hardcoded endemic trees data for autocomplete
+        trees_data = [
+            {'common_name': 'Yakal', 'scientific_name': 'Shorea astylosa', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'Red Lauan', 'scientific_name': 'Shorea negrosensis', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'White Lauan', 'scientific_name': 'Shorea contorta', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'Tanguile', 'scientific_name': 'Shorea polysperma', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'Almon', 'scientific_name': 'Shorea almon', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'Mayapis', 'scientific_name': 'Shorea palosapis', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'Palosapis', 'scientific_name': 'Anisoptera thurifera', 'family': 'Dipterocarpaceae', 'genus': 'Anisoptera'},
+            {'common_name': 'Bagtikan', 'scientific_name': 'Parashorea malaanonan', 'family': 'Dipterocarpaceae', 'genus': 'Parashorea'},
+            {'common_name': 'Guijo', 'scientific_name': 'Shorea guiso', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
+            {'common_name': 'Manggachapui', 'scientific_name': 'Hopea acuminata', 'family': 'Dipterocarpaceae', 'genus': 'Hopea'},
+            {'common_name': 'Philippine Teak', 'scientific_name': 'Tectona philippinensis', 'family': 'Lamiaceae', 'genus': 'Tectona'},
+            {'common_name': 'Kamagong', 'scientific_name': 'Diospyros blancoi', 'family': 'Ebenaceae', 'genus': 'Diospyros'},
+            {'common_name': 'Bolong Eta', 'scientific_name': 'Diospyros pilosanthera', 'family': 'Ebenaceae', 'genus': 'Diospyros'},
+            {'common_name': 'Philippine Ironwood', 'scientific_name': 'Xanthostemon verdugonianus', 'family': 'Myrtaceae', 'genus': 'Xanthostemon'},
+            {'common_name': 'Banuyo', 'scientific_name': 'Wallaceodendron celebicum', 'family': 'Fabaceae', 'genus': 'Wallaceodendron'},
+            {'common_name': 'Katmon', 'scientific_name': 'Dillenia philippinensis', 'family': 'Dilleniaceae', 'genus': 'Dillenia'},
+            {'common_name': 'Malabayabas', 'scientific_name': 'Tristaniopsis decorticata', 'family': 'Myrtaceae', 'genus': 'Tristaniopsis'},
+            {'common_name': 'Tindalo', 'scientific_name': 'Afzelia rhomboidea', 'family': 'Fabaceae', 'genus': 'Afzelia'},
+            {'common_name': 'Kalantas', 'scientific_name': 'Toona calantas', 'family': 'Meliaceae', 'genus': 'Toona'},
+            {'common_name': 'Nato', 'scientific_name': 'Palaquium philippense', 'family': 'Sapotaceae', 'genus': 'Palaquium'},
+            {'common_name': 'Malasantol', 'scientific_name': 'Sandoricum vidalii', 'family': 'Meliaceae', 'genus': 'Sandoricum'},
+            {'common_name': 'Ipil', 'scientific_name': 'Intsia bijuga', 'family': 'Fabaceae', 'genus': 'Intsia'},
+            {'common_name': 'Batulinau', 'scientific_name': 'Diospyros ferrea', 'family': 'Ebenaceae', 'genus': 'Diospyros'},
+            {'common_name': 'Apitong', 'scientific_name': 'Dipterocarpus grandiflorus', 'family': 'Dipterocarpaceae', 'genus': 'Dipterocarpus'},
+            {'common_name': 'Panau', 'scientific_name': 'Dipterocarpus gracilis', 'family': 'Dipterocarpaceae', 'genus': 'Dipterocarpus'},
+            {'common_name': 'Malapapaya', 'scientific_name': 'Polyscias nodosa', 'family': 'Araliaceae', 'genus': 'Polyscias'},
+            {'common_name': 'Banaba', 'scientific_name': 'Lagerstroemia speciosa', 'family': 'Lythraceae', 'genus': 'Lagerstroemia'},
+            {'common_name': 'Almaciga', 'scientific_name': 'Agathis philippinensis', 'family': 'Araucariaceae', 'genus': 'Agathis'},
+            {'common_name': 'Udling', 'scientific_name': 'Astronia cumingiana', 'family': 'Melastomataceae', 'genus': 'Astronia'},
+            {'common_name': 'Bakan', 'scientific_name': 'Litsea philippinensis', 'family': 'Lauraceae', 'genus': 'Litsea'},
+            {'common_name': 'Celtis', 'scientific_name': 'Celtis philippensis', 'family': 'Cannabaceae', 'genus': 'Celtis'},
+            {'common_name': 'Balete', 'scientific_name': 'Ficus benjamina', 'family': 'Moraceae', 'genus': 'Ficus'},
+            {'common_name': 'Bitanghol', 'scientific_name': 'Calophyllum blancoi', 'family': 'Clusiaceae', 'genus': 'Calophyllum'},
+            {'common_name': 'Kalingag', 'scientific_name': 'Cinnamomum mercadoi', 'family': 'Lauraceae', 'genus': 'Cinnamomum'},
+            {'common_name': 'Bitaog', 'scientific_name': 'Calophyllum inophyllum', 'family': 'Clusiaceae', 'genus': 'Calophyllum'},
+            {'common_name': 'Clethra sp', 'scientific_name': 'Clethra sp.', 'family': 'Clethraceae', 'genus': 'Clethra L.'},
+        ]
         
-        # Check if file exists
-        if not os.path.exists(csv_path):
-            print(f"[API] CSV file not found at: {csv_path}")
-            return JsonResponse({
-                'success': False,
-                'error': f'CSV file not found at: {csv_path}'
-            }, status=404)
-        
-        print(f"[API] Reading CSV file from: {csv_path}")
-        # Read CSV file
-        trees_data = []
-        with open(csv_path, 'r', encoding='utf-8') as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                trees_data.append({
-                    'common_name': row.get('Common Name', '').strip(),
-                    'scientific_name': row.get('Scientific Name', '').strip(),
-                    'family': row.get('Family', '').strip(),
-                    'genus': row.get('Genus', '').strip()
-                })
-        
-        print(f"[API] Loaded {len(trees_data)} trees from CSV")
+        print(f"[API] Loaded {len(trees_data)} trees for autocomplete")
         response = JsonResponse({
             'success': True,
             'trees': trees_data

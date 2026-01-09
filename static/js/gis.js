@@ -1516,9 +1516,9 @@ document.addEventListener("DOMContentLoaded", () => {
         images: locationData.images
       })
       
-      // Build image section - show first available image or images for each species
+      // Build image section - only show images when filtering by specific species (showStats = true)
       let imageSection = ''
-      if (locationData.images.length > 0) {
+      if (showStats && locationData.images.length > 0) {
         // If only one image, show it prominently
         if (locationData.images.length === 1) {
           imageSection = `<div style="margin: 8px 0;"><img src="${locationData.images[0]}" alt="Tree Image" style="max-width: 220px; max-height: 150px; border-radius: 6px; object-fit: cover;" onerror="this.style.display='none'"></div>`

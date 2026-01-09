@@ -229,6 +229,64 @@
         color: var(--text-secondary);
         opacity: 0.5;
     }
+    
+    .image-note {
+        background: #fff3cd;
+        color: #856404;
+        padding: 0.75rem;
+        border-radius: var(--border-radius-sm);
+        margin-bottom: 1rem;
+        border: 1px solid #ffeaa7;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .image-note i {
+        font-size: 1.1rem;
+    }
+    
+    .current-image-container {
+        margin-bottom: 1rem;
+        padding: 1rem;
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: var(--border-radius-sm);
+    }
+    
+    .current-image-container img {
+        max-width: 200px;
+        max-height: 200px;
+        border-radius: var(--border-radius-sm);
+        border: 1px solid var(--border-color);
+        object-fit: cover;
+    }
+    
+    .change-image-btn {
+        padding: 0.5rem 1.5rem;
+        background: var(--color-primary, #4e73df);
+        color: white;
+        border: none;
+        border-radius: var(--border-radius-sm);
+        cursor: pointer;
+        font-weight: 500;
+        white-space: nowrap;
+        transition: background 0.3s ease;
+        margin-top: 0.5rem;
+    }
+    
+    .change-image-btn:hover:not(:disabled) {
+        background: var(--color-primary-dark, #3d5aa3);
+    }
+    
+    .change-image-form {
+        display: none;
+        margin-top: 1rem;
+    }
+    
+    .change-image-form.show {
+        display: block;
+    }
 </style>
 {% endblock %}
 
@@ -244,7 +302,7 @@
     <h1 class="page-title">
         <i class="fas fa-image"></i> Upload Images for Species
     </h1>
-    <p class="text-muted mb-4">Upload images for tree species that don't have images yet. Images will be shared by all trees with the same common name and scientific name.</p>
+    <p class="text-muted mb-4">Upload or change images for tree species. Images will be shared by all trees with the same common name and scientific name.</p>
     
     <div class="filter-section">
         <h5 style="margin-bottom: 1rem; color: var(--text-primary);">
@@ -282,16 +340,42 @@
                 </div>
                 
                 <div class="upload-section">
-                    <form class="upload-form" data-species-id="{{ item.species.id }}" data-common-name="{{ item.common_name }}" data-scientific-name="{{ item.scientific_name }}">
-                        <div class="file-input-wrapper">
-                            <label for="image_{{ item.species.id }}">Select Image:</label>
-                            <input type="file" id="image_{{ item.species.id }}" name="image" accept="image/jpeg,image/png,image/jpg" required>
-                            <small class="form-text text-muted">Only JPEG and PNG images are supported.</small>
+                    {% if item.has_image %}
+                        <div class="image-note">
+                            <i class="fas fa-info-circle"></i>
+                            <span>This tree already has an image.</span>
                         </div>
-                        <button type="submit" class="upload-btn">
-                            <i class="fas fa-upload"></i> Upload
+                        <div class="current-image-container">
+                            <img src="{% url 'app:species_image' item.species.id %}" alt="{{ item.common_name }}" onerror="this.style.display='none'">
+                        </div>
+                        <button type="button" class="change-image-btn" data-species-id="{{ item.species.id }}">
+                            <i class="fas fa-edit"></i> Change Image
                         </button>
-                    </form>
+                        <form class="upload-form change-image-form" data-species-id="{{ item.species.id }}" data-common-name="{{ item.common_name }}" data-scientific-name="{{ item.scientific_name }}">
+                            <div class="file-input-wrapper">
+                                <label for="image_{{ item.species.id }}">Select New Image:</label>
+                                <input type="file" id="image_{{ item.species.id }}" name="image" accept="image/jpeg,image/png,image/jpg" required>
+                                <small class="form-text text-muted">Only JPEG and PNG images are supported.</small>
+                            </div>
+                            <button type="submit" class="upload-btn">
+                                <i class="fas fa-upload"></i> Update Image
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary cancel-change-btn" style="margin-left: 0.5rem;">
+                                Cancel
+                            </button>
+                        </form>
+                    {% else %}
+                        <form class="upload-form" data-species-id="{{ item.species.id }}" data-common-name="{{ item.common_name }}" data-scientific-name="{{ item.scientific_name }}">
+                            <div class="file-input-wrapper">
+                                <label for="image_{{ item.species.id }}">Select Image:</label>
+                                <input type="file" id="image_{{ item.species.id }}" name="image" accept="image/jpeg,image/png,image/jpg" required>
+                                <small class="form-text text-muted">Only JPEG and PNG images are supported.</small>
+                            </div>
+                            <button type="submit" class="upload-btn">
+                                <i class="fas fa-upload"></i> Upload
+                            </button>
+                        </form>
+                    {% endif %}
                     <div class="upload-status" id="status_{{ item.species.id }}"></div>
                 </div>
             </div>
@@ -359,6 +443,38 @@ document.addEventListener('DOMContentLoaded', function() {
         filterSpecies();
     });
     
+    // Handle "Change Image" button clicks
+    document.querySelectorAll('.change-image-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const speciesId = this.dataset.speciesId;
+            const form = document.querySelector(`.change-image-form[data-species-id="${speciesId}"]`);
+            if (form) {
+                form.classList.add('show');
+                this.style.display = 'none';
+            }
+        });
+    });
+    
+    // Handle "Cancel" button clicks
+    document.querySelectorAll('.cancel-change-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const form = this.closest('.change-image-form');
+            if (form) {
+                form.classList.remove('show');
+                const speciesId = form.dataset.speciesId;
+                const changeBtn = document.querySelector(`.change-image-btn[data-species-id="${speciesId}"]`);
+                if (changeBtn) {
+                    changeBtn.style.display = 'block';
+                }
+                // Reset file input
+                const fileInput = form.querySelector('input[type="file"]');
+                if (fileInput) {
+                    fileInput.value = '';
+                }
+            }
+        });
+    });
+    
     // Handle form submissions
     document.querySelectorAll('.upload-form').forEach(form => {
         form.addEventListener('submit', function(e) {
@@ -401,19 +517,32 @@ document.addEventListener('DOMContentLoaded', function() {
                     statusDiv.className = 'upload-status success';
                     statusDiv.style.display = 'block';
                     
-                    // Remove the card after successful upload
-                    setTimeout(() => {
-                        const card = form.closest('.species-card');
-                        card.style.transition = 'opacity 0.3s';
-                        card.style.opacity = '0';
+                    // If it was a change image form, hide it and show the change button again
+                    if (form.classList.contains('change-image-form')) {
+                        form.classList.remove('show');
+                        const changeBtn = document.querySelector(`.change-image-btn[data-species-id="${speciesId}"]`);
+                        if (changeBtn) {
+                            changeBtn.style.display = 'block';
+                        }
+                        // Reload the page to show the updated image
                         setTimeout(() => {
-                            card.remove();
-                            // Check if no more cards
-                            if (document.querySelectorAll('.species-card').length === 0) {
-                                location.reload();
-                            }
-                        }, 300);
-                    }, 1500);
+                            location.reload();
+                        }, 1500);
+                    } else {
+                        // Remove the card after successful upload (only for new uploads)
+                        setTimeout(() => {
+                            const card = form.closest('.species-card');
+                            card.style.transition = 'opacity 0.3s';
+                            card.style.opacity = '0';
+                            setTimeout(() => {
+                                card.remove();
+                                // Check if no more cards
+                                if (document.querySelectorAll('.species-card').length === 0) {
+                                    location.reload();
+                                }
+                            }, 300);
+                        }, 1500);
+                    }
                 } else {
                     statusDiv.textContent = data.error || 'Error uploading image.';
                     statusDiv.className = 'upload-status error';

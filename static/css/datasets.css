@@ -2,7 +2,7 @@
 .datasets-container {
     padding: 1rem 0;
     max-width: 100%;
-    overflow-x: hidden;
+    overflow-x: auto;
   }
   
   .datasets-actions {
@@ -118,6 +118,7 @@
     overflow-x: auto;
     overflow-y: visible;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
   }
   
   /* Table wrapper for horizontal scrolling */
@@ -126,29 +127,35 @@
     overflow-y: visible;
     max-width: 100%;
     -webkit-overflow-scrolling: touch;
+    width: 100%;
   }
   
   .datasets-table {
     width: 100%;
-    min-width: 1200px; /* Minimum width to prevent squishing - increased for Hectares column */
+    min-width: 1600px; /* Minimum width to accommodate all columns */
     color: var(--text-primary);
     table-layout: fixed;
+    margin: 0;
   }
   
   /* Column width management */
   .datasets-table th:nth-child(1), .datasets-table td:nth-child(1) { width: 40px; } /* Checkbox */
-  .datasets-table th:nth-child(2), .datasets-table td:nth-child(2) { width: 12%; } /* Common Name */
-  .datasets-table th:nth-child(3), .datasets-table td:nth-child(3) { width: 12%; } /* Scientific Name */
-  .datasets-table th:nth-child(4), .datasets-table td:nth-child(4) { width: 8%; }  /* Species */
-  .datasets-table th:nth-child(5), .datasets-table td:nth-child(5) { width: 8%; }  /* Family */
-  .datasets-table th:nth-child(6), .datasets-table td:nth-child(6) { width: 8%; }  /* Genus */
-  .datasets-table th:nth-child(7), .datasets-table td:nth-child(7) { width: 8%; }  /* Population */
-  .datasets-table th:nth-child(8), .datasets-table td:nth-child(8) { width: 7%; }  /* Hectares */
-  .datasets-table th:nth-child(9), .datasets-table td:nth-child(9) { width: 10%; } /* Health Status */
-  .datasets-table th:nth-child(10), .datasets-table td:nth-child(10) { width: 11%; } /* Coordinates */
-  .datasets-table th:nth-child(11), .datasets-table td:nth-child(11) { width: 6%; }  /* Year */
-  .datasets-table th:nth-child(12), .datasets-table td:nth-child(12) { width: 10%; } /* Notes */
-  .datasets-table th:nth-child(13), .datasets-table td:nth-child(13) { 
+  .datasets-table th:nth-child(2), .datasets-table td:nth-child(2) { width: 10%; } /* Common Name */
+  .datasets-table th:nth-child(3), .datasets-table td:nth-child(3) { width: 10%; } /* Scientific Name */
+  .datasets-table th:nth-child(4), .datasets-table td:nth-child(4) { width: 7%; }  /* Family */
+  .datasets-table th:nth-child(5), .datasets-table td:nth-child(5) { width: 7%; }  /* Genus */
+  .datasets-table th:nth-child(6), .datasets-table td:nth-child(6) { width: 6%; }  /* Hectares */
+  .datasets-table th:nth-child(7), .datasets-table td:nth-child(7) { width: 5%; }  /* Planted */
+  .datasets-table th:nth-child(8), .datasets-table td:nth-child(8) { width: 5%; }  /* Existing */
+  .datasets-table th:nth-child(9), .datasets-table td:nth-child(9) { width: 5%; }  /* Height */
+  .datasets-table th:nth-child(10), .datasets-table td:nth-child(10) { width: 6%; } /* Diameter Breast */
+  .datasets-table th:nth-child(11), .datasets-table td:nth-child(11) { width: 5%; } /* Healthy */
+  .datasets-table th:nth-child(12), .datasets-table td:nth-child(12) { width: 6%; } /* Not Healthy */
+  .datasets-table th:nth-child(13), .datasets-table td:nth-child(13) { width: 6%; } /* Latitude */
+  .datasets-table th:nth-child(14), .datasets-table td:nth-child(14) { width: 6%; } /* Longitude */
+  .datasets-table th:nth-child(15), .datasets-table td:nth-child(15) { width: 10%; } /* Address */
+  .datasets-table th:nth-child(16), .datasets-table td:nth-child(16) { width: 4%; } /* Year */
+  .datasets-table th:nth-child(17), .datasets-table td:nth-child(17) { 
     width: 10% !important; 
     min-width: 120px !important;
     max-width: none !important;
@@ -159,14 +166,14 @@
   }
   
   /* Ensure Actions column header is also sticky */
-  .datasets-table thead th:nth-child(13) {
+  .datasets-table thead th:nth-child(17) {
     position: sticky;
     right: 0;
     z-index: 11;
     background-color: rgba(255, 255, 255, 0.05);
   }
   
-  html[data-theme="light"] .datasets-table thead th:nth-child(13) {
+  html[data-theme="light"] .datasets-table thead th:nth-child(17) {
     background-color: rgba(0, 0, 0, 0.05);
   }
   
@@ -192,7 +199,7 @@
   
   /* Allow text wrapping for specific columns */
   .datasets-table td:nth-child(3), /* Scientific Name */
-  .datasets-table td:nth-child(12) { /* Notes */
+  .datasets-table td:nth-child(15) { /* Address */
     white-space: normal;
     word-wrap: break-word;
   }
@@ -418,10 +425,48 @@
     color: var(--text-primary);
   }
   
+  /* Custom scrollbar styling for horizontal scroll */
+  .datasets-table-container::-webkit-scrollbar,
+  .table-responsive::-webkit-scrollbar {
+    height: 12px;
+  }
+  
+  .datasets-table-container::-webkit-scrollbar-track,
+  .table-responsive::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 6px;
+  }
+  
+  .datasets-table-container::-webkit-scrollbar-thumb,
+  .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+  }
+  
+  .datasets-table-container::-webkit-scrollbar-thumb:hover,
+  .table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
+  }
+  
+  html[data-theme="light"] .datasets-table-container::-webkit-scrollbar-track,
+  html[data-theme="light"] .table-responsive::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.05);
+  }
+  
+  html[data-theme="light"] .datasets-table-container::-webkit-scrollbar-thumb,
+  html[data-theme="light"] .table-responsive::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.2);
+  }
+  
+  html[data-theme="light"] .datasets-table-container::-webkit-scrollbar-thumb:hover,
+  html[data-theme="light"] .table-responsive::-webkit-scrollbar-thumb:hover {
+    background: rgba(0, 0, 0, 0.3);
+  }
+  
   /* Responsive adjustments */
-  @media (max-width: 1200px) {
+  @media (max-width: 1600px) {
     .datasets-table {
-      min-width: 1200px;
+      min-width: 1600px;
     }
   }
   

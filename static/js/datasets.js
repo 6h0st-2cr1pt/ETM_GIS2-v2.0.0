@@ -122,16 +122,18 @@ document.addEventListener("DOMContentLoaded", () => {
             paginationControls.appendChild(prev);
         }
         
-        // Create page number buttons
-        for (let i = 1; i <= totalPages; i++) {
+        // Create only 3 page number buttons (will be updated dynamically)
+        for (let i = 1; i <= Math.min(3, totalPages); i++) {
             const pageButton = document.createElement('button');
             pageButton.className = 'pagination-button';
+            pageButton.dataset.pageNum = i;
             pageButton.textContent = i;
             if (i === 1) {
                 pageButton.classList.add('active');
             }
             pageButton.addEventListener('click', () => {
-                showPage(i);
+                const pageNum = parseInt(pageButton.dataset.pageNum);
+                showPage(pageNum);
             });
             paginationControls.appendChild(pageButton);
         }
@@ -158,12 +160,43 @@ document.addEventListener("DOMContentLoaded", () => {
         const totalPages = Math.ceil(totalRows / itemsPerPage);
         const pageButtons = document.querySelectorAll('.pagination-controls .pagination-button:not(#prev-page):not(#next-page)');
         
+        // Calculate which 3 pages to show
+        let startPage, endPage;
+        
+        if (totalPages <= 3) {
+            // If 3 or fewer pages, show all
+            startPage = 1;
+            endPage = totalPages;
+        } else if (currentPage <= 2) {
+            // If on page 1 or 2, show pages 1, 2, 3
+            startPage = 1;
+            endPage = 3;
+        } else if (currentPage >= totalPages - 1) {
+            // If on last or second-to-last page, show last 3 pages
+            startPage = totalPages - 2;
+            endPage = totalPages;
+        } else {
+            // Otherwise, show current page - 1, current, current + 1
+            startPage = currentPage - 1;
+            endPage = currentPage + 1;
+        }
+        
+        // Update the page buttons
         pageButtons.forEach((button, index) => {
-            const pageNum = index + 1;
-            if (pageNum === currentPage) {
-                button.classList.add('active');
+            const pageNum = startPage + index;
+            if (pageNum <= totalPages) {
+                button.dataset.pageNum = pageNum;
+                button.textContent = pageNum;
+                button.style.display = '';
+                
+                if (pageNum === currentPage) {
+                    button.classList.add('active');
+                } else {
+                    button.classList.remove('active');
+                }
             } else {
-                button.classList.remove('active');
+                // Hide extra buttons if not needed
+                button.style.display = 'none';
             }
         });
     }
@@ -649,8 +682,8 @@ document.addEventListener("DOMContentLoaded", () => {
   
     if (exportButton) {
       exportButton.addEventListener("click", () => {
-        const format = document.getElementById("exportFormat").value
-        exportData(format)
+        // Export as CSV only
+        exportData("csv")
       })
     }
   
@@ -659,17 +692,89 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!table) return
   
       const rows = table.querySelectorAll("tbody tr")
-      const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim())
+      const allHeaders = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim())
+      
+      // Define the columns to export (in order)
+      const exportColumns = [
+        "COMMON NAME",
+        "SCIENTIFIC NAME",
+        "FAMILY",
+        "GENUS",
+        "HECTARS",
+        "PLANTED",
+        "EXISTING",
+        "HEIGHT",
+        "DIAMETER BREAST",
+        "HEALTHY",
+        "NOT HEALTHY",
+        "LATITUDE",
+        "LONGITUDE",
+        "ADDRESS",
+        "YEAR"
+      ]
+      
+      // Filter headers to only include export columns
+      const headers = exportColumns.filter(col => allHeaders.includes(col))
   
       // Prepare data array
       const data = []
       rows.forEach((row) => {
         const rowData = {}
         const cells = row.querySelectorAll("td")
-        cells.forEach((cell, index) => {
-          rowData[headers[index]] = cell.textContent.trim()
+        
+        // Map all headers to cell values
+        allHeaders.forEach((header, index) => {
+          if (cells[index]) {
+            const cell = cells[index]
+            // Try to get value from data attribute first (more reliable for raw values)
+            // Map header to data attribute name
+            const dataAttrMap = {
+              "COMMON NAME": "common_name",
+              "SCIENTIFIC NAME": "scientific_name",
+              "FAMILY": "family",
+              "GENUS": "genus",
+              "HECTARS": "hectars",
+              "PLANTED": "planted",
+              "EXISTING": "existing",
+              "HEIGHT": "height",
+              "DIAMETER BREAST": "diameter_breast",
+              "HEALTHY": "healthy",
+              "NOT HEALTHY": "not_healthy",
+              "LATITUDE": "latitude",
+              "LONGITUDE": "longitude",
+              "ADDRESS": "address",
+              "YEAR": "year"
+            }
+            
+            const dataAttr = dataAttrMap[header]
+            let value = ""
+            
+            if (dataAttr) {
+              // Try to get value from data attribute (raw value without formatting)
+              // Handle both camelCase (data-common-name) and underscore (data-common_name) formats
+              const dataAttrValue = cell.getAttribute(`data-${dataAttr}`)
+              if (dataAttrValue !== null) {
+                value = dataAttrValue
+              } else {
+                // Fall back to text content
+                value = cell.textContent.trim()
+              }
+            } else {
+              // Fall back to text content
+              value = cell.textContent.trim()
+            }
+            
+            rowData[header] = value
+          }
         })
-        data.push(rowData)
+        
+        // Only include export columns in the data
+        const filteredRowData = {}
+        headers.forEach(header => {
+          filteredRowData[header] = rowData[header] || ""
+        })
+        
+        data.push(filteredRowData)
       })
   
       switch (format) {
@@ -677,7 +782,7 @@ document.addEventListener("DOMContentLoaded", () => {
           exportCSV(data, headers)
           break
         case "json":
-          exportJSON(data)
+          exportJSON(data, headers)
           break
         case "excel":
           exportExcel(data, headers)
@@ -688,13 +793,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   
     function exportCSV(data, headers) {
+      // Create CSV header row
       let csv = headers.join(",") + "\n"
   
       data.forEach((row) => {
         const values = headers.map((header) => {
-          const value = row[header] || ""
-          // Escape quotes and wrap in quotes if contains comma
-          return value.includes(",") ? `"${value.replace(/"/g, '""')}"` : value
+          let value = row[header] || ""
+          // Clean up value - remove HTML tags, extra whitespace
+          value = value.replace(/<[^>]*>/g, "").trim()
+          // Handle empty values
+          if (value === "" || value === "-") {
+            value = ""
+          }
+          // Escape quotes and wrap in quotes if contains comma, newline, or quote
+          if (value.includes(",") || value.includes("\n") || value.includes('"')) {
+            return `"${value.replace(/"/g, '""')}"`
+          }
+          return value
         })
         csv += values.join(",") + "\n"
       })
@@ -702,8 +817,23 @@ document.addEventListener("DOMContentLoaded", () => {
       downloadFile(csv, "endemic-trees-data.csv", "text/csv")
     }
   
-    function exportJSON(data) {
-      const json = JSON.stringify(data, null, 2)
+    function exportJSON(data, headers) {
+      // Clean up data - remove HTML tags and format properly
+      const cleanedData = data.map(row => {
+        const cleanedRow = {}
+        headers.forEach(header => {
+          let value = row[header] || ""
+          value = value.replace(/<[^>]*>/g, "").trim()
+          if (value === "" || value === "-") {
+            cleanedRow[header] = null
+          } else {
+            cleanedRow[header] = value
+          }
+        })
+        return cleanedRow
+      })
+      
+      const json = JSON.stringify(cleanedData, null, 2)
       downloadFile(json, "endemic-trees-data.json", "application/json")
     }
   
@@ -713,8 +843,18 @@ document.addEventListener("DOMContentLoaded", () => {
   
       data.forEach((row) => {
         const values = headers.map((header) => {
-          const value = row[header] || ""
-          return value.includes(",") ? `"${value.replace(/"/g, '""')}"` : value
+          let value = row[header] || ""
+          // Clean up value - remove HTML tags, extra whitespace
+          value = value.replace(/<[^>]*>/g, "").trim()
+          // Handle empty values
+          if (value === "" || value === "-") {
+            value = ""
+          }
+          // Escape quotes and wrap in quotes if contains comma, newline, or quote
+          if (value.includes(",") || value.includes("\n") || value.includes('"')) {
+            return `"${value.replace(/"/g, '""')}"`
+          }
+          return value
         })
         csv += values.join(",") + "\n"
       })
