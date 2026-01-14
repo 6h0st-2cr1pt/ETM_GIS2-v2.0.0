@@ -601,16 +601,16 @@ document.addEventListener("DOMContentLoaded", () => {
           // Show/hide rows based on search
           allRows.forEach((row) => {
             const rowText = row.textContent.toLowerCase()
-            if (rowText.indexOf(searchTerm) > -1) {
+          if (rowText.indexOf(searchTerm) > -1) {
               row.style.display = ""
-            } else {
+          } else {
               row.style.display = "none"
-              // Uncheck hidden rows
+            // Uncheck hidden rows
               const checkbox = row.querySelector('.row-checkbox')
-              if (checkbox) {
-                checkbox.checked = false
-              }
+            if (checkbox) {
+              checkbox.checked = false
             }
+          }
           })
         }
         

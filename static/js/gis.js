@@ -492,8 +492,8 @@ document.addEventListener("DOMContentLoaded", () => {
   ]
   let colorIndex = 0
 
-  // Load all trees and seeds by default (aggregated by address for "All Trees")
-  Promise.all([loadTreesByAddress(), loadSeeds()])
+  // Load all trees and seeds by default (show all individual tree pins for "All Trees")
+  Promise.all([loadTrees(), loadSeeds()])
     .then(() => {
       console.log("Initial data load complete")
       // Ensure seed layer is visible
@@ -594,7 +594,7 @@ document.addEventListener("DOMContentLoaded", () => {
       treeLayer.clearLayers()
 
       if (filterValue === "all") {
-        loadTreesByAddress()
+        loadTrees() // Show all individual tree pins
         // Hide the filtered data container
         filteredDataContainer.style.display = "none"
       } else {
@@ -1297,14 +1297,10 @@ document.addEventListener("DOMContentLoaded", () => {
         const healthStatus = p.health_status ? p.health_status.replace(/_/g, " ") : 'Unknown';
         
         const imageHtml = p.image_url ? `<div style="margin:8px 0"><img src="${p.image_url}" alt="${commonName}" style="max-width:220px;border-radius:6px"></div>` : ''
-        // Format hectares - handle null, undefined, or numeric values (including 0)
-        let hectaresDisplay = 'N/A'
-        if (p.hectares !== null && p.hectares !== undefined && p.hectares !== '') {
-          const hectaresNum = Number(p.hectares)
-          if (!isNaN(hectaresNum) && hectaresNum >= 0) {
-            hectaresDisplay = `${hectaresNum.toFixed(2)} ha`
-          }
-        }
+        
+        // Determine Existing or Planted status
+        const isPlanted = p.is_planted !== undefined ? p.is_planted : false
+        const treeStatus = isPlanted ? 'Planted' : 'Existing'
         
         const popupContent = `
           <div class="tree-popup">
@@ -1314,17 +1310,15 @@ document.addEventListener("DOMContentLoaded", () => {
             <table class="popup-table">
               <tr><td>Family:</td><td>${family}</td></tr>
               <tr><td>Genus:</td><td>${genus}</td></tr>
-              <tr><td>Population:</td><td>${p.population || 0}</td></tr>
-              <tr><td><strong>Hectares:</strong></td><td>${hectaresDisplay}</td></tr>
               <tr><td>Health Status:</td><td>
                 <div class="health-status-indicator" style="display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; ${p.is_healthy ? 'background-color: #4CAF50; color: white;' : 'background-color: #F44336; color: white;'}">
                   ${p.is_healthy !== undefined ? (p.is_healthy ? '✓ Healthy' : '✗ Not Healthy') : 'Status Unknown'}
                 </div>
               </td></tr>
+              <tr><td>Status:</td><td>${treeStatus}</td></tr>
               <tr><td>Year:</td><td>${p.year || 'N/A'}</td></tr>
-              <tr><td>Location:</td><td>${address ? address : `${location} (${Number(__pos.lat).toFixed(6)}, ${Number(__pos.lng).toFixed(6)})`}</td></tr>
+              <tr><td>Address:</td><td>${address || 'N/A'}</td></tr>
             </table>
-            ${p.notes ? `<p class="popup-notes">${p.notes}</p>` : ""}
           </div>
         `
         layer.bindPopup(popupContent)
@@ -1384,10 +1378,8 @@ document.addEventListener("DOMContentLoaded", () => {
         })
       }
       
-      // Add tree to this location
+      // Add tree to this location - store individual tree details (do not aggregate)
       const locationData = locationMap.get(key)
-      const treeKey = `${commonName}|${feature.properties.scientific_name || 'Unknown'}`
-      const existingTree = locationData.trees.find(t => t.key === treeKey)
       
       // Collect image URL if available
       const imageUrl = feature.properties.image_url || null
@@ -1395,25 +1387,18 @@ document.addEventListener("DOMContentLoaded", () => {
         locationData.images.push(imageUrl)
       }
       
-      if (existingTree) {
-        // Aggregate population for same species at same location
-        const oldPop = existingTree.population
-        existingTree.population += population
-        // Ensure image URL is stored for existing tree too
-        if (imageUrl && !existingTree.image_url) {
-          existingTree.image_url = imageUrl
-        }
-        console.log(`[GIS] Aggregating ${commonName} at location ${key}: ${oldPop} + ${population} = ${existingTree.population}`)
-      } else {
-        locationData.trees.push({
-          key: treeKey,
-          common_name: commonName,
-          scientific_name: feature.properties.scientific_name || 'Unknown',
-          population: population,
-          image_url: imageUrl // Store image URL for this species
-        })
-        console.log(`[GIS] Adding ${commonName} at location ${key}: population = ${population}, image_url: ${imageUrl ? 'yes' : 'no'}`)
-      }
+      // Store individual tree record with all details
+      locationData.trees.push({
+        common_name: commonName,
+        scientific_name: feature.properties.scientific_name || 'Unknown',
+        family: feature.properties.family || 'Unknown',
+        genus: feature.properties.genus || 'Unknown',
+        is_healthy: isHealthy,
+        is_planted: isPlanted,
+        year: feature.properties.year || null,
+        image_url: imageUrl,
+        population: population // Keep for reference but show individual trees
+      })
       
       // Collect height and diameter values for averaging
       if (height !== null && !isNaN(height)) {
@@ -1457,16 +1442,8 @@ document.addEventListener("DOMContentLoaded", () => {
     locationMap.forEach((locationData, key) => {
       const latlng = [locationData.lat, locationData.lng]
       
-      // Calculate total population for this location
-      const totalPopulation = locationData.trees.reduce((sum, tree) => sum + tree.population, 0)
-      
-      // Calculate average height and diameter
-      const avgHeight = locationData.heights.length > 0 
-        ? (locationData.heights.reduce((sum, h) => sum + h, 0) / locationData.heights.length).toFixed(2)
-        : 'N/A'
-      const avgDiameter = locationData.diameters.length > 0
-        ? (locationData.diameters.reduce((sum, d) => sum + d, 0) / locationData.diameters.length).toFixed(2)
-        : 'N/A'
+      // Calculate total population for marker size
+      const totalPopulation = locationData.trees.reduce((sum, tree) => sum + (tree.population || 1), 0)
       
       // Get color for the marker
       // If showStats is false (All Trees filter), use a special color
@@ -1481,9 +1458,9 @@ document.addEventListener("DOMContentLoaded", () => {
         markerColor = getColorForSpecies(primarySpecies)
       }
       
-      // Create marker with size based on total population
+      // Create marker with size based on number of trees at this location
       const marker = L.circleMarker(latlng, {
-        radius: Math.min(15, Math.max(8, Math.sqrt(totalPopulation) * 0.5)),
+        radius: Math.min(15, Math.max(8, Math.sqrt(locationData.trees.length) * 2)),
         fillColor: markerColor,
         color: "#fff",
         weight: 2,
@@ -1491,86 +1468,42 @@ document.addEventListener("DOMContentLoaded", () => {
         fillOpacity: 0.8,
       })
       
-      // Create popup content with table
-      let tableRows = ''
-      locationData.trees.forEach(tree => {
-        tableRows += `
-          <tr>
-            <td>${tree.common_name} <em>(${tree.scientific_name})</em></td>
-            <td style="text-align: center;">${tree.population}</td>
-          </tr>
+      // Create popup content showing individual tree information (not aggregated)
+      let treeSections = ''
+      locationData.trees.forEach((tree, index) => {
+        const treeStatus = tree.is_planted ? 'Planted' : 'Existing'
+        const healthStatus = tree.is_healthy !== undefined 
+          ? (tree.is_healthy ? '✓ Healthy' : '✗ Not Healthy')
+          : 'Status Unknown'
+        const healthColor = tree.is_healthy ? '#4CAF50' : '#F44336'
+        const imageHtml = tree.image_url 
+          ? `<div style="margin:8px 0"><img src="${tree.image_url}" alt="${tree.common_name}" style="max-width:220px;border-radius:6px"></div>` 
+          : ''
+        
+        treeSections += `
+          <div style="margin-bottom: ${index < locationData.trees.length - 1 ? '20px' : '0'}; padding-bottom: ${index < locationData.trees.length - 1 ? '20px' : '0'}; border-bottom: ${index < locationData.trees.length - 1 ? '1px solid rgba(255,255,255,0.2)' : 'none'};">
+            <h3 style="margin: 0 0 8px 0;">${tree.common_name}</h3>
+            <p style="margin: 0 0 8px 0;"><em>${tree.scientific_name}</em></p>
+            ${imageHtml}
+            <table class="popup-table" style="width: 100%; margin-top: 8px;">
+              <tr><td>Family:</td><td>${tree.family}</td></tr>
+              <tr><td>Genus:</td><td>${tree.genus}</td></tr>
+              <tr><td>Health Status:</td><td>
+                <div class="health-status-indicator" style="display: inline-block; padding: 6px 12px; border-radius: 4px; font-weight: bold; background-color: ${healthColor}; color: white;">
+                  ${healthStatus}
+                </div>
+              </td></tr>
+              <tr><td>Status:</td><td>${treeStatus}</td></tr>
+              <tr><td>Year:</td><td>${tree.year || 'N/A'}</td></tr>
+              <tr><td>Address:</td><td>${locationData.address || 'N/A'}</td></tr>
+            </table>
+          </div>
         `
       })
       
-      // Debug log for this location
-      console.log(`[GIS] Creating marker for location ${key}:`, {
-        address: locationData.address,
-        trees: locationData.trees.map(t => `${t.common_name}: ${t.population}`),
-        totalPopulation: totalPopulation,
-        avgHeight: avgHeight,
-        avgDiameter: avgDiameter,
-        totalExisting: locationData.totalExisting,
-        totalPlanted: locationData.totalPlanted,
-        totalHealthy: locationData.totalHealthy,
-        totalNotHealthy: locationData.totalNotHealthy,
-        images: locationData.images
-      })
-      
-      // Build image section - only show images when filtering by specific species (showStats = true)
-      let imageSection = ''
-      if (showStats && locationData.images.length > 0) {
-        // If only one image, show it prominently
-        if (locationData.images.length === 1) {
-          imageSection = `<div style="margin: 8px 0;"><img src="${locationData.images[0]}" alt="Tree Image" style="max-width: 220px; max-height: 150px; border-radius: 6px; object-fit: cover;" onerror="this.style.display='none'"></div>`
-        } else {
-          // Multiple images - show first one (or could show a gallery)
-          imageSection = `<div style="margin: 8px 0;"><img src="${locationData.images[0]}" alt="Tree Image" style="max-width: 220px; max-height: 150px; border-radius: 6px; object-fit: cover;" onerror="this.style.display='none'"></div>`
-        }
-      }
-      
-      // Build statistics section only if showStats is true
-      const statsSection = showStats ? `
-          <div style="margin: 12px 0; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 6px;">
-            <table style="width: 100%; font-size: 13px;">
-              <tr>
-                <td style="padding: 4px 8px;"><strong>Avg Height:</strong></td>
-                <td style="padding: 4px 8px;">${avgHeight} m</td>
-                <td style="padding: 4px 8px;"><strong>Avg Diameter:</strong></td>
-                <td style="padding: 4px 8px;">${avgDiameter} cm</td>
-              </tr>
-              <tr>
-                <td style="padding: 4px 8px;"><strong>Existing:</strong></td>
-                <td style="padding: 4px 8px;">${locationData.totalExisting}</td>
-                <td style="padding: 4px 8px;"><strong>Planted:</strong></td>
-                <td style="padding: 4px 8px;">${locationData.totalPlanted}</td>
-              </tr>
-              <tr>
-                <td style="padding: 4px 8px;"><strong>Healthy:</strong></td>
-                <td style="padding: 4px 8px; color: #4CAF50;">${locationData.totalHealthy}</td>
-                <td style="padding: 4px 8px;"><strong>Not Healthy:</strong></td>
-                <td style="padding: 4px 8px; color: #f44336;">${locationData.totalNotHealthy}</td>
-              </tr>
-            </table>
-          </div>
-      ` : ''
-      
       const popupContent = `
         <div class="tree-popup">
-          <h3>${locationData.address || `Location (${locationData.lat.toFixed(6)}, ${locationData.lng.toFixed(6)})`}</h3>
-          <p style="margin: 8px 0; font-weight: bold; color: #4CAF50;">Total Population: ${totalPopulation}</p>
-          ${imageSection}
-          ${statsSection}
-          <table class="popup-table" style="width: 100%; margin-top: 10px;">
-            <thead>
-              <tr>
-                <th style="text-align: left; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.3);">Tree</th>
-                <th style="text-align: center; padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.3);">Population</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${tableRows}
-            </tbody>
-          </table>
+          ${treeSections}
         </div>
       `
       
@@ -1596,9 +1529,99 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLegend()
   }
 
-  // Function to update heatmap
+  // Kernel Density Estimation (KDE) function
+  // Uses Gaussian kernel to create smooth density surface
+  function calculateKDE(dataPoints, bandwidth = 0.01) {
+    console.log(`📊 Calculating KDE for ${dataPoints.length} points with bandwidth ${bandwidth}`)
+    
+    if (dataPoints.length === 0) return []
+    
+    // Calculate bounds
+    let minLat = Infinity, maxLat = -Infinity
+    let minLng = Infinity, maxLng = -Infinity
+    
+    dataPoints.forEach(point => {
+      minLat = Math.min(minLat, point[0])
+      maxLat = Math.max(maxLat, point[0])
+      minLng = Math.min(minLng, point[1])
+      maxLng = Math.max(maxLng, point[1])
+    })
+    
+    // Add padding to bounds
+    const latPadding = (maxLat - minLat) * 0.1
+    const lngPadding = (maxLng - minLng) * 0.1
+    minLat -= latPadding
+    maxLat += latPadding
+    minLng -= lngPadding
+    maxLng += lngPadding
+    
+    // Create grid - adjust resolution based on data extent
+    const latRange = maxLat - minLat
+    const lngRange = maxLng - minLng
+    const gridSize = Math.max(50, Math.min(100, Math.floor(Math.sqrt(dataPoints.length) * 2)))
+    
+    const latStep = latRange / gridSize
+    const lngStep = lngRange / gridSize
+    
+    // Gaussian kernel function
+    const gaussianKernel = (distance, bandwidth) => {
+      return Math.exp(-0.5 * Math.pow(distance / bandwidth, 2))
+    }
+    
+    // Calculate distance between two points (Haversine formula for small distances)
+    const distance = (lat1, lng1, lat2, lng2) => {
+      const dLat = lat2 - lat1
+      const dLng = lng2 - lng1
+      return Math.sqrt(dLat * dLat + dLng * dLng)
+    }
+    
+    // Calculate adaptive bandwidth based on data spread
+    const adaptiveBandwidth = bandwidth * Math.max(latRange, lngRange)
+    
+    // Calculate density for each grid point
+    const densityGrid = []
+    let maxDensity = 0
+    
+    for (let i = 0; i <= gridSize; i++) {
+      for (let j = 0; j <= gridSize; j++) {
+        const gridLat = minLat + i * latStep
+        const gridLng = minLng + j * lngStep
+        
+        let density = 0
+        
+        // Sum contributions from all data points
+        dataPoints.forEach(point => {
+          const dist = distance(gridLat, gridLng, point[0], point[1])
+          const weight = point[2] || 1 // Use intensity/weight if available
+          density += weight * gaussianKernel(dist, adaptiveBandwidth)
+        })
+        
+        if (density > maxDensity) {
+          maxDensity = density
+        }
+        
+        densityGrid.push({
+          lat: gridLat,
+          lng: gridLng,
+          density: density
+        })
+      }
+    }
+    
+    // Normalize densities and convert to heatmap format
+    const heatPoints = densityGrid.map(point => {
+      const normalizedDensity = maxDensity > 0 ? point.density / maxDensity : 0
+      return [point.lat, point.lng, normalizedDensity]
+    })
+    
+    console.log(`✅ KDE calculated: ${heatPoints.length} grid points, max density: ${maxDensity.toFixed(4)}`)
+    
+    return heatPoints
+  }
+
+  // Function to update heatmap using Kernel Density Estimation (KDE)
   function updateHeatmap(geojson) {
-    console.log("🔥 Updating heatmap with data:", geojson)
+    console.log("🔥 Updating heatmap with KDE:", geojson)
     
     // Clear existing heatmap
     additionalLayers.heatmap.clearLayers()
@@ -1609,29 +1632,46 @@ document.addEventListener("DOMContentLoaded", () => {
       return
     }
 
-    // Extract points for heatmap
-    const heatPoints = []
+    // Extract points with weights (population) for KDE
+    const dataPoints = []
     geojson.features.forEach((feature) => {
       if (feature.geometry && feature.geometry.coordinates && feature.properties) {
         const coords = feature.geometry.coordinates
-        const intensity = feature.properties.population || 1
-        heatPoints.push([coords[1], coords[0], intensity / 10]) // lat, lng, intensity
+        const weight = feature.properties.population || 1
+        // Store as [lat, lng, weight]
+        dataPoints.push([coords[1], coords[0], weight])
       }
     })
 
-    console.log(`Creating heatmap with ${heatPoints.length} points`)
+    console.log(`Creating KDE heatmap with ${dataPoints.length} tree points`)
 
-    // Create heatmap layer
-    if (heatPoints.length > 0) {
-      const heat = L.heatLayer(heatPoints, {
-        radius: 25,
-        blur: 15,
-        maxZoom: 17,
-        max: 1.0,
-        gradient: { 0.4: "blue", 0.65: "lime", 1: "red" },
-      })
-      additionalLayers.heatmap.addLayer(heat)
-      console.log("✅ Heatmap layer created and added successfully")
+    if (dataPoints.length > 0) {
+      // Calculate KDE density surface
+      const kdePoints = calculateKDE(dataPoints, 0.015) // Bandwidth parameter (adjust for smoothness)
+      
+      if (kdePoints.length > 0) {
+        // Create smooth heatmap layer with KDE results
+        const heat = L.heatLayer(kdePoints, {
+          radius: 30,           // Larger radius for smoother appearance
+          blur: 20,             // More blur for smoother transitions
+          maxZoom: 18,
+          max: 1.0,
+          minOpacity: 0.3,       // Show lower density areas
+          gradient: {
+            0.0: "rgba(0,0,255,0)",      // Transparent blue at low density
+            0.2: "rgba(0,128,255,0.3)",  // Light blue
+            0.4: "rgba(0,255,255,0.5)",  // Cyan
+            0.6: "rgba(0,255,128,0.7)",   // Green-cyan
+            0.8: "rgba(255,255,0,0.8)",   // Yellow
+            1.0: "rgba(255,0,0,1.0)"     // Red at high density
+          },
+        })
+        
+        additionalLayers.heatmap.addLayer(heat)
+        console.log("✅ KDE Heatmap layer created and added successfully")
+      } else {
+        console.log("❌ No KDE points generated")
+      }
     } else {
       console.log("❌ No valid points found for heatmap")
     }
