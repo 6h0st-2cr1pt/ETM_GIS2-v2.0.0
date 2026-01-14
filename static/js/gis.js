@@ -496,12 +496,19 @@ document.addEventListener("DOMContentLoaded", () => {
   Promise.all([loadTrees(), loadSeeds()])
     .then(() => {
       console.log("Initial data load complete")
-      // Ensure seed layer is visible
-      if (document.getElementById("showSeeds").checked) {
+      // Ensure seed layer is visible (only if checkbox exists)
+      const showSeedsCheckbox = document.getElementById("showSeeds")
+      if (showSeedsCheckbox && showSeedsCheckbox.checked) {
         console.log("Show seeds is checked, ensuring seed layer is visible")
         if (!map.hasLayer(seedLayer)) {
           map.addLayer(seedLayer)
           console.log("Seed layer added to map after initial load")
+        }
+      } else {
+        // If checkbox doesn't exist, add seed layer by default
+        if (!map.hasLayer(seedLayer)) {
+          map.addLayer(seedLayer)
+          console.log("Seed layer added to map (default)")
         }
       }
       
@@ -1529,99 +1536,10 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLegend()
   }
 
-  // Kernel Density Estimation (KDE) function
-  // Uses Gaussian kernel to create smooth density surface
-  function calculateKDE(dataPoints, bandwidth = 0.01) {
-    console.log(`📊 Calculating KDE for ${dataPoints.length} points with bandwidth ${bandwidth}`)
-    
-    if (dataPoints.length === 0) return []
-    
-    // Calculate bounds
-    let minLat = Infinity, maxLat = -Infinity
-    let minLng = Infinity, maxLng = -Infinity
-    
-    dataPoints.forEach(point => {
-      minLat = Math.min(minLat, point[0])
-      maxLat = Math.max(maxLat, point[0])
-      minLng = Math.min(minLng, point[1])
-      maxLng = Math.max(maxLng, point[1])
-    })
-    
-    // Add padding to bounds
-    const latPadding = (maxLat - minLat) * 0.1
-    const lngPadding = (maxLng - minLng) * 0.1
-    minLat -= latPadding
-    maxLat += latPadding
-    minLng -= lngPadding
-    maxLng += lngPadding
-    
-    // Create grid - adjust resolution based on data extent
-    const latRange = maxLat - minLat
-    const lngRange = maxLng - minLng
-    const gridSize = Math.max(50, Math.min(100, Math.floor(Math.sqrt(dataPoints.length) * 2)))
-    
-    const latStep = latRange / gridSize
-    const lngStep = lngRange / gridSize
-    
-    // Gaussian kernel function
-    const gaussianKernel = (distance, bandwidth) => {
-      return Math.exp(-0.5 * Math.pow(distance / bandwidth, 2))
-    }
-    
-    // Calculate distance between two points (Haversine formula for small distances)
-    const distance = (lat1, lng1, lat2, lng2) => {
-      const dLat = lat2 - lat1
-      const dLng = lng2 - lng1
-      return Math.sqrt(dLat * dLat + dLng * dLng)
-    }
-    
-    // Calculate adaptive bandwidth based on data spread
-    const adaptiveBandwidth = bandwidth * Math.max(latRange, lngRange)
-    
-    // Calculate density for each grid point
-    const densityGrid = []
-    let maxDensity = 0
-    
-    for (let i = 0; i <= gridSize; i++) {
-      for (let j = 0; j <= gridSize; j++) {
-        const gridLat = minLat + i * latStep
-        const gridLng = minLng + j * lngStep
-        
-        let density = 0
-        
-        // Sum contributions from all data points
-        dataPoints.forEach(point => {
-          const dist = distance(gridLat, gridLng, point[0], point[1])
-          const weight = point[2] || 1 // Use intensity/weight if available
-          density += weight * gaussianKernel(dist, adaptiveBandwidth)
-        })
-        
-        if (density > maxDensity) {
-          maxDensity = density
-        }
-        
-        densityGrid.push({
-          lat: gridLat,
-          lng: gridLng,
-          density: density
-        })
-      }
-    }
-    
-    // Normalize densities and convert to heatmap format
-    const heatPoints = densityGrid.map(point => {
-      const normalizedDensity = maxDensity > 0 ? point.density / maxDensity : 0
-      return [point.lat, point.lng, normalizedDensity]
-    })
-    
-    console.log(`✅ KDE calculated: ${heatPoints.length} grid points, max density: ${maxDensity.toFixed(4)}`)
-    
-    return heatPoints
-  }
-
-  // Function to update heatmap using Kernel Density Estimation (KDE)
+  // Function to update heatmap
+  // Based on coordinates: one tree = one point with equal intensity
   function updateHeatmap(geojson) {
-    console.log("🔥 Updating heatmap with KDE:", geojson)
+    console.log("🔥 Updating heatmap with data:", geojson)
     
     // Clear existing heatmap
     additionalLayers.heatmap.clearLayers()
@@ -1632,46 +1550,47 @@ document.addEventListener("DOMContentLoaded", () => {
       return
     }
 
-    // Extract points with weights (population) for KDE
-    const dataPoints = []
+    // Extract points for heatmap - one tree = one point with equal intensity
+    // Each tree contributes equally regardless of population
+    const heatPoints = []
     geojson.features.forEach((feature) => {
-      if (feature.geometry && feature.geometry.coordinates && feature.properties) {
+      if (feature.geometry && feature.geometry.coordinates && feature.geometry.coordinates.length >= 2) {
         const coords = feature.geometry.coordinates
-        const weight = feature.properties.population || 1
-        // Store as [lat, lng, weight]
-        dataPoints.push([coords[1], coords[0], weight])
+        const lat = coords[1]  // Latitude
+        const lng = coords[0]  // Longitude
+        
+        // Validate coordinates
+        if (typeof lat === 'number' && typeof lng === 'number' && 
+            !isNaN(lat) && !isNaN(lng) &&
+            lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+          // Each tree contributes equally with intensity 1.0
+          // One pin = one tree, based on coordinates
+          heatPoints.push([lat, lng, 1.0])
+        }
       }
     })
 
-    console.log(`Creating KDE heatmap with ${dataPoints.length} tree points`)
+    console.log(`Creating heatmap with ${heatPoints.length} tree points (one point per tree)`)
 
-    if (dataPoints.length > 0) {
-      // Calculate KDE density surface
-      const kdePoints = calculateKDE(dataPoints, 0.015) // Bandwidth parameter (adjust for smoothness)
-      
-      if (kdePoints.length > 0) {
-        // Create smooth heatmap layer with KDE results
-        const heat = L.heatLayer(kdePoints, {
-          radius: 30,           // Larger radius for smoother appearance
-          blur: 20,             // More blur for smoother transitions
-          maxZoom: 18,
-          max: 1.0,
-          minOpacity: 0.3,       // Show lower density areas
-          gradient: {
-            0.0: "rgba(0,0,255,0)",      // Transparent blue at low density
-            0.2: "rgba(0,128,255,0.3)",  // Light blue
-            0.4: "rgba(0,255,255,0.5)",  // Cyan
-            0.6: "rgba(0,255,128,0.7)",   // Green-cyan
-            0.8: "rgba(255,255,0,0.8)",   // Yellow
-            1.0: "rgba(255,0,0,1.0)"     // Red at high density
-          },
-        })
-        
-        additionalLayers.heatmap.addLayer(heat)
-        console.log("✅ KDE Heatmap layer created and added successfully")
-      } else {
-        console.log("❌ No KDE points generated")
-      }
+    // Create heatmap layer based on coordinate density
+    if (heatPoints.length > 0) {
+      const heat = L.heatLayer(heatPoints, {
+        radius: 30,           // Radius for each point's influence
+        blur: 20,             // Blur for smooth transitions
+        maxZoom: 18,
+        max: 1.0,             // Maximum intensity
+        minOpacity: 0.2,      // Minimum opacity to show lower density areas
+        gradient: { 
+          0.0: "rgba(0,0,255,0)",      // Transparent blue at low density
+          0.2: "rgba(0,128,255,0.4)", // Light blue
+          0.4: "rgba(0,255,255,0.6)",  // Cyan
+          0.6: "rgba(0,255,128,0.8)",  // Green-cyan
+          0.8: "rgba(255,255,0,0.9)",  // Yellow
+          1.0: "rgba(255,0,0,1.0)"     // Red at high density
+        },
+      })
+      additionalLayers.heatmap.addLayer(heat)
+      console.log(`✅ Heatmap layer created with ${heatPoints.length} points based on tree coordinates`)
     } else {
       console.log("❌ No valid points found for heatmap")
     }
@@ -1751,24 +1670,30 @@ document.addEventListener("DOMContentLoaded", () => {
     updateLegend()
   }, 500)
 
-  // Entity type control change event
-  document.getElementById("showTrees").addEventListener("change", function () {
-    if (this.checked) {
-      map.addLayer(treeLayer)
-    } else {
-      map.removeLayer(treeLayer)
-    }
-  })
+  // Entity type control change event (only if elements exist)
+  const showTreesCheckbox = document.getElementById("showTrees")
+  if (showTreesCheckbox) {
+    showTreesCheckbox.addEventListener("change", function () {
+      if (this.checked) {
+        map.addLayer(treeLayer)
+      } else {
+        map.removeLayer(treeLayer)
+      }
+    })
+  }
 
-  document.getElementById("showSeeds").addEventListener("change", function () {
-    console.log("Show seeds checkbox changed:", this.checked)
-    if (this.checked) {
-      map.addLayer(seedLayer)
-      console.log("Seed layer added to map")
-    } else {
-      map.removeLayer(seedLayer)
-      console.log("Seed layer removed from map")
-    }
-  })
+  const showSeedsCheckbox = document.getElementById("showSeeds")
+  if (showSeedsCheckbox) {
+    showSeedsCheckbox.addEventListener("change", function () {
+      console.log("Show seeds checkbox changed:", this.checked)
+      if (this.checked) {
+        map.addLayer(seedLayer)
+        console.log("Seed layer added to map")
+      } else {
+        map.removeLayer(seedLayer)
+        console.log("Seed layer removed from map")
+      }
+    })
+  }
 })
 

@@ -26,6 +26,60 @@
             <canvas id="totalPopulationByAddressChart" data-address-species='{{ address_species_data }}'></canvas>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
+
+        <!-- New Charts -->
+        <div class="analytics-chart-card full-width">
+            <h3>Healthy vs Not Healthy Trees by Species</h3>
+            <canvas id="healthBySpeciesChart" 
+                    data-health-by-species='{{ health_by_species }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="analytics-chart-card">
+            <h3>Tree Height/Diameter Distribution</h3>
+            <div style="margin-bottom: 15px;">
+                <label style="color: rgba(255,255,255,0.7); margin-right: 10px;">
+                    <input type="radio" name="histogramType" value="height" checked style="margin-right: 5px;">
+                    Height (meters)
+                </label>
+                <label style="color: rgba(255,255,255,0.7);">
+                    <input type="radio" name="histogramType" value="diameter" style="margin-right: 5px;">
+                    Diameter (cm)
+                </label>
+            </div>
+            <canvas id="histogramChart" 
+                    data-heights='{{ heights }}' 
+                    data-diameters='{{ diameters }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="analytics-chart-card">
+            <h3>Health Status Distribution</h3>
+            <canvas id="healthPieChart" 
+                    data-total-healthy='{{ total_healthy }}' 
+                    data-total-not-healthy='{{ total_not_healthy }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
+
+        <div class="analytics-chart-card full-width">
+            <h3>Tree Distribution Map (Scatter Plot)</h3>
+            <div style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <div>
+                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Filter by:</label>
+                    <select id="scatterFilterType">
+                        <option value="species">Species</option>
+                        <option value="health">Health Status</option>
+                    </select>
+                </div>
+                <div id="scatterFilterValueContainer">
+                    <select id="scatterFilterValue">
+                        <option value="all">All</option>
+                    </select>
+                </div>
+            </div>
+            <canvas id="scatterPlotChart" data-tree-coordinates='{{ tree_coordinates }}'></canvas>
+            <div class="no-data-message" style="display: none;">No data available</div>
+        </div>
     </div>
 
     <!-- Seed Sources Panel -->

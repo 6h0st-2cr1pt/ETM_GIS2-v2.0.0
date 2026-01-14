@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let defaultTab = "csv-upload"
   if (hash) {
     const tabId = hash.substring(1) // Remove the #
-    if (tabId === "csv-upload" || tabId === "manual-entry") {
+    if (tabId === "csv-upload" || tabId === "manual-entry" || tabId === "manage-taxonomy") {
       defaultTab = tabId
     }
   }
@@ -492,8 +492,337 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Load tree data on page load
     loadTreesData()
+    
+    // Initialize autocomplete dropdown for Common Name
+    initializeCommonNameAutocomplete()
   } else {
     console.log("Tree auto-population: Not all form fields found, skipping setup")
   }
 
+  // Initialize taxonomy management if tab exists
+  if (document.getElementById("manage-taxonomy")) {
+    initializeTaxonomyManagement()
+  }
 })
+
+// Autocomplete dropdown for Common Name
+let autocompleteSuggestions = []
+let selectedSuggestionIndex = -1
+let userSelectedFromDropdown = false
+
+function initializeCommonNameAutocomplete() {
+  const commonNameInput = document.getElementById("common_name")
+  const suggestionsContainer = document.getElementById("commonNameSuggestions")
+  
+  if (!commonNameInput || !suggestionsContainer) return
+
+  // Load suggestions from API
+  loadAutocompleteSuggestions()
+
+  // Handle input
+  commonNameInput.addEventListener('input', function(e) {
+    const value = this.value.trim()
+    userSelectedFromDropdown = false
+    
+    if (value.length === 0) {
+      suggestionsContainer.style.display = 'none'
+      selectedSuggestionIndex = -1
+      return
+    }
+
+    // Filter suggestions
+    const filtered = autocompleteSuggestions.filter(tree => 
+      tree.common_name.toLowerCase().includes(value.toLowerCase())
+    )
+
+    if (filtered.length > 0) {
+      displaySuggestions(filtered, suggestionsContainer)
+    } else {
+      suggestionsContainer.style.display = 'none'
+    }
+  })
+
+  // Handle focus out - clear if not selected
+  commonNameInput.addEventListener('blur', function(e) {
+    // Delay to allow click on suggestion
+    setTimeout(() => {
+      if (!userSelectedFromDropdown && this.value.trim()) {
+        // Check if value matches any suggestion exactly
+        const exactMatch = autocompleteSuggestions.find(tree => 
+          tree.common_name.toLowerCase() === this.value.trim().toLowerCase()
+        )
+        
+        if (!exactMatch) {
+          // Clear the field if user didn't select from dropdown
+          this.value = ''
+          suggestionsContainer.style.display = 'none'
+          
+          // Clear auto-filled fields
+          const scientificNameInput = document.getElementById("scientific_name")
+          const familyInput = document.getElementById("family")
+          const genusInput = document.getElementById("genus")
+          
+          if (scientificNameInput && scientificNameInput.dataset.autoFilled === 'true') {
+            scientificNameInput.value = ''
+            scientificNameInput.dataset.autoFilled = 'false'
+          }
+          if (familyInput && familyInput.dataset.autoFilled === 'true') {
+            familyInput.value = ''
+            familyInput.dataset.autoFilled = 'false'
+          }
+          if (genusInput && genusInput.dataset.autoFilled === 'true') {
+            genusInput.value = ''
+            genusInput.dataset.autoFilled = 'false'
+          }
+        }
+      }
+      suggestionsContainer.style.display = 'none'
+      selectedSuggestionIndex = -1
+    }, 200)
+  })
+
+  // Handle keyboard navigation
+  commonNameInput.addEventListener('keydown', function(e) {
+    const suggestions = suggestionsContainer.querySelectorAll('.autocomplete-suggestion')
+    
+    if (suggestions.length === 0) return
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, suggestions.length - 1)
+      updateSelectedSuggestion(suggestions)
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1)
+      updateSelectedSuggestion(suggestions)
+    } else if (e.key === 'Enter' && selectedSuggestionIndex >= 0) {
+      e.preventDefault()
+      const selected = suggestions[selectedSuggestionIndex]
+      if (selected) {
+        selectSuggestion(selected)
+      }
+    } else if (e.key === 'Escape') {
+      suggestionsContainer.style.display = 'none'
+      selectedSuggestionIndex = -1
+    }
+  })
+}
+
+function loadAutocompleteSuggestions() {
+  fetch("/api/endemic-trees-list/")
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.trees) {
+        autocompleteSuggestions = data.trees
+        console.log(`Loaded ${autocompleteSuggestions.length} suggestions for autocomplete`)
+      }
+    })
+    .catch(error => {
+      console.error("Error loading autocomplete suggestions:", error)
+    })
+}
+
+function displaySuggestions(suggestions, container) {
+  container.innerHTML = ''
+  selectedSuggestionIndex = -1
+  
+  suggestions.slice(0, 10).forEach((tree, index) => {
+    const div = document.createElement('div')
+    div.className = 'autocomplete-suggestion'
+    div.dataset.index = index
+    div.innerHTML = `<strong>${tree.common_name}</strong> <em>(${tree.scientific_name})</em>`
+    
+    div.addEventListener('click', () => {
+      selectSuggestion(div)
+    })
+    
+    div.addEventListener('mouseenter', () => {
+      selectedSuggestionIndex = index
+      updateSelectedSuggestion(container.querySelectorAll('.autocomplete-suggestion'))
+    })
+    
+    container.appendChild(div)
+  })
+  
+  container.style.display = 'block'
+}
+
+function updateSelectedSuggestion(suggestions) {
+  suggestions.forEach((suggestion, index) => {
+    if (index === selectedSuggestionIndex) {
+      suggestion.classList.add('selected')
+    } else {
+      suggestion.classList.remove('selected')
+    }
+  })
+}
+
+function selectSuggestion(suggestionElement) {
+  const commonNameInput = document.getElementById("common_name")
+  const suggestionsContainer = document.getElementById("commonNameSuggestions")
+  
+  // Extract common name from suggestion (it's in <strong> tag)
+  const strongTag = suggestionElement.querySelector('strong')
+  const commonName = strongTag ? strongTag.textContent : suggestionElement.textContent.split('(')[0].trim()
+  
+  commonNameInput.value = commonName
+  userSelectedFromDropdown = true
+  suggestionsContainer.style.display = 'none'
+  selectedSuggestionIndex = -1
+  
+  // Trigger auto-populate
+  const event = new Event('input', { bubbles: true })
+  commonNameInput.dispatchEvent(event)
+}
+
+// Taxonomy Management
+function initializeTaxonomyManagement() {
+  // Load taxonomy list on tab show
+  const taxonomyTab = document.querySelector('[data-tab="manage-taxonomy"]')
+  if (taxonomyTab) {
+    taxonomyTab.addEventListener('click', () => {
+      loadTaxonomyList()
+    })
+  }
+  
+  // Handle taxonomy form submission
+  const taxonomyForm = document.getElementById("taxonomy-form")
+  if (taxonomyForm) {
+    taxonomyForm.addEventListener('submit', function(e) {
+      e.preventDefault()
+      
+      const formData = new FormData(this)
+      
+      fetch("/api/add-taxonomy/", {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+        }
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          alert('Taxonomy added successfully!')
+          this.reset()
+          loadTaxonomyList()
+          // Reload autocomplete suggestions
+          loadAutocompleteSuggestions()
+        } else {
+          alert('Error: ' + (data.error || 'Failed to add taxonomy'))
+        }
+      })
+      .catch(error => {
+        console.error("Error adding taxonomy:", error)
+        alert('Error adding taxonomy. Please check console for details.')
+      })
+    })
+  }
+  
+  // Clear taxonomy form
+  const clearBtn = document.getElementById("clear-taxonomy-form")
+  if (clearBtn) {
+    clearBtn.addEventListener('click', function() {
+      document.getElementById("taxonomy-form").reset()
+    })
+  }
+  
+  // Load initial taxonomy list if tab is active
+  if (document.getElementById("manage-taxonomy").style.display !== 'none') {
+    loadTaxonomyList()
+  }
+}
+
+function loadTaxonomyList() {
+  const container = document.getElementById("taxonomy-list-container")
+  if (!container) return
+  
+  container.innerHTML = '<div class="text-center" style="padding: 2rem;"><p>Loading taxonomy entries...</p></div>'
+  
+  fetch("/api/list-taxonomy/")
+    .then(response => response.json())
+    .then(data => {
+      if (data.success && data.taxonomy) {
+        displayTaxonomyList(data.taxonomy, container)
+      } else {
+        container.innerHTML = '<div class="text-center" style="padding: 2rem;"><p>No taxonomy entries found.</p></div>'
+      }
+    })
+    .catch(error => {
+      console.error("Error loading taxonomy:", error)
+      container.innerHTML = '<div class="text-center" style="padding: 2rem;"><p style="color: #f44336;">Error loading taxonomy entries.</p></div>'
+    })
+}
+
+function displayTaxonomyList(taxonomy, container) {
+  if (taxonomy.length === 0) {
+    container.innerHTML = '<div class="text-center" style="padding: 2rem;"><p>No taxonomy entries found. Add your first entry above.</p></div>'
+    return
+  }
+  
+  let html = `
+    <table class="taxonomy-table">
+      <thead>
+        <tr>
+          <th>Common Name</th>
+          <th>Scientific Name</th>
+          <th>Family</th>
+          <th>Genus</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+  `
+  
+  taxonomy.forEach(item => {
+    html += `
+      <tr>
+        <td>${item.common_name}</td>
+        <td><em>${item.scientific_name}</em></td>
+        <td>${item.family}</td>
+        <td>${item.genus}</td>
+        <td>
+          <button class="btn-delete" onclick="deleteTaxonomy(${item.id})">
+            <i class="fas fa-trash"></i> Delete
+          </button>
+        </td>
+      </tr>
+    `
+  })
+  
+  html += `
+      </tbody>
+    </table>
+  `
+  
+  container.innerHTML = html
+}
+
+function deleteTaxonomy(id) {
+  if (!confirm('Are you sure you want to delete this taxonomy entry?')) {
+    return
+  }
+  
+  fetch(`/api/delete-taxonomy/${id}/`, {
+    method: 'POST',
+    headers: {
+      'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(response => response.json())
+  .then(data => {
+    if (data.success) {
+      alert('Taxonomy deleted successfully!')
+      loadTaxonomyList()
+      // Reload autocomplete suggestions
+      loadAutocompleteSuggestions()
+    } else {
+      alert('Error: ' + (data.error || 'Failed to delete taxonomy'))
+    }
+  })
+  .catch(error => {
+    console.error("Error deleting taxonomy:", error)
+    alert('Error deleting taxonomy. Please check console for details.')
+  })
+}

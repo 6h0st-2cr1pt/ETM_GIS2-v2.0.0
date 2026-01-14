@@ -13,6 +13,7 @@
    <div class="tab-navigation">
       <button class="tab-button active" data-tab="csv-upload">CSV Upload</button>
       <button class="tab-button" data-tab="manual-entry">Manual Tree Entry</button>
+      <button class="tab-button" data-tab="manage-taxonomy">Manage Taxonomy</button>
    </div>
 
    <div class="upload-content">
@@ -115,7 +116,11 @@
                   <div class="form-grid">
                      <div class="form-group">
                         <label for="common_name">Common Name</label>
-                        <input type="text" name="common_name" id="common_name" class="form-control" required>
+                        <div style="position: relative;">
+                           <input type="text" name="common_name" id="common_name" class="form-control" required autocomplete="off">
+                           <div id="commonNameSuggestions" class="autocomplete-suggestions" style="display: none;"></div>
+                        </div>
+                        <small class="form-text text-muted">Start typing to see suggestions. Select from dropdown or your input will be cleared.</small>
                      </div>
 
                      <div class="form-group">
@@ -219,6 +224,62 @@
                      </button>
                   </div>
                </form>
+            </div>
+         </div>
+      </div>
+
+      <!-- Manage Taxonomy Tab -->
+      <div class="upload-section manage-taxonomy-section tab-content" id="manage-taxonomy" style="display: none;">
+         <div class="upload-card">
+            <div class="upload-card-header">
+               <h2>Manage Endemic Tree Taxonomy</h2>
+               <p>Add, edit, or delete endemic tree taxonomy entries. These will be used for autocomplete suggestions in Manual Tree Entry.</p>
+            </div>
+
+            <div class="taxonomy-form-section">
+               <h3>Add New Taxonomy</h3>
+               <form method="post" id="taxonomy-form">
+                  {% csrf_token %}
+                  <div class="form-grid">
+                     <div class="form-group">
+                        <label for="taxonomy_common_name">Common Name *</label>
+                        <input type="text" name="common_name" id="taxonomy_common_name" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="taxonomy_scientific_name">Scientific Name *</label>
+                        <input type="text" name="scientific_name" id="taxonomy_scientific_name" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="taxonomy_family">Family *</label>
+                        <input type="text" name="family" id="taxonomy_family" class="form-control" required>
+                     </div>
+
+                     <div class="form-group">
+                        <label for="taxonomy_genus">Genus *</label>
+                        <input type="text" name="genus" id="taxonomy_genus" class="form-control" required>
+                     </div>
+                  </div>
+
+                  <div class="form-actions">
+                     <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-plus"></i> Add Taxonomy
+                     </button>
+                     <button type="button" class="btn btn-secondary" id="clear-taxonomy-form">
+                        <i class="fas fa-times"></i> Clear
+                     </button>
+                  </div>
+               </form>
+            </div>
+
+            <div class="taxonomy-list-section" style="margin-top: 2rem;">
+               <h3>Existing Taxonomy Entries</h3>
+               <div id="taxonomy-list-container">
+                  <div class="text-center" style="padding: 2rem;">
+                     <p>Loading taxonomy entries...</p>
+                  </div>
+               </div>
             </div>
          </div>
       </div>

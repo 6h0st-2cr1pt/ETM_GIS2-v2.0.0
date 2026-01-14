@@ -265,13 +265,21 @@ def analytics(request):
         if not EndemicTree.objects.filter(user=request.user).exists():
             return render(request, 'app/analytics.html', {
                 'active_page': 'analytics',
-                'address_species_data': '[]'
+                'address_species_data': '[]',
+                'health_by_species': '[]',
+                'heights': '[]',
+                'diameters': '[]',
+                'total_healthy': 0,
+                'total_not_healthy': 0,
+                'tree_coordinates': '[]',
+                'seed_sources': '[]'
             })
 
-        # Get population by address and species
-        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').exclude(
-            location__address__isnull=True
-        ).exclude(location__address='')
+        # Get all trees for analytics (including those without addresses for scatter plot)
+        all_trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+        
+        # Get population by address and species (for existing charts)
+        trees = all_trees.exclude(location__address__isnull=True).exclude(location__address='')
 
         # Group by address and species
         address_species_map = {}
@@ -292,6 +300,55 @@ def analytics(request):
                 }
             
             address_species_map[address][species_name]['population'] += tree.population
+        
+        # Collect data for new charts
+        # 1. Health status per species (for stacked bar chart)
+        health_by_species = {}
+        # 2. Height and diameter data (for histogram)
+        heights = []
+        diameters = []
+        # 3. Total healthy vs not healthy (for pie chart)
+        total_healthy = 0
+        total_not_healthy = 0
+        # 4. Tree coordinates with health/species (for scatter plot)
+        tree_coordinates = []
+        
+        for tree in all_trees:
+            species_name = tree.species.common_name if tree.species else 'Unknown'
+            
+            # Health status per species
+            if species_name not in health_by_species:
+                health_by_species[species_name] = {'healthy': 0, 'not_healthy': 0}
+            
+            # Determine healthy count
+            is_healthy = tree.is_healthy if tree.is_healthy is not None else True
+            healthy_count = tree.healthy_count if tree.healthy_count else (tree.population if is_healthy else 0)
+            not_healthy_count = (tree.bad_count or 0) + (tree.deceased_count or 0)
+            if not_healthy_count == 0 and not is_healthy:
+                not_healthy_count = tree.population
+            
+            health_by_species[species_name]['healthy'] += healthy_count
+            health_by_species[species_name]['not_healthy'] += not_healthy_count
+            
+            # Total healthy vs not healthy
+            total_healthy += healthy_count
+            total_not_healthy += not_healthy_count
+            
+            # Height and diameter data
+            if tree.height_meters is not None:
+                heights.append(float(tree.height_meters))
+            if tree.diameter_cm is not None:
+                diameters.append(float(tree.diameter_cm))
+            
+            # Coordinates for scatter plot
+            if tree.location and tree.location.latitude and tree.location.longitude:
+                tree_coordinates.append({
+                    'latitude': float(tree.location.latitude),
+                    'longitude': float(tree.location.longitude),
+                    'species': species_name,
+                    'is_healthy': is_healthy,
+                    'health_status': 'Healthy' if is_healthy else 'Not Healthy'
+                })
 
         # Convert to list format for chart
         address_species_data = []
@@ -369,11 +426,22 @@ def analytics(request):
         # Clean and prepare data for JSON serialization
         address_species_data = clean_data(address_species_data or [])
         seed_sources = clean_data(seed_sources or [])
+        
+        # Prepare new chart data
+        health_by_species_list = [{'species': k, 'healthy': v['healthy'], 'not_healthy': v['not_healthy']} 
+                                   for k, v in health_by_species.items()]
+        health_by_species_list.sort(key=lambda x: x['healthy'] + x['not_healthy'], reverse=True)
 
         context = {
             'active_page': 'analytics',
             'address_species_data': json.dumps(address_species_data),
-            'seed_sources': json.dumps(seed_sources)
+            'seed_sources': json.dumps(seed_sources),
+            'health_by_species': json.dumps(health_by_species_list),
+            'heights': json.dumps(heights),
+            'diameters': json.dumps(diameters),
+            'total_healthy': total_healthy,
+            'total_not_healthy': total_not_healthy,
+            'tree_coordinates': json.dumps(tree_coordinates)
         }
 
         return render(request, 'app/analytics.html', context)
@@ -386,7 +454,13 @@ def analytics(request):
         context = {
             'active_page': 'analytics',
             'address_species_data': '[]',
-            'seed_sources': '[]'
+            'seed_sources': '[]',
+            'health_by_species': '[]',
+            'heights': '[]',
+            'diameters': '[]',
+            'total_healthy': 0,
+            'total_not_healthy': 0,
+            'tree_coordinates': '[]'
         }
         return render(request, 'app/analytics.html', context)
 
@@ -1788,10 +1862,23 @@ def api_species_list(request):
 
 
 def api_endemic_trees_list(request):
-    """API endpoint to get endemic trees data for auto-population."""
+    """API endpoint to get endemic trees data for auto-population from database."""
     try:
-        # Hardcoded endemic trees data for autocomplete
-        trees_data = [
+        # Get taxonomy from database (TreeSpecies)
+        trees_data = []
+        if request.user.is_authenticated:
+            species_list = TreeSpecies.objects.filter(user=request.user).select_related('genus', 'genus__family').all()
+            for species in species_list:
+                trees_data.append({
+                    'common_name': species.common_name,
+                    'scientific_name': species.scientific_name,
+                    'family': species.genus.family.name if species.genus and species.genus.family else '',
+                    'genus': species.genus.name if species.genus else ''
+                })
+        
+        # Fallback to hardcoded data if no database entries
+        if not trees_data:
+            trees_data = [
             {'common_name': 'Yakal', 'scientific_name': 'Shorea astylosa', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
             {'common_name': 'Red Lauan', 'scientific_name': 'Shorea negrosensis', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
             {'common_name': 'White Lauan', 'scientific_name': 'Shorea contorta', 'family': 'Dipterocarpaceae', 'genus': 'Shorea'},
@@ -2324,8 +2411,8 @@ def tree_data(request):
                     'location_id': str(tree.location.id),  # Add location_id for filtering
                     'common_name': tree.species.common_name,
                     'scientific_name': tree.species.scientific_name,
-                    'family': tree.species.genus.family.name,
-                    'genus': tree.species.genus.name,
+                    'family': tree.species.genus.family.name if tree.species.genus and tree.species.genus.family else '',
+                    'genus': tree.species.genus.name if tree.species.genus else '',
                     'population': tree.population,
                     'health_status': tree.health_status,
                     'year': tree.year,
@@ -2477,8 +2564,8 @@ def filter_trees(request, species_id):
                     'location_id': str(tree.location.id),  # Add location_id for filtering
                     'common_name': tree.species.common_name,
                     'scientific_name': tree.species.scientific_name,
-                    'family': tree.species.genus.family.name,
-                    'genus': tree.species.genus.name,
+                    'family': tree.species.genus.family.name if tree.species.genus and tree.species.genus.family else '',
+                    'genus': tree.species.genus.name if tree.species.genus else '',
                     'population': tree.population,
                     'health_status': tree.health_status,
                     'year': tree.year,
@@ -3248,9 +3335,14 @@ def api_layers(request):
         
     if request.method == 'GET':
         print("[DEBUG] API layers GET request received")
-        # Only show current user's layers
-        layers = MapLayer.objects.filter(user=request.user).order_by('-id')
-        print(f"[DEBUG] Found {layers.count()} layers for user {request.user.username}")
+        # Only show current user's layers (if authenticated)
+        if request.user.is_authenticated:
+            layers = MapLayer.objects.filter(user=request.user).order_by('-id')
+            username = getattr(request.user, 'username', 'unknown')
+            print(f"[DEBUG] Found {layers.count()} layers for user {username}")
+        else:
+            layers = MapLayer.objects.none()
+            print("[DEBUG] User not authenticated, returning empty layers list")
         layers_data = []
         for layer in layers:
             layer_data = {
@@ -3455,3 +3547,237 @@ def species_image(request, species_id):
         import traceback
         traceback.print_exc()
         return HttpResponseServerError(f"Error serving image: {str(e)}")
+@login_required(login_url='app:login')
+
+def add_taxonomy(request):
+
+    """Add new taxonomy entry"""
+
+    if request.method == 'POST':
+
+        try:
+
+            common_name = request.POST.get('common_name', '').strip()
+
+            scientific_name = request.POST.get('scientific_name', '').strip()
+
+            family_name = request.POST.get('family', '').strip()
+
+            genus_name = request.POST.get('genus', '').strip()
+
+            
+
+            if not all([common_name, scientific_name, family_name, genus_name]):
+
+                return JsonResponse({
+
+                    'success': False,
+
+                    'error': 'All fields are required'
+
+                }, status=400)
+
+            
+
+            # Get or create family
+
+            family, _ = TreeFamily.objects.get_or_create(
+
+                name=family_name,
+
+                user=request.user,
+
+                defaults={'description': ''}
+
+            )
+
+            
+
+            # Get or create genus
+
+            genus, _ = TreeGenus.objects.get_or_create(
+
+                name=genus_name,
+
+                user=request.user,
+
+                defaults={'family': family}
+
+            )
+
+            # Update family if it was different
+
+            if genus.family != family:
+
+                genus.family = family
+
+                genus.save()
+
+            
+
+            # Create species (will update if exists)
+
+            species, created = TreeSpecies.objects.get_or_create(
+
+                scientific_name=scientific_name,
+
+                user=request.user,
+
+                defaults={
+
+                    'common_name': common_name,
+
+                    'genus': genus,
+
+                    'is_endemic': True
+
+                }
+
+            )
+
+            
+
+            # Update if exists
+
+            if not created:
+
+                species.common_name = common_name
+
+                species.genus = genus
+
+                species.save()
+
+            
+
+            return JsonResponse({
+
+                'success': True,
+
+                'message': 'Taxonomy added successfully',
+
+                'id': str(species.id)
+
+            })
+
+        except Exception as e:
+
+            import traceback
+
+            traceback.print_exc()
+
+            return JsonResponse({
+
+                'success': False,
+
+                'error': str(e)
+
+            }, status=500)
+
+    
+
+    return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+
+
+
+
+@login_required(login_url='app:login')
+
+def list_taxonomy(request):
+
+    """List all taxonomy entries for the user"""
+
+    try:
+
+        species_list = TreeSpecies.objects.filter(user=request.user).select_related('genus', 'genus__family').order_by('common_name')
+
+        taxonomy_data = []
+
+        for species in species_list:
+
+            taxonomy_data.append({
+
+                'id': str(species.id),
+
+                'common_name': species.common_name,
+
+                'scientific_name': species.scientific_name,
+
+                'family': species.genus.family.name if species.genus and species.genus.family else '',
+
+                'genus': species.genus.name if species.genus else ''
+
+            })
+
+        
+
+        return JsonResponse({
+
+            'success': True,
+
+            'taxonomy': taxonomy_data
+
+        })
+
+    except Exception as e:
+
+        return JsonResponse({
+
+            'success': False,
+
+            'error': str(e)
+
+        }, status=500)
+
+
+
+
+
+@login_required(login_url='app:login')
+
+def delete_taxonomy(request, taxonomy_id):
+
+    """Delete a taxonomy entry"""
+
+    if request.method != 'POST':
+
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    
+
+    try:
+
+        species = TreeSpecies.objects.get(id=taxonomy_id, user=request.user)
+
+        species.delete()
+
+        return JsonResponse({
+
+            'success': True,
+
+            'message': 'Taxonomy deleted successfully'
+
+        })
+
+    except TreeSpecies.DoesNotExist:
+
+        return JsonResponse({
+
+            'success': False,
+
+            'error': 'Taxonomy entry not found'
+
+        }, status=404)
+
+    except Exception as e:
+
+        return JsonResponse({
+
+            'success': False,
+
+            'error': str(e)
+
+        }, status=500)
+
+
+

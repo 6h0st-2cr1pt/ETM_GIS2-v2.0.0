@@ -50,4 +50,8 @@ urlpatterns = [
     path('api/csv-upload-progress/', views.api_csv_upload_progress, name='api_csv_upload_progress'),
     path('upload-species-images/', views.upload_species_images, name='upload_species_images'),
     path('api/upload-species-image/', views.upload_species_image_api, name='upload_species_image_api'),
+    # Taxonomy management
+    path('api/add-taxonomy/', views.add_taxonomy, name='add_taxonomy'),
+    path('api/list-taxonomy/', views.list_taxonomy, name='list_taxonomy'),
+    path('api/delete-taxonomy/<int:taxonomy_id>/', views.delete_taxonomy, name='delete_taxonomy'),
 ]

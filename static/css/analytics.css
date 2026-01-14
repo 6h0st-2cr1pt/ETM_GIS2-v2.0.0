@@ -104,6 +104,63 @@
   max-height: 400px;
 }
 
+.analytics-chart-card.full-width canvas {
+  max-height: 500px;
+}
+
+/* Filter controls styling */
+.analytics-chart-card select,
+.analytics-chart-card input[type="radio"] {
+  cursor: pointer;
+}
+
+.analytics-chart-card label {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* Scatter plot filter dropdowns styling */
+#scatterFilterType,
+#scatterFilterValue {
+  padding: 5px 10px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 150px;
+}
+
+#scatterFilterType:hover,
+#scatterFilterValue:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+#scatterFilterType:focus,
+#scatterFilterValue:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.15) !important;
+  border-color: rgba(0, 184, 148, 0.5);
+  box-shadow: 0 0 0 2px rgba(0, 184, 148, 0.2);
+}
+
+/* Style options inside select dropdowns */
+#scatterFilterType option,
+#scatterFilterValue option {
+  background: rgba(30, 30, 30, 0.95) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  padding: 8px;
+}
+
+/* For browsers that support styling select options */
+#scatterFilterType option:checked,
+#scatterFilterValue option:checked {
+  background: rgba(0, 184, 148, 0.3) !important;
+  color: white !important;
+}
+
 .analytics-advanced-container {
   margin-top: 2rem;
   margin-bottom: 2rem;
