@@ -115,12 +115,12 @@
                   {% csrf_token %}
                   <div class="form-grid">
                      <div class="form-group">
-                        <label for="common_name">Common Name</label>
+                        <label for="common_name">Common Name *</label>
                         <div style="position: relative;">
                            <input type="text" name="common_name" id="common_name" class="form-control" required autocomplete="off">
                            <div id="commonNameSuggestions" class="autocomplete-suggestions" style="display: none;"></div>
                         </div>
-                        <small class="form-text text-muted">Start typing to see suggestions. Select from dropdown or your input will be cleared.</small>
+                        <small class="form-text text-muted"><strong>Important:</strong> Start typing to search, then <strong>select from the dropdown</strong> to ensure correct capitalization. If you don't select from the dropdown, your input will be cleared and the form cannot be submitted.</small>
                      </div>
 
                      <div class="form-group">

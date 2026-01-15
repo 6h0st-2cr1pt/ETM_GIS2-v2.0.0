@@ -1043,21 +1043,66 @@ def upload_data(request):
         elif 'submit_manual' in request.POST:
             try:
                 # Get form data
-                common_name = request.POST.get('common_name')
-                scientific_name = request.POST.get('scientific_name')
-                family_name = request.POST.get('family')
-                genus_name = request.POST.get('genus')
+                common_name = request.POST.get('common_name', '').strip()
+                scientific_name = request.POST.get('scientific_name', '').strip()
+                family_name = request.POST.get('family', '').strip()
+                genus_name = request.POST.get('genus', '').strip()
                 # Each manual entry represents one tree, so population is always 1
                 population = 1
 
+                # Validate all required fields (except Notes)
+                missing_fields = []
+                if not common_name:
+                    missing_fields.append('Common Name')
+                if not scientific_name:
+                    missing_fields.append('Scientific Name')
+                if not family_name:
+                    missing_fields.append('Family')
+                if not genus_name:
+                    missing_fields.append('Genus')
+                
                 # Get tree health and type from radio buttons
                 tree_health = request.POST.get('tree_health')
                 tree_type = request.POST.get('tree_type')
                 
                 if not tree_health:
-                    raise ValueError("Tree health status is required")
+                    missing_fields.append('Tree Health Status')
                 if not tree_type:
-                    raise ValueError("Tree type (Planted/Existing) is required")
+                    missing_fields.append('Tree Type (Planted/Existing)')
+                
+                # Validate numeric fields
+                latitude_str = request.POST.get('latitude', '').strip()
+                longitude_str = request.POST.get('longitude', '').strip()
+                year_str = request.POST.get('year', '').strip()
+                hectares_str = request.POST.get('hectares', '').strip()
+                
+                if not latitude_str:
+                    missing_fields.append('Latitude')
+                if not longitude_str:
+                    missing_fields.append('Longitude')
+                if not year_str:
+                    missing_fields.append('Year')
+                if not hectares_str:
+                    missing_fields.append('Hectares')
+                
+                # If any required fields are missing, return error
+                if missing_fields:
+                    messages.error(request, f'Please fill in all required fields: {", ".join(missing_fields)}')
+                    return redirect('app:upload')
+                
+                # Validate that common name exists in taxonomy (to ensure it was selected from dropdown)
+                try:
+                    # Check if the common name exists in the user's taxonomy
+                    species_check = TreeSpecies.objects.filter(
+                        user=request.user,
+                        common_name__iexact=common_name
+                    ).first()
+                    if not species_check:
+                        messages.error(request, f'Common Name "{common_name}" not found in taxonomy. Please select from the dropdown suggestions.')
+                        return redirect('app:upload')
+                except Exception as e:
+                    messages.error(request, f'Error validating Common Name: {str(e)}')
+                    return redirect('app:upload')
 
                 # Convert to boolean values
                 is_healthy = (tree_health == 'healthy')
@@ -1084,14 +1129,26 @@ def upload_data(request):
                 height_meters = float(height_meters_str) if height_meters_str else None
                 diameter_cm = float(diameter_cm_str) if diameter_cm_str else None
 
-                latitude = float(request.POST.get('latitude'))
-                longitude = float(request.POST.get('longitude'))
-                year = int(request.POST.get('year'))
-                # Get hectares (required)
-                hectares_str = request.POST.get('hectares', '').strip()
-                if not hectares_str:
-                    messages.error(request, 'Hectares is required')
+                # Validate and convert numeric fields
+                try:
+                    latitude = float(latitude_str)
+                except (ValueError, TypeError):
+                    messages.error(request, 'Invalid latitude value')
                     return redirect('app:upload')
+                
+                try:
+                    longitude = float(longitude_str)
+                except (ValueError, TypeError):
+                    messages.error(request, 'Invalid longitude value')
+                    return redirect('app:upload')
+                
+                try:
+                    year = int(year_str)
+                except (ValueError, TypeError):
+                    messages.error(request, 'Invalid year value')
+                    return redirect('app:upload')
+                
+                # Validate hectares
                 try:
                     hectares = float(hectares_str)
                     if hectares < 0:
@@ -3000,6 +3057,12 @@ def cleanup_orphaned_taxonomy(species):
     """
     Helper function to clean up orphaned taxonomy records (species, genus, family)
     that are no longer referenced by any trees or seeds.
+    
+    NOTE: This function is NOT automatically called when trees/seeds are deleted.
+    Taxonomy entries should remain in the database for autocomplete suggestions
+    and future use. They can only be deleted explicitly from the Manage Taxonomy page.
+    
+    This function is kept for potential manual cleanup operations if needed.
     """
     if not species:
         return
@@ -3030,7 +3093,6 @@ def delete_tree(request, tree_id):
     try:
         tree = get_object_or_404(EndemicTree, id=tree_id, user=request.user)
         location = tree.location
-        species = tree.species  # Store species before deleting tree
         
         tree.delete()
         
@@ -3038,8 +3100,9 @@ def delete_tree(request, tree_id):
         if location and not location.trees.exists():
             location.delete()
         
-        # Clean up orphaned taxonomy (species, genus, family)
-        cleanup_orphaned_taxonomy(species)
+        # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
+        # Taxonomy entries should remain in the database for autocomplete suggestions and future use
+        # They can only be deleted explicitly from the Manage Taxonomy page
             
         return JsonResponse({'success': True})
     except EndemicTree.DoesNotExist:
@@ -3088,9 +3151,9 @@ def delete_trees_bulk(request):
             if location and not location.trees.exists():
                 location.delete()
         
-        # Clean up orphaned taxonomy records
-        for species in species_to_check:
-            cleanup_orphaned_taxonomy(species)
+        # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
+        # Taxonomy entries should remain in the database for autocomplete suggestions and future use
+        # They can only be deleted explicitly from the Manage Taxonomy page
         
         return JsonResponse({
             'success': True,
@@ -3123,9 +3186,9 @@ def delete_all_trees(request):
             if not location.trees.exists():
                 location.delete()
         
-        # Clean up all orphaned taxonomy records
-        for species in species_to_check:
-            cleanup_orphaned_taxonomy(species)
+        # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
+        # Taxonomy entries should remain in the database for autocomplete suggestions and future use
+        # They can only be deleted explicitly from the Manage Taxonomy page
         
         return JsonResponse({
             'success': True,
@@ -3152,8 +3215,9 @@ def delete_seed(request, seed_id):
         if location and not location.trees.exists() and not location.seeds.exists():
             location.delete()
         
-        # Clean up orphaned taxonomy records
-        cleanup_orphaned_taxonomy(species)
+        # Note: We do NOT delete taxonomy entries (species, genus, family) when seeds are deleted
+        # Taxonomy entries should remain in the database for autocomplete suggestions and future use
+        # They can only be deleted explicitly from the Manage Taxonomy page
             
         return JsonResponse({'success': True})
     except TreeSeed.DoesNotExist:
@@ -3202,9 +3266,9 @@ def delete_seeds_bulk(request):
             if location and not location.trees.exists() and not location.seeds.exists():
                 location.delete()
         
-        # Clean up orphaned taxonomy records
-        for species in species_to_check:
-            cleanup_orphaned_taxonomy(species)
+        # Note: We do NOT delete taxonomy entries (species, genus, family) when seeds are deleted
+        # Taxonomy entries should remain in the database for autocomplete suggestions and future use
+        # They can only be deleted explicitly from the Manage Taxonomy page
         
         return JsonResponse({
             'success': True,
@@ -3237,9 +3301,9 @@ def delete_all_seeds(request):
             if not location.trees.exists() and not location.seeds.exists():
                 location.delete()
         
-        # Clean up all orphaned taxonomy records
-        for species in species_to_check:
-            cleanup_orphaned_taxonomy(species)
+        # Note: We do NOT delete taxonomy entries (species, genus, family) when seeds are deleted
+        # Taxonomy entries should remain in the database for autocomplete suggestions and future use
+        # They can only be deleted explicitly from the Manage Taxonomy page
         
         return JsonResponse({
             'success': True,

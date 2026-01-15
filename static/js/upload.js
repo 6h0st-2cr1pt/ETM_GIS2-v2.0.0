@@ -32,6 +32,13 @@ document.addEventListener("DOMContentLoaded", () => {
           setTimeout(() => {
             content.style.opacity = "1"
           }, 50)
+          
+          // Load taxonomy list if switching to manage-taxonomy tab
+          if (tabId === "manage-taxonomy" && typeof loadTaxonomyList === 'function') {
+            setTimeout(() => {
+              loadTaxonomyList()
+            }, 100)
+          }
         } else {
           content.style.display = "none"
           content.style.opacity = "0"
@@ -233,8 +240,58 @@ document.addEventListener("DOMContentLoaded", () => {
   function validateForm(form) {
     let isValid = true
     const requiredFields = form.querySelectorAll("[required]")
+    const errorMessages = []
 
+    // Special validation for common name - must be selected from dropdown
+    const commonNameInput = document.getElementById("common_name")
+    if (commonNameInput && form.id === "manual-entry-form") {
+      const commonNameValue = commonNameInput.value.trim()
+      const selectedFromDropdown = commonNameInput.dataset.selectedFromDropdown === 'true'
+      
+      if (!commonNameValue) {
+        isValid = false
+        commonNameInput.classList.add("error")
+        let errorMsg = commonNameInput.parentElement.querySelector(".error-message")
+        if (!errorMsg) {
+          errorMsg = document.createElement("div")
+          errorMsg.className = "error-message"
+          errorMsg.style.color = "#f44336"
+          errorMsg.style.fontSize = "0.875rem"
+          errorMsg.style.marginTop = "0.25rem"
+          commonNameInput.parentElement.appendChild(errorMsg)
+        }
+        errorMsg.textContent = "Common Name is required"
+        errorMessages.push("Common Name is required")
+      } else if (!selectedFromDropdown) {
+        isValid = false
+        commonNameInput.classList.add("error")
+        let errorMsg = commonNameInput.parentElement.querySelector(".error-message")
+        if (!errorMsg) {
+          errorMsg = document.createElement("div")
+          errorMsg.className = "error-message"
+          errorMsg.style.color = "#f44336"
+          errorMsg.style.fontSize = "0.875rem"
+          errorMsg.style.marginTop = "0.25rem"
+          commonNameInput.parentElement.appendChild(errorMsg)
+        }
+        errorMsg.textContent = "Please select a Common Name from the dropdown suggestions"
+        errorMessages.push("Please select a Common Name from the dropdown suggestions")
+      } else {
+        commonNameInput.classList.remove("error")
+        const errorMsg = commonNameInput.parentElement.querySelector(".error-message")
+        if (errorMsg) {
+          errorMsg.remove()
+        }
+      }
+    }
+
+    // Validate all required fields (except Notes)
     requiredFields.forEach((field) => {
+      // Skip Notes field
+      if (field.id === 'notes' || field.name === 'notes') {
+        return
+      }
+      
       // Handle radio buttons differently
       if (field.type === 'radio') {
         const radioGroup = form.querySelectorAll(`input[name="${field.name}"]`)
@@ -246,6 +303,8 @@ document.addEventListener("DOMContentLoaded", () => {
           radioGroup.forEach(radio => {
             radio.classList.add("error")
           })
+          const fieldLabel = field.closest('.form-group')?.querySelector('label')?.textContent || field.name
+          errorMessages.push(`${fieldLabel} is required`)
         } else {
           // Remove error from all radios in the group
           radioGroup.forEach(radio => {
@@ -263,8 +322,16 @@ document.addEventListener("DOMContentLoaded", () => {
           if (!errorMsg) {
             errorMsg = document.createElement("div")
             errorMsg.className = "error-message"
+            errorMsg.style.color = "#f44336"
+            errorMsg.style.fontSize = "0.875rem"
+            errorMsg.style.marginTop = "0.25rem"
             errorMsg.textContent = "This field is required"
             field.parentElement.appendChild(errorMsg)
+          }
+          
+          const fieldLabel = field.closest('.form-group')?.querySelector('label')?.textContent || field.name
+          if (!errorMessages.includes(`${fieldLabel} is required`)) {
+            errorMessages.push(`${fieldLabel} is required`)
           }
         } else {
           field.classList.remove("error")
@@ -275,6 +342,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
     })
+
+    // Show alert with all errors if validation fails
+    if (!isValid && errorMessages.length > 0) {
+      alert("Please fix the following errors:\n\n" + errorMessages.join("\n"))
+    }
 
     return isValid
   }
@@ -523,10 +595,14 @@ function initializeCommonNameAutocomplete() {
   commonNameInput.addEventListener('input', function(e) {
     const value = this.value.trim()
     userSelectedFromDropdown = false
+    // Clear the flag when user types (not selecting from dropdown)
+    this.dataset.selectedFromDropdown = 'false'
     
     if (value.length === 0) {
       suggestionsContainer.style.display = 'none'
       selectedSuggestionIndex = -1
+      // Clear the flag when field is empty
+      this.dataset.selectedFromDropdown = 'false'
       return
     }
 
@@ -565,6 +641,7 @@ function initializeCommonNameAutocomplete() {
         if (!exactMatch) {
           // Clear the field if user didn't select from dropdown
           this.value = ''
+          this.dataset.selectedFromDropdown = 'false'
           suggestionsContainer.style.display = 'none'
           
           // Clear auto-filled fields
@@ -584,6 +661,9 @@ function initializeCommonNameAutocomplete() {
             genusInput.value = ''
             genusInput.dataset.autoFilled = 'false'
           }
+        } else {
+          // If exact match found, mark as selected from dropdown
+          this.dataset.selectedFromDropdown = 'true'
         }
       }
       suggestionsContainer.style.display = 'none'
@@ -706,8 +786,11 @@ function selectSuggestion(suggestionElement, treeData) {
   // Set the flag BEFORE setting the value to prevent blur handler from clearing it
   userSelectedFromDropdown = true
   
-  // Set the common name value
+  // Set the common name value with correct capitalization
   commonNameInput.value = commonName
+  
+  // Mark that this value was selected from dropdown (for validation)
+  commonNameInput.dataset.selectedFromDropdown = 'true'
   
   // Hide suggestions
   suggestionsContainer.style.display = 'none'
@@ -789,8 +872,11 @@ function initializeTaxonomyManagement() {
     })
   }
   
-  // Load initial taxonomy list if tab is active
-  if (document.getElementById("manage-taxonomy").style.display !== 'none') {
+  // Load initial taxonomy list if tab is active (check both display style and active class)
+  const manageTaxonomyTab = document.getElementById("manage-taxonomy")
+  const manageTaxonomyButton = document.querySelector('[data-tab="manage-taxonomy"]')
+  if (manageTaxonomyTab && manageTaxonomyButton && 
+      (manageTaxonomyTab.style.display !== 'none' || manageTaxonomyButton.classList.contains('active'))) {
     loadTaxonomyList()
   }
 }
