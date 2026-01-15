@@ -76,6 +76,34 @@
                         </div>
                     {% endif %}
                 </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                    <label for="yearFilter" style="display: block; margin-bottom: 8px; color: rgba(255, 255, 255, 0.9); font-size: 0.9rem;">Year:</label>
+                    <select id="yearFilter" name="yearFilter" class="filter-select">
+                        <option value="">All Years</option>
+                        {% for year in unique_years %}
+                        <option value="{{ year }}">{{ year }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                    <label for="healthFilter" style="display: block; margin-bottom: 8px; color: rgba(255, 255, 255, 0.9); font-size: 0.9rem;">Health Status:</label>
+                    <select id="healthFilter" name="healthFilter" class="filter-select">
+                        <option value="">All</option>
+                        <option value="healthy">Healthy</option>
+                        <option value="not_healthy">Not Healthy</option>
+                    </select>
+                </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                    <label for="statusFilter" style="display: block; margin-bottom: 8px; color: rgba(255, 255, 255, 0.9); font-size: 0.9rem;">Tree Status:</label>
+                    <select id="statusFilter" name="statusFilter" class="filter-select">
+                        <option value="">All</option>
+                        <option value="planted">Planted</option>
+                        <option value="existing">Existing</option>
+                    </select>
+                </div>
             </div>
         </div>
 <!--
@@ -141,12 +169,12 @@
 <style>
 /* Force scrollbar for tree filter list */
 .tree-filter-list {
-  max-height: 150px !important;
+  max-height: 250px !important;
   overflow-y: scroll !important;
   overflow-x: hidden !important;
   padding-right: 15px !important;
   margin-right: -15px !important;
-  height: 150px !important;
+  height: 250px !important;
 }
 
 .tree-filter-list::-webkit-scrollbar {
@@ -183,8 +211,8 @@
 
 /* Additional aggressive scrollbar forcing */
 .control-dropdown .tree-filter-list {
-  max-height: 150px !important;
-  height: 150px !important;
+  max-height: 250px !important;
+  height: 250px !important;
   overflow-y: scroll !important;
   overflow-x: hidden !important;
   padding-right: 15px !important;
@@ -284,9 +312,9 @@
     const treeFilterList = document.querySelector('.tree-filter-list');
     if (treeFilterList) {
       console.log("Found tree filter list, applying scrollbar fixes...");
-      treeFilterList.style.maxHeight = '150px';
+      treeFilterList.style.maxHeight = '250px';
       treeFilterList.style.overflowY = 'scroll';
-      treeFilterList.style.height = '150px';
+      treeFilterList.style.height = '250px';
       treeFilterList.style.paddingRight = '15px';
       treeFilterList.style.marginRight = '-15px';
       

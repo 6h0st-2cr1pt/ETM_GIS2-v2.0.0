@@ -240,6 +240,9 @@ def gis(request):
         user=request.user
     ).distinct().order_by('common_name')  # Remove duplicates and order by common name
 
+    # Get unique years from trees
+    unique_years = EndemicTree.objects.filter(user=request.user).values_list('year', flat=True).distinct().order_by('-year')
+
     # Get default pin style
     try:
         default_pin = PinStyle.objects.get(user=request.user, is_default=True)
@@ -250,6 +253,7 @@ def gis(request):
         'active_page': 'gis',
         'layers': layers,
         'tree_species': tree_species,
+        'unique_years': unique_years,
         'default_pin': default_pin,
     }
     return render(request, 'app/gis.html', context)

@@ -79,10 +79,10 @@
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
   padding: 0.75rem;
   min-width: 200px;
-  max-height: 200px;
+  max-height: 500px;
   display: none;
   z-index: 1001;
-  overflow-y: scroll;
+  overflow-y: auto;
   overflow-x: hidden;
   /* Force scrollbar to always be visible */
   scrollbar-gutter: stable;
@@ -125,6 +125,38 @@
 .control-dropdown.active {
   display: block;
   animation: fadeIn 0.3s ease;
+}
+
+/* Filter select dropdowns styling */
+.control-dropdown .filter-select {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: rgba(40, 40, 40, 0.95);
+  color: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  font-size: 0.9rem;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23ffffff%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-6.5%200-13%205.4-13%2013s5.4%2013%2013%2013l126.5%20126.5c5.2%205.2%2013%205.2%2018.2%200l126.5-126.5c5.2-5.2%205.2-13%200-18.2z%22%2F%3E%3C%2Fsvg%3E');
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+  padding-right: 30px;
+}
+
+.control-dropdown .filter-select:focus {
+  outline: none;
+  border-color: rgba(28, 200, 138, 0.6);
+  box-shadow: 0 0 0 2px rgba(28, 200, 138, 0.2);
+}
+
+.control-dropdown .filter-select option {
+  background-color: rgba(40, 40, 40, 0.95);
+  color: rgba(255, 255, 255, 0.95);
+  padding: 8px;
 }
 
 @keyframes fadeIn {

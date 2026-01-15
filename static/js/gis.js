@@ -594,21 +594,59 @@ document.addEventListener("DOMContentLoaded", () => {
     })
   })
 
+  // Store current filter values
+  let currentSpeciesFilter = "all"
+  let currentYearFilter = ""
+  let currentHealthFilter = ""
+  let currentStatusFilter = ""
+
+  // Function to apply all filters
+  function applyFilters() {
+    treeLayer.clearLayers()
+    
+    if (currentSpeciesFilter === "all") {
+      loadTrees() // Show all individual tree pins
+      // Hide the filtered data container
+      filteredDataContainer.style.display = "none"
+    } else {
+      loadFilteredTrees(currentSpeciesFilter)
+    }
+  }
+
   // Tree filter change event
   document.querySelectorAll('input[name="treeFilter"]').forEach((radio) => {
     radio.addEventListener("change", function () {
-      const filterValue = this.value
-      treeLayer.clearLayers()
-
-      if (filterValue === "all") {
-        loadTrees() // Show all individual tree pins
-        // Hide the filtered data container
-        filteredDataContainer.style.display = "none"
-      } else {
-        loadFilteredTrees(filterValue)
-      }
+      currentSpeciesFilter = this.value
+      applyFilters()
     })
   })
+
+  // Year filter change event
+  const yearFilter = document.getElementById('yearFilter')
+  if (yearFilter) {
+    yearFilter.addEventListener("change", function () {
+      currentYearFilter = this.value
+      applyFilters()
+    })
+  }
+
+  // Health filter change event
+  const healthFilter = document.getElementById('healthFilter')
+  if (healthFilter) {
+    healthFilter.addEventListener("change", function () {
+      currentHealthFilter = this.value
+      applyFilters()
+    })
+  }
+
+  // Status filter change event (Existing/Planted)
+  const statusFilter = document.getElementById('statusFilter')
+  if (statusFilter) {
+    statusFilter.addEventListener("change", function () {
+      currentStatusFilter = this.value
+      applyFilters()
+    })
+  }
 
   // Toggle control dropdowns
   document.querySelectorAll(".control-toggle").forEach((toggle) => {
@@ -730,6 +768,52 @@ document.addEventListener("DOMContentLoaded", () => {
       .catch((error) => console.error("Error exporting data:", error))
   })
 
+  // Function to filter GeoJSON features by year, health status, and tree status
+  function filterGeoJSON(geojson) {
+    if (!geojson.features) return geojson
+    
+    const filteredFeatures = geojson.features.filter(feature => {
+      const props = feature.properties
+      
+      // Filter by year
+      if (currentYearFilter) {
+        const treeYear = props.year ? String(props.year) : ''
+        if (treeYear !== currentYearFilter) {
+          return false
+        }
+      }
+      
+      // Filter by health status
+      if (currentHealthFilter) {
+        const isHealthy = props.is_healthy !== undefined ? props.is_healthy : true
+        if (currentHealthFilter === 'healthy' && !isHealthy) {
+          return false
+        }
+        if (currentHealthFilter === 'not_healthy' && isHealthy) {
+          return false
+        }
+      }
+      
+      // Filter by tree status (Existing/Planted)
+      if (currentStatusFilter) {
+        const isPlanted = props.is_planted !== undefined ? props.is_planted : false
+        if (currentStatusFilter === 'planted' && !isPlanted) {
+          return false
+        }
+        if (currentStatusFilter === 'existing' && isPlanted) {
+          return false
+        }
+      }
+      
+      return true
+    })
+    
+    return {
+      ...geojson,
+      features: filteredFeatures
+    }
+  }
+
   // Function to load all trees
   function loadTrees() {
     // Clear existing tree markers
@@ -779,11 +863,15 @@ document.addEventListener("DOMContentLoaded", () => {
           throw new Error(data.error)
         }
         
-        addTreesToMap(data)
+        // Apply filters
+        const filteredData = filterGeoJSON(data)
+        console.log(`Filtered ${filteredData.features.length} trees from ${data.features.length} total`)
+        
+        addTreesToMap(filteredData)
 
         // Also update heatmap if active
         if (map.hasLayer(additionalLayers.heatmap)) {
-          updateHeatmap(data)
+          updateHeatmap(filteredData)
         }
       })
       .catch((error) => {
@@ -1067,17 +1155,22 @@ document.addEventListener("DOMContentLoaded", () => {
       })
       .then((data) => {
         console.log("Filtered tree data received:", data)
+        
+        // Apply filters
+        const filteredData = filterGeoJSON(data)
+        console.log(`Filtered ${filteredData.features.length} trees from ${data.features.length} total`)
+        
         // Use location aggregation for filtered trees (showStats = true for filtered species)
-        addTreesByAddressToMap(data, true)
+        addTreesByAddressToMap(filteredData, true)
 
         // Also update heatmap if active
         if (map.hasLayer(additionalLayers.heatmap)) {
-          updateHeatmap(data)
+          updateHeatmap(filteredData)
         }
 
         // Display filtered data in the glass card
-        if (data.features && data.features.length > 0) {
-          displayFilteredData(data)
+        if (filteredData.features && filteredData.features.length > 0) {
+          displayFilteredData(filteredData)
         } else {
           // If no features, show a message
           displayNoDataMessage(speciesId)
