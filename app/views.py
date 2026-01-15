@@ -485,7 +485,7 @@ def datasets(request):
     Display and manage datasets
     """
     trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family').all()
-    species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
+    species_list = TreeSpecies.objects.filter(user=request.user).select_related('genus', 'genus__family').all().order_by('common_name')
 
     # Expand aggregated trees into individual tree rows (each row = 1 tree)
     expanded_trees = []
@@ -541,10 +541,18 @@ def datasets(request):
                 'year': tree.year,
             })
 
+    # Get unique values for filters
+    unique_common_names = sorted(set(tree['common_name'] for tree in expanded_trees if tree['common_name']))
+    unique_addresses = sorted(set(tree['address'] for tree in expanded_trees if tree['address']))
+    unique_years = sorted(set(tree['year'] for tree in expanded_trees if tree['year']), reverse=True)
+
     context = {
         'active_page': 'datasets',
         'trees': expanded_trees,
         'species_list': species_list,
+        'unique_common_names': unique_common_names,
+        'unique_addresses': unique_addresses,
+        'unique_years': unique_years,
     }
     return render(request, 'app/datasets.html', context)
 
@@ -2827,8 +2835,31 @@ def edit_tree(request, tree_id):
         if request.method == 'POST':
             try:
                 # Get form data
-                species_id = request.POST.get('species')
-                population = int(request.POST.get('population'))
+                common_name = request.POST.get('common_name', '').strip()
+                species_id = request.POST.get('species_id', '').strip()
+                
+                # Find species by common name or use species_id
+                if species_id:
+                    try:
+                        species = TreeSpecies.objects.get(id=species_id, user=request.user)
+                    except TreeSpecies.DoesNotExist:
+                        return JsonResponse({
+                            'success': False,
+                            'error': 'Species not found'
+                        }, status=400)
+                elif common_name:
+                    species = TreeSpecies.objects.filter(common_name=common_name, user=request.user).first()
+                    if not species:
+                        return JsonResponse({
+                            'success': False,
+                            'error': f'Species with common name "{common_name}" not found'
+                        }, status=400)
+                else:
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Common name or species ID is required'
+                    }, status=400)
+                
                 hectares_str = request.POST.get('hectares', '').strip()
                 if not hectares_str:
                     return JsonResponse({
@@ -2848,25 +2879,38 @@ def edit_tree(request, tree_id):
                         'error': 'Invalid hectares value'
                     }, status=400)
                 year = int(request.POST.get('year'))
-                health_status = request.POST.get('health_status')
                 latitude = float(request.POST.get('latitude'))
                 longitude = float(request.POST.get('longitude'))
-                notes = request.POST.get('notes')
+                
+                # Get additional fields
+                is_healthy_str = request.POST.get('is_healthy', 'true')
+                is_healthy = is_healthy_str.lower() == 'true'
+                is_planted_str = request.POST.get('is_planted', 'false')
+                is_planted = is_planted_str.lower() == 'true'
+                
+                height_str = request.POST.get('height', '').strip()
+                height_meters = float(height_str) if height_str else None
+                
+                diameter_str = request.POST.get('diameter_breast', '').strip()
+                diameter_cm = float(diameter_str) if diameter_str else None
+                
+                address = request.POST.get('address', '').strip()
 
                 # Validate data
-                if not all([species_id, population, year, health_status, latitude, longitude]):
+                if not all([year, latitude, longitude]):
                     return JsonResponse({
                         'success': False,
                         'error': 'All required fields must be provided'
                     }, status=400)
 
                 # Update tree record
-                tree.species_id = species_id
-                tree.population = population
+                tree.species = species
                 tree.hectares = hectares
                 tree.year = year
-                tree.health_status = health_status
-                tree.notes = notes
+                tree.is_healthy = is_healthy
+                tree.is_planted = is_planted
+                tree.height_meters = height_meters
+                tree.diameter_cm = diameter_cm
 
                 # Update location
                 if not tree.location:
@@ -2886,42 +2930,20 @@ def edit_tree(request, tree_id):
                     coords_changed = (tree.location.latitude != latitude or tree.location.longitude != longitude)
                     tree.location.latitude = latitude
                     tree.location.longitude = longitude
-                    tree.location.save()
-                    if coords_changed:
+                    
+                    # Update address if provided, otherwise geocode
+                    if address:
+                        tree.location.address = address
+                    elif coords_changed:
                         # Clear address and geocode again
                         tree.location.address = None
+                    
+                    tree.location.save()
+                    if coords_changed and not address:
                         try:
                             geocode_location(tree.location)
                         except Exception as e:
                             print(f"Geocoding failed for location {tree.location.id}: {str(e)}")
-                
-                # Handle image upload - save to species level (shared by all trees with same common_name and scientific_name)
-                if 'tree_image' in request.FILES:
-                    image_file = request.FILES['tree_image']
-                    
-                    # Check if species already has an image
-                    if tree.species.image:
-                        return JsonResponse({
-                            'success': False,
-                            'error': f"Image already exists for {tree.species.common_name} ({tree.species.scientific_name}). To update the image, please edit the species in the admin panel."
-                        }, status=400)
-                    
-                    # Read image as binary
-                    image_file.seek(0)  # Reset file pointer
-                    image_data = image_file.read()
-                    
-                    # Store binary data in species
-                    tree.species.image = image_data
-                    
-                    # Determine and store image format
-                    content_type = image_file.content_type
-                    if 'jpeg' in content_type or 'jpg' in content_type:
-                        tree.species.image_format = 'JPEG'
-                    elif 'png' in content_type:
-                        tree.species.image_format = 'PNG'
-                    
-                    # Save species with image
-                    tree.species.save()
 
                 tree.save()
 
@@ -2942,12 +2964,21 @@ def edit_tree(request, tree_id):
             return JsonResponse({
                 'id': str(tree.id),
                 'species_id': str(tree.species.id),
+                'common_name': tree.species.common_name,
+                'scientific_name': tree.species.scientific_name,
+                'family': tree.species.genus.family.name if tree.species.genus and tree.species.genus.family else '',
+                'genus': tree.species.genus.name if tree.species.genus else '',
                 'population': tree.population,
                 'hectares': tree.hectares,
                 'year': tree.year,
                 'health_status': tree.health_status,
+                'is_healthy': tree.is_healthy,
+                'is_planted': tree.is_planted,
+                'height_meters': tree.height_meters,
+                'diameter_cm': tree.diameter_cm,
                 'latitude': tree.location.latitude,
                 'longitude': tree.location.longitude,
+                'address': tree.location.address or '',
                 'notes': tree.notes or '',
                 'image_url': request.build_absolute_uri(reverse('app:species_image', args=[tree.species.id])) if tree.species.image else None
             })
@@ -3731,6 +3762,127 @@ def list_taxonomy(request):
 
 
 
+
+
+@login_required(login_url='app:login')
+
+def update_taxonomy(request, taxonomy_id):
+
+    """Update an existing taxonomy entry"""
+
+    if request.method != 'POST':
+
+        return JsonResponse({'error': 'Invalid request method'}, status=405)
+
+    
+
+    try:
+
+        species = TreeSpecies.objects.get(id=taxonomy_id, user=request.user)
+
+        common_name = request.POST.get('common_name', '').strip()
+
+        scientific_name = request.POST.get('scientific_name', '').strip()
+
+        family_name = request.POST.get('family', '').strip()
+
+        genus_name = request.POST.get('genus', '').strip()
+
+        
+
+        if not all([common_name, scientific_name, family_name, genus_name]):
+
+            return JsonResponse({
+
+                'success': False,
+
+                'error': 'All fields are required'
+
+            }, status=400)
+
+        
+
+        # Get or create family
+
+        family, _ = TreeFamily.objects.get_or_create(
+
+            name=family_name,
+
+            user=request.user,
+
+            defaults={'description': ''}
+
+        )
+
+        
+
+        # Get or create genus
+
+        genus, _ = TreeGenus.objects.get_or_create(
+
+            name=genus_name,
+
+            user=request.user,
+
+            defaults={'family': family}
+
+        )
+
+        # Update family if it was different
+
+        if genus.family != family:
+
+            genus.family = family
+
+            genus.save()
+
+        
+
+        # Update species
+
+        species.common_name = common_name
+
+        species.scientific_name = scientific_name
+
+        species.genus = genus
+
+        species.save()
+
+        
+
+        return JsonResponse({
+
+            'success': True,
+
+            'message': 'Taxonomy updated successfully',
+
+            'id': str(species.id)
+
+        })
+
+    except TreeSpecies.DoesNotExist:
+
+        return JsonResponse({
+
+            'success': False,
+
+            'error': 'Taxonomy entry not found'
+
+        }, status=404)
+
+    except Exception as e:
+
+        import traceback
+
+        traceback.print_exc()
+
+        return JsonResponse({
+
+            'success': False,
+
+            'error': str(e)
+
+        }, status=500)
 
 
 @login_required(login_url='app:login')

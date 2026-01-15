@@ -53,5 +53,6 @@ urlpatterns = [
     # Taxonomy management
     path('api/add-taxonomy/', views.add_taxonomy, name='add_taxonomy'),
     path('api/list-taxonomy/', views.list_taxonomy, name='list_taxonomy'),
+    path('api/update-taxonomy/<int:taxonomy_id>/', views.update_taxonomy, name='update_taxonomy'),
     path('api/delete-taxonomy/<int:taxonomy_id>/', views.delete_taxonomy, name='delete_taxonomy'),
 ]

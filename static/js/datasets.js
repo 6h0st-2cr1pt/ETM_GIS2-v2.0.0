@@ -12,8 +12,67 @@ document.addEventListener("DOMContentLoaded", () => {
     let currentPage = 1;
     const table = document.getElementById("datasetsTable");
     const tbody = table ? table.getElementsByTagName("tbody")[0] : null;
-    const allRows = tbody ? Array.from(tbody.getElementsByTagName("tr")) : [];
-    const totalRows = allRows.length;
+    let allRows = tbody ? Array.from(tbody.getElementsByTagName("tr")) : [];
+    let filteredRows = allRows;
+    let totalRows = allRows.length;
+    
+    // ========== FILTER FUNCTIONALITY ==========
+    const filterCommonName = document.getElementById('filterCommonName');
+    const filterAddress = document.getElementById('filterAddress');
+    const filterYear = document.getElementById('filterYear');
+    
+    function applyFilters() {
+        const commonNameValue = filterCommonName ? filterCommonName.value : '';
+        const addressValue = filterAddress ? filterAddress.value : '';
+        const yearValue = filterYear ? filterYear.value : '';
+        
+        filteredRows = allRows.filter(row => {
+            // Get cells by their data attributes
+            const commonNameCell = row.querySelector('td[data-common_name]');
+            const addressCell = row.querySelector('td[data-address]');
+            const yearCell = row.querySelector('td[data-year]');
+            
+            // Extract values from data attributes or text content
+            const rowCommonName = commonNameCell ? (commonNameCell.getAttribute('data-common_name') || commonNameCell.textContent.trim()) : '';
+            const rowAddress = addressCell ? (addressCell.getAttribute('data-address') || (addressCell.textContent.trim() === '-' ? '' : addressCell.textContent.trim())) : '';
+            const rowYear = yearCell ? (yearCell.getAttribute('data-year') || yearCell.textContent.trim()) : '';
+            
+            // Match logic: empty filter means show all
+            const matchesCommonName = !commonNameValue || rowCommonName === commonNameValue;
+            const matchesAddress = !addressValue || rowAddress === addressValue;
+            const matchesYear = !yearValue || String(rowYear) === String(yearValue);
+            
+            return matchesCommonName && matchesAddress && matchesYear;
+        });
+        
+        totalRows = filteredRows.length;
+        currentPage = 1;
+        
+        // Re-initialize pagination with filtered rows
+        if (totalRows >= itemsPerPage) {
+            initializePagination();
+        } else {
+            // Show all filtered rows if less than itemsPerPage
+            allRows.forEach(row => row.style.display = 'none');
+            filteredRows.forEach(row => row.style.display = '');
+            const paginationContainer = document.querySelector('.datasets-pagination');
+            if (paginationContainer) {
+                paginationContainer.style.display = 'none';
+            }
+            updatePaginationInfo();
+        }
+    }
+    
+    // Add event listeners for filters
+    if (filterCommonName) {
+        filterCommonName.addEventListener('change', applyFilters);
+    }
+    if (filterAddress) {
+        filterAddress.addEventListener('change', applyFilters);
+    }
+    if (filterYear) {
+        filterYear.addEventListener('change', applyFilters);
+    }
     
     // Only enable pagination if there are 10 or more rows
     if (totalRows >= itemsPerPage) {
@@ -65,11 +124,12 @@ document.addEventListener("DOMContentLoaded", () => {
         const endIndex = startIndex + itemsPerPage;
         
         // Hide all rows first
-        allRows.forEach((row, index) => {
+        allRows.forEach(row => row.style.display = 'none');
+        
+        // Show only filtered rows for current page
+        filteredRows.forEach((row, index) => {
             if (index >= startIndex && index < endIndex) {
                 row.style.display = '';
-            } else {
-                row.style.display = 'none';
             }
         });
         
@@ -84,7 +144,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     
     function updatePaginationInfo() {
-        const startIndex = (currentPage - 1) * itemsPerPage + 1;
+        const startIndex = totalRows > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0;
         const endIndex = Math.min(currentPage * itemsPerPage, totalRows);
         
         const showingStart = document.getElementById('showing-start');
@@ -215,11 +275,8 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
     
-    // View and Edit button handlers
-    const viewButtons = document.querySelectorAll('.action-view');
-    const imageButtons = document.querySelectorAll('.action-image');
+    // Edit button handlers
     const editButtons = document.querySelectorAll('.action-edit');
-    const deleteButtons = document.querySelectorAll('.action-delete');
     
     // Bulk delete functionality
     const selectAllCheckbox = document.getElementById('selectAllCheckbox');
@@ -359,57 +416,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Initialize Bootstrap modals
-    const treeDetailsModal = new bootstrap.Modal(document.getElementById('treeDetailsModal'));
-    const imagePreviewModal = new bootstrap.Modal(document.getElementById('imagePreviewModal'));
     const editTreeModal = new bootstrap.Modal(document.getElementById('editTreeModal'));
-
-    // View button click handler
-    viewButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const row = button.closest('tr');
-            
-            // Populate view modal with data from the row
-            document.getElementById('view-common-name').textContent = row.querySelector('[data-common_name]').dataset.common_name;
-            document.getElementById('view-scientific-name').textContent = row.querySelector('[data-scientific_name]').dataset.scientific_name;
-            document.getElementById('view-family').textContent = row.querySelector('[data-family]').dataset.family;
-            document.getElementById('view-genus').textContent = row.querySelector('[data-genus]').dataset.genus;
-            document.getElementById('view-population').textContent = row.querySelector('[data-population]').dataset.population;
-            const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || 'N/A';
-            document.getElementById('view-hectares').textContent = hectares !== 'N/A' ? parseFloat(hectares).toFixed(2) + ' ha' : 'N/A';
-            document.getElementById('view-health-status').textContent = row.querySelector('[data-health_status]').dataset.health_status;
-            document.getElementById('view-year').textContent = row.querySelector('[data-year]').dataset.year;
-            
-            const coordinates = row.querySelector('[data-coordinates]').dataset.coordinates.split(',');
-            document.getElementById('view-latitude').textContent = coordinates[0];
-            document.getElementById('view-longitude').textContent = coordinates[1];
-            
-            const notes = row.querySelector('[data-notes]').dataset.notes;
-            document.getElementById('view-notes').textContent = notes || 'No notes available';
-
-            // Show the view modal
-            treeDetailsModal.show();
-        });
-    });
-
-    // Image preview button click handler
-    imageButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const imageUrl = button.dataset.imageUrl;
-            const placeholder = document.getElementById('image-preview-placeholder');
-            const image = document.getElementById('image-preview-img');
-            
-            if (imageUrl && imageUrl.trim() !== '') {
-                image.src = imageUrl;
-                image.style.display = 'block';
-                placeholder.style.display = 'none';
-            } else {
-                image.style.display = 'none';
-                placeholder.style.display = 'block';
-            }
-            
-            imagePreviewModal.show();
-        });
-    });
 
     // Edit button click handler
     editButtons.forEach(button => {
@@ -432,60 +439,28 @@ document.addEventListener("DOMContentLoaded", () => {
                     
                     // Populate edit form with data
                     document.getElementById('edit-tree-id').value = treeId;
-                    document.getElementById('edit-species').value = data.species_id;
-                    document.getElementById('edit-population').value = data.population;
+                    document.getElementById('edit-species-id').value = data.species_id;
+                    document.getElementById('edit-common-name').value = data.common_name || '';
+                    document.getElementById('edit-scientific-name').value = data.scientific_name || '';
+                    document.getElementById('edit-family').value = data.family || '';
+                    document.getElementById('edit-genus').value = data.genus || '';
                     document.getElementById('edit-hectares').value = data.hectares || '';
-                    document.getElementById('edit-health-status').value = data.health_status;
                     document.getElementById('edit-year').value = data.year;
+                    document.getElementById('edit-is-healthy').value = data.is_healthy ? 'true' : 'false';
+                    document.getElementById('edit-is-planted').value = data.is_planted ? 'true' : 'false';
+                    document.getElementById('edit-height').value = data.height_meters || '';
+                    document.getElementById('edit-diameter-breast').value = data.diameter_cm || '';
+                    document.getElementById('edit-address').value = data.address || '';
                     document.getElementById('edit-latitude').value = data.latitude;
                     document.getElementById('edit-longitude').value = data.longitude;
-                    document.getElementById('edit-notes').value = data.notes || '';
-                    
-                    // Handle image preview
-                    const currentImagePreview = document.getElementById('edit-image-preview');
-                    const currentImageContainer = document.getElementById('edit-image-preview-container');
-                    if (data.image_url) {
-                        currentImagePreview.src = data.image_url;
-                        currentImageContainer.style.display = 'block';
-                    } else {
-                        currentImageContainer.style.display = 'none';
-                    }
-                    
-                    // Reset new image preview
-                    document.getElementById('edit-image-new-preview-container').style.display = 'none';
-                    document.getElementById('edit-tree-image').value = '';
                 } else {
                     // Fallback to row data if API fails
-                    document.getElementById('edit-tree-id').value = treeId;
-                    document.getElementById('edit-species').value = row.querySelector('[data-species]').dataset.species;
-                    document.getElementById('edit-population').value = row.querySelector('[data-population]').dataset.population;
-                    const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || '';
-                    document.getElementById('edit-hectares').value = hectares;
-                    document.getElementById('edit-health-status').value = row.querySelector('[data-health_status]').dataset.health_status;
-                    document.getElementById('edit-year').value = row.querySelector('[data-year]').dataset.year;
-                    
-                    const coordinates = row.querySelector('[data-coordinates]').dataset.coordinates.split(',');
-                    document.getElementById('edit-latitude').value = coordinates[0];
-                    document.getElementById('edit-longitude').value = coordinates[1];
-                    
-                    document.getElementById('edit-notes').value = row.querySelector('[data-notes]').dataset.notes || '';
+                    populateEditFormFromRow(row, treeId);
                 }
             } catch (error) {
                 console.error('Error fetching tree details:', error);
                 // Fallback to row data
-                document.getElementById('edit-tree-id').value = treeId;
-                document.getElementById('edit-species').value = row.querySelector('[data-species]').dataset.species;
-                document.getElementById('edit-population').value = row.querySelector('[data-population]').dataset.population;
-                const hectares = row.querySelector('[data-hectares]')?.dataset.hectares || '';
-                document.getElementById('edit-hectares').value = hectares;
-                document.getElementById('edit-health-status').value = row.querySelector('[data-health_status]').dataset.health_status;
-                document.getElementById('edit-year').value = row.querySelector('[data-year]').dataset.year;
-                
-                const coordinates = row.querySelector('[data-coordinates]').dataset.coordinates.split(',');
-                document.getElementById('edit-latitude').value = coordinates[0];
-                document.getElementById('edit-longitude').value = coordinates[1];
-                
-                document.getElementById('edit-notes').value = row.querySelector('[data-notes]').dataset.notes || '';
+                populateEditFormFromRow(row, treeId);
             }
 
             // Show the edit modal
@@ -493,24 +468,197 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     });
     
-    // Image preview for new image upload in edit form
-    const editImageInput = document.getElementById('edit-tree-image');
-    if (editImageInput) {
-        editImageInput.addEventListener('change', function(e) {
-            const file = e.target.files[0];
-            const newPreviewContainer = document.getElementById('edit-image-new-preview-container');
-            const newPreview = document.getElementById('edit-image-new-preview');
+    // Function to populate edit form from row data
+    function populateEditFormFromRow(row, treeId) {
+        document.getElementById('edit-tree-id').value = treeId;
+        const commonName = row.querySelector('[data-common_name]')?.getAttribute('data-common_name') || '';
+        const scientificName = row.querySelector('[data-scientific_name]')?.getAttribute('data-scientific_name') || '';
+        const family = row.querySelector('[data-family]')?.getAttribute('data-family') || '';
+        const genus = row.querySelector('[data-genus]')?.getAttribute('data-genus') || '';
+        
+        document.getElementById('edit-common-name').value = commonName;
+        document.getElementById('edit-scientific-name').value = scientificName;
+        document.getElementById('edit-family').value = family;
+        document.getElementById('edit-genus').value = genus;
+        document.getElementById('edit-hectares').value = row.querySelector('[data-hectars]')?.getAttribute('data-hectars') || '';
+        document.getElementById('edit-year').value = row.querySelector('[data-year]')?.getAttribute('data-year') || '';
+        document.getElementById('edit-latitude').value = row.querySelector('[data-latitude]')?.getAttribute('data-latitude') || '';
+        document.getElementById('edit-longitude').value = row.querySelector('[data-longitude]')?.getAttribute('data-longitude') || '';
+        document.getElementById('edit-address').value = row.querySelector('[data-address]')?.getAttribute('data-address') || '';
+        const height = row.querySelector('[data-height]')?.getAttribute('data-height') || '';
+        document.getElementById('edit-height').value = height;
+        const diameter = row.querySelector('[data-diameter_breast]')?.getAttribute('data-diameter_breast') || '';
+        document.getElementById('edit-diameter-breast').value = diameter;
+        const healthy = row.querySelector('[data-healthy]')?.getAttribute('data-healthy') || '0';
+        document.getElementById('edit-is-healthy').value = healthy === '1' ? 'true' : 'false';
+        const planted = row.querySelector('[data-planted]')?.getAttribute('data-planted') || '0';
+        document.getElementById('edit-is-planted').value = planted === '1' ? 'true' : 'false';
+    }
+    
+    // Initialize autocomplete for edit common name field
+    let editAutocompleteSuggestions = [];
+    let editSelectedSuggestionIndex = -1;
+    let editUserSelectedFromDropdown = false;
+    
+    function initializeEditAutocomplete() {
+        const editCommonNameInput = document.getElementById('edit-common-name');
+        const editSuggestionsContainer = document.getElementById('editCommonNameSuggestions');
+        
+        if (!editCommonNameInput || !editSuggestionsContainer) return;
+        
+        // Load suggestions
+        fetch("/api/endemic-trees-list/")
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.trees) {
+                    editAutocompleteSuggestions = data.trees;
+                }
+            })
+            .catch(error => {
+                console.error("Error loading autocomplete suggestions:", error);
+            });
+        
+        // Handle input
+        editCommonNameInput.addEventListener('input', function(e) {
+            const value = this.value.trim();
+            editUserSelectedFromDropdown = false;
             
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = function(e) {
-                    newPreview.src = e.target.result;
-                    newPreviewContainer.style.display = 'block';
-                };
-                reader.readAsDataURL(file);
-            } else {
-                newPreviewContainer.style.display = 'none';
+            if (value.length === 0) {
+                editSuggestionsContainer.style.display = 'none';
+                editSelectedSuggestionIndex = -1;
+                return;
             }
+            
+            const filtered = editAutocompleteSuggestions.filter(tree => 
+                tree.common_name.toLowerCase().includes(value.toLowerCase())
+            );
+            
+            if (filtered.length > 0) {
+                displayEditSuggestions(filtered, editSuggestionsContainer);
+            } else {
+                editSuggestionsContainer.style.display = 'none';
+            }
+        });
+        
+        // Handle blur
+        editCommonNameInput.addEventListener('blur', function() {
+            setTimeout(() => {
+                if (!editUserSelectedFromDropdown && this.value.trim()) {
+                    const exactMatch = editAutocompleteSuggestions.find(tree => 
+                        tree.common_name.toLowerCase() === this.value.trim().toLowerCase()
+                    );
+                    
+                    if (!exactMatch) {
+                        this.value = '';
+                        editSuggestionsContainer.style.display = 'none';
+                        // Clear auto-filled fields
+                        document.getElementById('edit-scientific-name').value = '';
+                        document.getElementById('edit-family').value = '';
+                        document.getElementById('edit-genus').value = '';
+                    }
+                }
+                editSuggestionsContainer.style.display = 'none';
+                editSelectedSuggestionIndex = -1;
+                editUserSelectedFromDropdown = false;
+            }, 250);
+        });
+        
+        // Handle keyboard navigation
+        editCommonNameInput.addEventListener('keydown', function(e) {
+            const suggestions = editSuggestionsContainer.querySelectorAll('.autocomplete-suggestion');
+            if (suggestions.length === 0) return;
+            
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                editSelectedSuggestionIndex = Math.min(editSelectedSuggestionIndex + 1, suggestions.length - 1);
+                updateEditSelectedSuggestion(suggestions);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                editSelectedSuggestionIndex = Math.max(editSelectedSuggestionIndex - 1, -1);
+                updateEditSelectedSuggestion(suggestions);
+            } else if (e.key === 'Enter' && editSelectedSuggestionIndex >= 0) {
+                e.preventDefault();
+                const selected = suggestions[editSelectedSuggestionIndex];
+                if (selected) {
+                    selectEditSuggestion(selected);
+                }
+            } else if (e.key === 'Escape') {
+                editSuggestionsContainer.style.display = 'none';
+                editSelectedSuggestionIndex = -1;
+            }
+        });
+    }
+    
+    function displayEditSuggestions(suggestions, container) {
+        container.innerHTML = '';
+        editSelectedSuggestionIndex = -1;
+        
+        suggestions.slice(0, 10).forEach((tree, index) => {
+            const div = document.createElement('div');
+            div.className = 'autocomplete-suggestion';
+            div.dataset.index = index;
+            div.dataset.commonName = tree.common_name;
+            div.dataset.scientificName = tree.scientific_name;
+            div.dataset.family = tree.family || '';
+            div.dataset.genus = tree.genus || '';
+            div.innerHTML = `<strong>${tree.common_name}</strong> <em>(${tree.scientific_name})</em>`;
+            
+            div.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+            });
+            
+            div.addEventListener('click', () => {
+                selectEditSuggestion(div);
+            });
+            
+            div.addEventListener('mouseenter', () => {
+                editSelectedSuggestionIndex = index;
+                updateEditSelectedSuggestion(container.querySelectorAll('.autocomplete-suggestion'));
+            });
+            
+            container.appendChild(div);
+        });
+        
+        container.style.display = 'block';
+    }
+    
+    function updateEditSelectedSuggestion(suggestions) {
+        suggestions.forEach((suggestion, index) => {
+            if (index === editSelectedSuggestionIndex) {
+                suggestion.classList.add('selected');
+            } else {
+                suggestion.classList.remove('selected');
+            }
+        });
+    }
+    
+    function selectEditSuggestion(suggestionElement) {
+        const commonNameInput = document.getElementById('edit-common-name');
+        const suggestionsContainer = document.getElementById('editCommonNameSuggestions');
+        
+        const treeData = {
+            common_name: suggestionElement.dataset.commonName,
+            scientific_name: suggestionElement.dataset.scientificName,
+            family: suggestionElement.dataset.family,
+            genus: suggestionElement.dataset.genus,
+        };
+        
+        commonNameInput.value = treeData.common_name;
+        editUserSelectedFromDropdown = true;
+        suggestionsContainer.style.display = 'none';
+        editSelectedSuggestionIndex = -1;
+        
+        // Auto-populate taxonomy fields
+        document.getElementById('edit-scientific-name').value = treeData.scientific_name;
+        document.getElementById('edit-family').value = treeData.family;
+        document.getElementById('edit-genus').value = treeData.genus;
+    }
+    
+    // Initialize autocomplete when modal is shown
+    const editTreeModalElement = document.getElementById('editTreeModal');
+    if (editTreeModalElement) {
+        editTreeModalElement.addEventListener('shown.bs.modal', function() {
+            initializeEditAutocomplete();
         });
     }
 

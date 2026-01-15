@@ -610,6 +610,28 @@ textarea.form-control {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.taxonomy-table .action-buttons {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.taxonomy-table .btn-edit {
+  background: rgba(33, 150, 243, 0.2);
+  color: #2196f3;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.3s ease;
+}
+
+.taxonomy-table .btn-edit:hover {
+  background: rgba(33, 150, 243, 0.4);
+  border-color: #2196f3;
+}
+
 .taxonomy-table .btn-delete {
   background: rgba(244, 67, 54, 0.2);
   color: #f44336;

@@ -544,8 +544,18 @@ function initializeCommonNameAutocomplete() {
 
   // Handle focus out - clear if not selected
   commonNameInput.addEventListener('blur', function(e) {
+    // Check if the blur was caused by clicking on a suggestion
+    const relatedTarget = e.relatedTarget || document.activeElement
+    const clickedSuggestion = relatedTarget && relatedTarget.closest('.autocomplete-suggestion')
+    
+    // If clicking on a suggestion, don't clear - let the click handler do its work
+    if (clickedSuggestion) {
+      return
+    }
+    
     // Delay to allow click on suggestion
     setTimeout(() => {
+      // Double-check that user didn't select from dropdown (in case click happened)
       if (!userSelectedFromDropdown && this.value.trim()) {
         // Check if value matches any suggestion exactly
         const exactMatch = autocompleteSuggestions.find(tree => 
@@ -578,7 +588,9 @@ function initializeCommonNameAutocomplete() {
       }
       suggestionsContainer.style.display = 'none'
       selectedSuggestionIndex = -1
-    }, 200)
+      // Reset the flag after processing
+      userSelectedFromDropdown = false
+    }, 250)
   })
 
   // Handle keyboard navigation
@@ -599,7 +611,12 @@ function initializeCommonNameAutocomplete() {
       e.preventDefault()
       const selected = suggestions[selectedSuggestionIndex]
       if (selected) {
-        selectSuggestion(selected)
+        // Get the tree data from the filtered suggestions
+        const filtered = autocompleteSuggestions.filter(tree => 
+          tree.common_name.toLowerCase().includes(this.value.trim().toLowerCase())
+        )
+        const treeData = filtered[selectedSuggestionIndex]
+        selectSuggestion(selected, treeData)
       }
     } else if (e.key === 'Escape') {
       suggestionsContainer.style.display = 'none'
@@ -630,10 +647,22 @@ function displaySuggestions(suggestions, container) {
     const div = document.createElement('div')
     div.className = 'autocomplete-suggestion'
     div.dataset.index = index
+    // Store the tree data in the element for easy access
+    div.dataset.commonName = tree.common_name
+    div.dataset.scientificName = tree.scientific_name
+    div.dataset.family = tree.family || ''
+    div.dataset.genus = tree.genus || ''
     div.innerHTML = `<strong>${tree.common_name}</strong> <em>(${tree.scientific_name})</em>`
     
-    div.addEventListener('click', () => {
-      selectSuggestion(div)
+    div.addEventListener('click', (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      selectSuggestion(div, tree)
+    })
+    
+    div.addEventListener('mousedown', (e) => {
+      // Prevent blur event from firing when clicking suggestion
+      e.preventDefault()
     })
     
     div.addEventListener('mouseenter', () => {
@@ -657,25 +686,50 @@ function updateSelectedSuggestion(suggestions) {
   })
 }
 
-function selectSuggestion(suggestionElement) {
+function selectSuggestion(suggestionElement, treeData) {
   const commonNameInput = document.getElementById("common_name")
   const suggestionsContainer = document.getElementById("commonNameSuggestions")
   
-  // Extract common name from suggestion (it's in <strong> tag)
-  const strongTag = suggestionElement.querySelector('strong')
-  const commonName = strongTag ? strongTag.textContent : suggestionElement.textContent.split('(')[0].trim()
+  if (!commonNameInput || !suggestionsContainer) {
+    console.error("Common name input or suggestions container not found")
+    return
+  }
   
-  commonNameInput.value = commonName
+  // Get common name from treeData or data attribute
+  const commonName = treeData ? treeData.common_name : (suggestionElement.dataset.commonName || '')
+  
+  if (!commonName) {
+    console.error("Could not extract common name from suggestion")
+    return
+  }
+  
+  // Set the flag BEFORE setting the value to prevent blur handler from clearing it
   userSelectedFromDropdown = true
+  
+  // Set the common name value
+  commonNameInput.value = commonName
+  
+  // Hide suggestions
   suggestionsContainer.style.display = 'none'
   selectedSuggestionIndex = -1
   
-  // Trigger auto-populate
-  const event = new Event('input', { bubbles: true })
-  commonNameInput.dispatchEvent(event)
+  // Focus back on the input to trigger auto-populate
+  commonNameInput.focus()
+  
+  // Trigger input event to auto-populate other fields
+  const inputEvent = new Event('input', { bubbles: true })
+  commonNameInput.dispatchEvent(inputEvent)
+  
+  // Also trigger a change event
+  const changeEvent = new Event('change', { bubbles: true })
+  commonNameInput.dispatchEvent(changeEvent)
+  
+  console.log("Selected suggestion:", commonName)
 }
 
 // Taxonomy Management
+let editingTaxonomyId = null
+
 function initializeTaxonomyManagement() {
   // Load taxonomy list on tab show
   const taxonomyTab = document.querySelector('[data-tab="manage-taxonomy"]')
@@ -692,8 +746,12 @@ function initializeTaxonomyManagement() {
       e.preventDefault()
       
       const formData = new FormData(this)
+      const submitButton = this.querySelector('button[type="submit"]')
+      const isEditing = editingTaxonomyId !== null
+      const url = isEditing ? `/api/update-taxonomy/${editingTaxonomyId}/` : "/api/add-taxonomy/"
+      const successMessage = isEditing ? 'Taxonomy updated successfully!' : 'Taxonomy added successfully!'
       
-      fetch("/api/add-taxonomy/", {
+      fetch(url, {
         method: 'POST',
         body: formData,
         headers: {
@@ -703,18 +761,20 @@ function initializeTaxonomyManagement() {
       .then(response => response.json())
       .then(data => {
         if (data.success) {
-          alert('Taxonomy added successfully!')
+          alert(successMessage)
           this.reset()
+          editingTaxonomyId = null
+          resetTaxonomyFormButton()
           loadTaxonomyList()
           // Reload autocomplete suggestions
           loadAutocompleteSuggestions()
         } else {
-          alert('Error: ' + (data.error || 'Failed to add taxonomy'))
+          alert('Error: ' + (data.error || 'Failed to save taxonomy'))
         }
       })
       .catch(error => {
-        console.error("Error adding taxonomy:", error)
-        alert('Error adding taxonomy. Please check console for details.')
+        console.error("Error saving taxonomy:", error)
+        alert('Error saving taxonomy. Please check console for details.')
       })
     })
   }
@@ -724,6 +784,8 @@ function initializeTaxonomyManagement() {
   if (clearBtn) {
     clearBtn.addEventListener('click', function() {
       document.getElementById("taxonomy-form").reset()
+      editingTaxonomyId = null
+      resetTaxonomyFormButton()
     })
   }
   
@@ -782,9 +844,14 @@ function displayTaxonomyList(taxonomy, container) {
         <td>${item.family}</td>
         <td>${item.genus}</td>
         <td>
-          <button class="btn-delete" onclick="deleteTaxonomy(${item.id})">
-            <i class="fas fa-trash"></i> Delete
-          </button>
+          <div class="action-buttons">
+            <button class="btn-edit" onclick="editTaxonomy(${item.id}, '${item.common_name.replace(/'/g, "\\'")}', '${item.scientific_name.replace(/'/g, "\\'")}', '${item.family.replace(/'/g, "\\'")}', '${item.genus.replace(/'/g, "\\'")}')">
+              <i class="fas fa-edit"></i> Edit
+            </button>
+            <button class="btn-delete" onclick="deleteTaxonomy(${item.id})">
+              <i class="fas fa-trash"></i> Delete
+            </button>
+          </div>
         </td>
       </tr>
     `
@@ -796,6 +863,40 @@ function displayTaxonomyList(taxonomy, container) {
   `
   
   container.innerHTML = html
+}
+
+function editTaxonomy(id, commonName, scientificName, family, genus) {
+  // Populate form fields
+  document.getElementById("taxonomy_common_name").value = commonName
+  document.getElementById("taxonomy_scientific_name").value = scientificName
+  document.getElementById("taxonomy_family").value = family
+  document.getElementById("taxonomy_genus").value = genus
+  
+  // Set editing mode
+  editingTaxonomyId = id
+  
+  // Update form button
+  const submitButton = document.querySelector('#taxonomy-form button[type="submit"]')
+  if (submitButton) {
+    submitButton.innerHTML = '<i class="fas fa-save"></i> Update Taxonomy'
+    submitButton.classList.remove('btn-primary')
+    submitButton.classList.add('btn-success')
+  }
+  
+  // Scroll to form
+  document.getElementById("taxonomy-form").scrollIntoView({ behavior: 'smooth', block: 'start' })
+  
+  // Focus on first field
+  document.getElementById("taxonomy_common_name").focus()
+}
+
+function resetTaxonomyFormButton() {
+  const submitButton = document.querySelector('#taxonomy-form button[type="submit"]')
+  if (submitButton) {
+    submitButton.innerHTML = '<i class="fas fa-plus"></i> Add Taxonomy'
+    submitButton.classList.remove('btn-success')
+    submitButton.classList.add('btn-primary')
+  }
 }
 
 function deleteTaxonomy(id) {
