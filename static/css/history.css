@@ -1,0 +1,296 @@
+/* History Page - Minimalist Design */
+.history-container {
+    padding: 2rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Header */
+.history-header {
+    margin-bottom: 2rem;
+}
+
+.page-title {
+    font-size: 2rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+/* Statistics Cards */
+.history-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.stat-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.stat-upload .stat-icon {
+    background: rgba(28, 200, 138, 0.1);
+    color: var(--color-secondary);
+}
+
+.stat-csv .stat-icon {
+    background: rgba(78, 115, 223, 0.1);
+    color: var(--color-primary);
+}
+
+.stat-manual .stat-icon {
+    background: rgba(54, 185, 204, 0.1);
+    color: var(--color-info);
+}
+
+.stat-edit .stat-icon {
+    background: rgba(246, 194, 62, 0.1);
+    color: var(--color-warning);
+}
+
+.stat-delete .stat-icon {
+    background: rgba(231, 74, 59, 0.1);
+    color: var(--color-danger);
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-value {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+/* History Card */
+.history-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.history-card-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.history-card-header h2 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+}
+
+.badge-count {
+    background: var(--bg-content);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Timeline */
+.history-table-container {
+    padding: 1.5rem;
+}
+
+.history-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.history-item {
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 1rem;
+}
+
+.history-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.history-item-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.history-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.history-item-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.action-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.action-csv_upload {
+    background: rgba(78, 115, 223, 0.1);
+    color: var(--color-primary);
+}
+
+.action-manual_entry {
+    background: rgba(54, 185, 204, 0.1);
+    color: var(--color-info);
+}
+
+.action-edit_tree {
+    background: rgba(246, 194, 62, 0.1);
+    color: var(--color-warning);
+}
+
+.action-delete_tree,
+.action-delete_trees_bulk,
+.action-delete_all_trees {
+    background: rgba(231, 74, 59, 0.1);
+    color: var(--color-danger);
+}
+
+.history-user {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+}
+
+.history-date-time {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.history-date {
+    font-weight: 500;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.history-time {
+    font-size: 0.8125rem;
+    color: var(--text-secondary);
+}
+
+.history-description {
+    color: var(--text-secondary);
+    font-size: 0.9375rem;
+    line-height: 1.5;
+}
+
+/* Empty State */
+.no-history-message {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--text-secondary);
+}
+
+.no-history-message p {
+    font-size: 1rem;
+    margin: 0.5rem 0;
+    color: var(--text-secondary);
+}
+
+.no-history-subtitle {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .history-container {
+        padding: 1rem;
+    }
+    
+    .page-title {
+        font-size: 1.75rem;
+    }
+    
+    .history-stats {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+    
+    .stat-card {
+        padding: 1rem;
+    }
+    
+    .stat-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 1.1rem;
+    }
+    
+    .stat-value {
+        font-size: 1.25rem;
+    }
+    
+    .history-card-header {
+        padding: 1.25rem;
+    }
+    
+    .history-table-container {
+        padding: 1.25rem;
+    }
+    
+    .history-item-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .history-date-time {
+        align-items: flex-start;
+    }
+}
+
+@media (max-width: 480px) {
+    .history-stats {
+        grid-template-columns: 1fr;
+    }
+}

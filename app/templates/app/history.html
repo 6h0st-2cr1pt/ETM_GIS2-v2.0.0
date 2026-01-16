@@ -1,0 +1,103 @@
+{% extends 'app/base.html' %}
+
+{% block content %}
+<div class="history-container">
+    <div class="history-header">
+        <h1 class="page-title">History</h1>
+    </div>
+    
+    {% if history_logs %}
+    <!-- Statistics Cards -->
+    <div class="history-stats">
+        <div class="stat-card stat-upload">
+            <div class="stat-icon">
+                <i class="fas fa-upload"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ total_count }}</div>
+                <div class="stat-label">Total Activities</div>
+            </div>
+        </div>
+        <div class="stat-card stat-csv">
+            <div class="stat-icon">
+                <i class="fas fa-file-csv"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ csv_count }}</div>
+                <div class="stat-label">CSV Uploads</div>
+            </div>
+        </div>
+        <div class="stat-card stat-manual">
+            <div class="stat-icon">
+                <i class="fas fa-plus-circle"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ manual_count }}</div>
+                <div class="stat-label">Manual Entries</div>
+            </div>
+        </div>
+        <div class="stat-card stat-edit">
+            <div class="stat-icon">
+                <i class="fas fa-edit"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ edit_count }}</div>
+                <div class="stat-label">Edits</div>
+            </div>
+        </div>
+        <div class="stat-card stat-delete">
+            <div class="stat-icon">
+                <i class="fas fa-trash-alt"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ delete_count }}</div>
+                <div class="stat-label">Deletions</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+    
+    <div class="history-content">
+        <div class="history-section">
+            <div class="history-card">
+                <div class="history-card-header">
+                    <h2>Activity Log</h2>
+                    <span class="badge-count">{{ history_logs|length }}</span>
+                </div>
+                
+                <div class="history-table-container">
+                    {% if history_logs %}
+                    <div class="history-timeline">
+                        {% for log in history_logs %}
+                        <div class="history-item">
+                            <div class="history-item-content">
+                                <div class="history-item-header">
+                                    <div class="history-item-left">
+                                        <span class="action-badge action-{{ log.action }}">
+                                            {{ log.get_action_display }}
+                                        </span>
+                                        <span class="history-user">{{ log.user.username }}</span>
+                                    </div>
+                                    <div class="history-date-time">
+                                        <span class="history-date">{{ log.created_at|date:"M d, Y" }}</span>
+                                        <span class="history-time">{{ log.created_at|date:"h:i A" }}</span>
+                                    </div>
+                                </div>
+                                <div class="history-description">{{ log.description }}</div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="no-history-message">
+                        <p>No activity logs found.</p>
+                        <p class="no-history-subtitle">Activity logs will appear here when you upload, edit, or delete records.</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
