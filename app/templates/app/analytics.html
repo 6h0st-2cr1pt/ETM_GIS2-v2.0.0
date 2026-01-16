@@ -80,24 +80,58 @@
             <canvas id="scatterPlotChart" data-tree-coordinates='{{ tree_coordinates }}'></canvas>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
+
+        <!-- Population by Year Chart with Filters -->
+        <div class="analytics-chart-card full-width">
+            <h3>Tree Population by Year</h3>
+            <div class="population-year-filters" style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                <div class="filter-group">
+                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Common Name:</label>
+                    <select id="populationYearSpeciesFilter" class="filter-select">
+                        <option value="all">All Species</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Tree Status:</label>
+                    <select id="populationYearStatusFilter" class="filter-select">
+                        <option value="all">All</option>
+                        <option value="planted">Planted</option>
+                        <option value="existing">Existing</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Health Status:</label>
+                    <select id="populationYearHealthFilter" class="filter-select">
+                        <option value="all">All</option>
+                        <option value="healthy">Healthy</option>
+                        <option value="not_healthy">Not Healthy</option>
+                    </select>
+                </div>
+            </div>
+            <canvas id="populationByYearChart"></canvas>
+            <div class="no-data-message" id="populationYearNoData" style="display: none;">No data available</div>
+        </div>
     </div>
 
-    <!-- Seed Sources Panel -->
+    <!-- Low Population Trees Panel -->
     <div class="critical-areas-panel">
-        <h2>Good Seed Sources</h2>
-        <p class="panel-description">Addresses and endemic trees identified as excellent seed sources (outliers with Z-Score ≥ 2)</p>
+        <h2>Trees with Low Population</h2>
+        <p class="panel-description">Endemic trees identified as having low population based on IUCN Regional Red List Guidelines</p>
         <div id="seedSourcesTable" class="critical-areas-table">
             <table class="table">
                 <thead>
                     <tr>
-                        <th>Address</th>
-                        <th>Endemic Tree</th>
-                        <th>Population</th>
+                        <th>Common Name</th>
+                        <th>Scientific Name</th>
+                        <th>Total Population</th>
+                        <th>Locations</th>
+                        <th>Addresses</th>
+                        <th>IUCN Status</th>
                     </tr>
                 </thead>
                 <tbody id="seedSourcesBody">
                     <tr>
-                        <td colspan="3" class="text-center">Loading...</td>
+                        <td colspan="6" class="text-center">Loading...</td>
                     </tr>
                 </tbody>
             </table>

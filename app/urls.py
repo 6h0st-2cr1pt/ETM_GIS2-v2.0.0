@@ -12,7 +12,7 @@ urlpatterns = [
     path('datasets/', views.datasets, name='datasets'),
     path('upload/', views.upload_data, name='upload'),
     path('settings/', views.settings, name='settings'),
-    path('about/', views.about, name='about'),
+    path('history/', views.history, name='history'),
     path('reports/', views.reports, name='reports'),
 
     # Authentication URLs
@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/filter-trees/<int:species_id>/', views.filter_trees, name='filter_trees'),
     path('api/analytics-data/', views.analytics_data, name='analytics_data'),
     path('api/analytics-by-area/', views.api_analytics_by_area, name='api_analytics_by_area'),
+    path('api/population-by-year/', views.api_population_by_year, name='api_population_by_year'),
     path('api/dashboard-data/', views.api_dashboard_data, name='api_dashboard_data'),
     # Map layer APIs
     path('api/layers/', views.api_layers, name='api_layers'),

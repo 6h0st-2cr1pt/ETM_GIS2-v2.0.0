@@ -16,6 +16,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeHistogramChart()
     initializeHealthPieChart()
     initializeScatterPlot()
+    initializePopulationByYearChart()
     loadSeedSources()
     return
   }
@@ -433,6 +434,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initializeHistogramChart()
   initializeHealthPieChart()
   initializeScatterPlot()
+  initializePopulationByYearChart()
 })
 
 // 1. Stacked Bar Chart: Healthy vs Not Healthy Trees by Species
@@ -949,23 +951,204 @@ function loadSeedSources() {
   }
 }
 
-// Function to update Seed Sources Table
-function updateSeedSources(seedSources) {
+// Function to update Low Population Trees Table
+function updateSeedSources(lowPopulationTrees) {
   const tbody = document.getElementById("seedSourcesBody")
   if (!tbody) return
 
-  if (!seedSources || seedSources.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="3" class="text-center">No seed sources found (outliers with Z-Score ≥ 2)</td></tr>'
+  if (!lowPopulationTrees || lowPopulationTrees.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">No trees with low population found. All species have adequate population levels.</td></tr>'
     return
   }
 
-  tbody.innerHTML = seedSources.map(source => {
+  // Function to get color class based on IUCN status
+  function getIUCNColorClass(iucnCode) {
+    switch(iucnCode) {
+      case 'CR':
+        return 'iucn-cr'; // Critically Endangered - red
+      case 'EN':
+        return 'iucn-en'; // Endangered - orange
+      case 'VU':
+        return 'iucn-vu'; // Vulnerable - yellow
+      case 'NT':
+        return 'iucn-nt'; // Near Threatened - light yellow
+      default:
+        return '';
+    }
+  }
+
+  tbody.innerHTML = lowPopulationTrees.map(tree => {
+    const iucnClass = getIUCNColorClass(tree.iucn_code || '')
     return `
       <tr>
-        <td>${source.address || 'Unknown'}</td>
-        <td>${source.species || 'Unknown'}</td>
-        <td>${source.population.toLocaleString()}</td>
+        <td><strong>${tree.common_name || 'Unknown'}</strong></td>
+        <td><em>${tree.scientific_name || 'Unknown'}</em></td>
+        <td>${tree.total_population.toLocaleString()}</td>
+        <td>${tree.locations_count || 0}</td>
+        <td>${tree.addresses || 'Unknown'}</td>
+        <td><span class="iucn-badge ${iucnClass}">${tree.iucn_status || 'Unknown'}</span></td>
       </tr>
     `
   }).join('')
+}
+
+// Population by Year Chart with Filters
+let populationByYearChart = null
+
+function initializePopulationByYearChart() {
+  const canvas = document.getElementById('populationByYearChart')
+  if (!canvas) return
+
+  const ctx = canvas.getContext('2d')
+  const noDataMsg = document.getElementById('populationYearNoData')
+  
+  // Get filter elements
+  const speciesFilter = document.getElementById('populationYearSpeciesFilter')
+  const statusFilter = document.getElementById('populationYearStatusFilter')
+  const healthFilter = document.getElementById('populationYearHealthFilter')
+  
+  if (!speciesFilter || !statusFilter || !healthFilter) return
+
+  // Function to load and update chart
+  async function loadChartData() {
+    try {
+      const species = speciesFilter.value || 'all'
+      const status = statusFilter.value || 'all'
+      const health = healthFilter.value || 'all'
+      
+      const response = await fetch(`/api/population-by-year/?species=${species}&status=${status}&health=${health}`)
+      const data = await response.json()
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to load data')
+      }
+      
+      const years = data.years || []
+      const populations = data.populations || []
+      
+      if (years.length === 0 || populations.length === 0) {
+        if (populationByYearChart) {
+          populationByYearChart.destroy()
+          populationByYearChart = null
+        }
+        canvas.style.display = 'none'
+        if (noDataMsg) noDataMsg.style.display = 'block'
+        return
+      }
+      
+      // Hide no data message
+      if (noDataMsg) noDataMsg.style.display = 'none'
+      canvas.style.display = 'block'
+      
+      // Destroy existing chart if it exists
+      if (populationByYearChart) {
+        populationByYearChart.destroy()
+      }
+      
+      // Create new chart
+      populationByYearChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: years.map(y => String(y)),
+          datasets: [{
+            label: 'Tree Population',
+            data: populations,
+            backgroundColor: 'rgba(78, 115, 223, 0.2)',
+            borderColor: 'rgba(78, 115, 223, 1)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 4,
+            pointHoverRadius: 6,
+            pointBackgroundColor: 'rgba(78, 115, 223, 1)',
+            pointBorderColor: '#fff',
+            pointBorderWidth: 2
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: true,
+          plugins: {
+            legend: {
+              display: true,
+              position: 'top',
+              labels: {
+                color: 'rgba(255, 255, 255, 0.9)',
+                font: {
+                  size: 12
+                }
+              }
+            },
+            tooltip: {
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: 'rgba(255, 255, 255, 0.9)',
+              bodyColor: 'rgba(255, 255, 255, 0.9)',
+              borderColor: 'rgba(255, 255, 255, 0.2)',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  return `Population: ${context.parsed.y.toLocaleString()}`
+                }
+              }
+            }
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                color: 'rgba(255, 255, 255, 0.7)',
+                callback: function(value) {
+                  return value.toLocaleString()
+                }
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
+              },
+              title: {
+                display: true,
+                text: 'Population',
+                color: 'rgba(255, 255, 255, 0.9)'
+              }
+            },
+            x: {
+              ticks: {
+                color: 'rgba(255, 255, 255, 0.7)'
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
+              },
+              title: {
+                display: true,
+                text: 'Year',
+                color: 'rgba(255, 255, 255, 0.9)'
+              }
+            }
+          }
+        }
+      })
+    } catch (error) {
+      console.error('Error loading population by year data:', error)
+      if (populationByYearChart) {
+        populationByYearChart.destroy()
+        populationByYearChart = null
+      }
+      canvas.style.display = 'none'
+      if (noDataMsg) noDataMsg.style.display = 'block'
+    }
+  }
+  
+  // Add event listeners to filters
+  speciesFilter.addEventListener('change', loadChartData)
+  statusFilter.addEventListener('change', loadChartData)
+  healthFilter.addEventListener('change', loadChartData)
+  
+  // Initial load
+  loadChartData()
+}
+
+// Initialize population by year chart when DOM is ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initializePopulationByYearChart)
+} else {
+  initializePopulationByYearChart()
 }

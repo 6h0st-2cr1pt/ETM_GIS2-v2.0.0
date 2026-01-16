@@ -602,13 +602,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Function to apply all filters
   function applyFilters() {
-    treeLayer.clearLayers()
-    
+      treeLayer.clearLayers()
+    // Clear colorMap to ensure legend only shows current trees
+    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    updateLegend() // Update legend immediately
+
     if (currentSpeciesFilter === "all") {
       loadTrees() // Show all individual tree pins
-      // Hide the filtered data container
-      filteredDataContainer.style.display = "none"
-    } else {
+        // Hide the filtered data container
+        filteredDataContainer.style.display = "none"
+      } else {
       loadFilteredTrees(currentSpeciesFilter)
     }
   }
@@ -619,7 +622,7 @@ document.addEventListener("DOMContentLoaded", () => {
       currentSpeciesFilter = this.value
       applyFilters()
     })
-  })
+    })
 
   // Year filter change event
   const yearFilter = document.getElementById('yearFilter')
@@ -818,6 +821,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadTrees() {
     // Clear existing tree markers
     treeLayer.clearLayers()
+    // Clear colorMap to ensure legend only shows current trees
+    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    updateLegend() // Update legend immediately to show "No trees on map" if no data
 
     // Add a console log to debug
     console.log("Loading all trees...")
@@ -889,6 +895,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadTreesByAddress() {
     // Clear existing tree markers
     treeLayer.clearLayers()
+    // Clear colorMap to ensure legend only shows current trees
+    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    updateLegend() // Update legend immediately to show "No trees on map" if no data
 
     console.log("Loading all trees aggregated by address...")
 
@@ -1139,6 +1148,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadFilteredTrees(speciesId) {
     // Clear existing tree markers
     treeLayer.clearLayers()
+    // Clear colorMap to ensure legend only shows current trees
+    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    updateLegend() // Update legend immediately to show "No trees on map" if no data
 
     // Add a console log to debug
     console.log(`Loading filtered trees for species ID: ${speciesId}`)
@@ -1694,10 +1706,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   legend.onAdd = (map) => {
     const div = L.DomUtil.create("div", "info legend")
-    div.innerHTML = "<h4>Tree Species</h4>"
+    div.innerHTML = ""
 
     // We'll populate this dynamically as trees are added
     div.setAttribute("id", "species-legend")
+    // Hide legend initially - it will be shown when trees are loaded
+    div.style.display = 'none'
     return div
   }
 
@@ -1718,75 +1732,63 @@ document.addEventListener("DOMContentLoaded", () => {
     const legendDiv = document.getElementById("species-legend")
     if (!legendDiv) return
 
+    // Only show species that are actually on the map (in colorMap)
+    // This ensures the legend reflects only trees that exist, not all taxonomy entries
+    const speciesInMap = Object.keys(colorMap)
+    
+    if (speciesInMap.length === 0) {
+      // Hide the legend completely when there are no trees
+      legendDiv.style.display = 'none'
+      legendDiv.innerHTML = ''
+    } else {
+      // Show the legend and populate it with species
+      legendDiv.style.display = 'block'
     let legendContent = "<h4>Tree Species</h4>"
 
-    // Get all species from template
-    const allSpecies = window.allTreeSpecies || []
-    const speciesSet = new Set()
-    
-    // First, add all species from template and assign colors
-    if (allSpecies.length > 0) {
-      allSpecies.forEach((species, index) => {
-        if (species.common_name) {
-          speciesSet.add(species.common_name)
-          // Assign color if not already set (from trees loaded on map)
-          if (!colorMap[species.common_name]) {
-            colorMap[species.common_name] = colorPalette[index % colorPalette.length]
-          }
-        }
-      })
-    }
-    
-    // Also include any species that are in colorMap but not in template (for backward compatibility)
-    Object.keys(colorMap).forEach(species => {
-      speciesSet.add(species)
-    })
-
-    // Sort species alphabetically for consistent display
-    const sortedSpecies = Array.from(speciesSet).sort()
-    
-    sortedSpecies.forEach(species => {
-      const color = colorMap[species] || colorPalette[0] // Default color if not set
+      // Sort species alphabetically for consistent display
+      const sortedSpecies = speciesInMap.sort()
+      
+      sortedSpecies.forEach(species => {
+        const color = colorMap[species]
       legendContent += `
         <div class="legend-item">
           <span class="legend-color" style="background-color: ${color}"></span>
           <span class="legend-label">${species}</span>
         </div>
       `
-    })
+      })
 
     legendDiv.innerHTML = legendContent
   }
+  }
   
-  // Initialize legend with all species on page load (after a delay to ensure template data is loaded)
-  setTimeout(() => {
-    updateLegend()
-  }, 500)
+  // Initialize legend after trees are loaded (will be called by loadTrees function)
+  // Don't initialize with all taxonomy species - wait for actual tree data
 
   // Entity type control change event (only if elements exist)
   const showTreesCheckbox = document.getElementById("showTrees")
   if (showTreesCheckbox) {
     showTreesCheckbox.addEventListener("change", function () {
-      if (this.checked) {
-        map.addLayer(treeLayer)
-      } else {
-        map.removeLayer(treeLayer)
-      }
-    })
+    if (this.checked) {
+      map.addLayer(treeLayer)
+    } else {
+      map.removeLayer(treeLayer)
+    }
+  })
   }
 
   const showSeedsCheckbox = document.getElementById("showSeeds")
   if (showSeedsCheckbox) {
     showSeedsCheckbox.addEventListener("change", function () {
-      console.log("Show seeds checkbox changed:", this.checked)
-      if (this.checked) {
-        map.addLayer(seedLayer)
-        console.log("Seed layer added to map")
-      } else {
-        map.removeLayer(seedLayer)
-        console.log("Seed layer removed from map")
-      }
-    })
+    console.log("Show seeds checkbox changed:", this.checked)
+    if (this.checked) {
+      map.addLayer(seedLayer)
+      console.log("Seed layer added to map")
+    } else {
+      map.removeLayer(seedLayer)
+      console.log("Seed layer removed from map")
+    }
+  })
   }
 })
 

@@ -60,11 +60,11 @@ html * option {
                         <div class="form-group mb-3">
                             <label for="addressDropdown">Address List</label>
                             <select class="form-select" id="addressDropdown" name="selected_address" style="background-color: rgba(0, 0, 0, 0.6); color: #ffffff; border: 1px solid rgba(255, 255, 255, 0.3);">
-                                <option value="">Select an address...</option>
+                                <option value="all">All address</option>
                                 {% for address in address_list %}
                                 <option value="{{ address }}">{{ address }}</option>
                                 {% empty %}
-                                <option value="">No addresses found in database.</option>
+                                <option value="all">No addresses found in database.</option>
                                 {% endfor %}
                             </select>
                         </div>

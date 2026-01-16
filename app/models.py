@@ -6,6 +6,31 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 
+class History(models.Model):
+    """History log for tracking user activities"""
+    ACTION_CHOICES = [
+        ('csv_upload', 'CSV Upload'),
+        ('manual_entry', 'Manual Tree Entry'),
+        ('edit_tree', 'Edit Tree'),
+        ('delete_tree', 'Delete Tree'),
+        ('delete_trees_bulk', 'Bulk Delete Trees'),
+        ('delete_all_trees', 'Delete All Trees'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='history_logs')
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    description = models.TextField(help_text="Description of the action")
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name_plural = "History Logs"
+    
+    def __str__(self):
+        return f"{self.user.username} - {self.get_action_display()} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
+
+
 class TreeFamily(models.Model):
     """Tree family classification"""
     name = models.CharField(max_length=100)
@@ -174,7 +199,7 @@ class MapLayer(models.Model):
     """Map layers for GIS visualization"""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
-    url = models.URLField()
+    url = models.URLField(blank=True, null=True)
     layer_type = models.CharField(max_length=50, choices=[
         ('topographic', 'Topographic'),
         ('satellite', 'Satellite'),

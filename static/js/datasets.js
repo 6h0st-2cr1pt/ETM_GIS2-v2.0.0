@@ -470,7 +470,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Function to populate edit form from row data
     function populateEditFormFromRow(row, treeId) {
-        document.getElementById('edit-tree-id').value = treeId;
+                document.getElementById('edit-tree-id').value = treeId;
         const commonName = row.querySelector('[data-common_name]')?.getAttribute('data-common_name') || '';
         const scientificName = row.querySelector('[data-scientific_name]')?.getAttribute('data-scientific_name') || '';
         const family = row.querySelector('[data-family]')?.getAttribute('data-family') || '';

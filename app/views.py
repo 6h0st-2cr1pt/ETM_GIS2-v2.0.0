@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from .models import (
     EndemicTree, MapLayer, UserSetting, TreeFamily,
-    TreeGenus, TreeSpecies, Location, PinStyle, TreeSeed, UserProfile
+    TreeGenus, TreeSpecies, Location, PinStyle, TreeSeed, UserProfile, History
 )
 from .forms import (
     EndemicTreeForm, CSVUploadForm, ThemeSettingsForm,
@@ -235,9 +235,11 @@ def gis(request):
     # Get all available map layers
     layers = MapLayer.objects.filter(user=request.user, is_active=True)
 
-    # Get all tree species for the user (not just those with trees)
+    # Get only tree species that have actual tree records (not all taxonomy entries)
+    # Manage Taxonomy is for autocomplete/suggestions only, not for display in GIS
     tree_species = TreeSpecies.objects.filter(
-        user=request.user
+        user=request.user,
+        trees__isnull=False  # Only species that have associated tree records
     ).distinct().order_by('common_name')  # Remove duplicates and order by common name
 
     # Get unique years from trees
@@ -276,7 +278,8 @@ def analytics(request):
                 'total_healthy': 0,
                 'total_not_healthy': 0,
                 'tree_coordinates': '[]',
-                'seed_sources': '[]'
+                'seed_sources': '[]',
+                'unique_species': []
             })
 
         # Get all trees for analytics (including those without addresses for scatter plot)
@@ -368,54 +371,84 @@ def analytics(request):
             reverse=True
         )
 
-        # Calculate Z-scores for seed source identification using SciPy
-        from scipy import stats
-        import numpy as np
+        # Calculate low population trees based on IUCN Regional Red List Guidelines
+        # IUCN thresholds for regional assessments:
+        # Critically Endangered (CR): < 50 mature individuals
+        # Endangered (EN): 50-250 mature individuals
+        # Vulnerable (VU): 250-1,000 mature individuals
+        # Near Threatened (NT): 1,000-2,500 mature individuals
         
-        # Collect all population values with their address and species info
-        population_data = []
-        for item in address_species_data:
-            address = item['address']
-            for species in item['species']:
-                pop_value = float(species['population']) if species['population'] else 0
-                population_data.append({
-                    'address': address,
-                    'species': species['species_name'],
-                    'population': pop_value
-                })
+        # Group trees by species to get total population per species
+        species_population_map = {}
+        for tree in all_trees:
+            if tree.species:
+                species_name = tree.species.common_name or 'Unknown'
+                scientific_name = tree.species.scientific_name or 'Unknown'
+                species_key = f"{species_name}|{scientific_name}"
+                
+                if species_key not in species_population_map:
+                    species_population_map[species_key] = {
+                        'common_name': species_name,
+                        'scientific_name': scientific_name,
+                        'total_population': 0,
+                        'locations': set(),
+                        'addresses': set()
+                    }
+                
+                species_population_map[species_key]['total_population'] += tree.population or 0
+                if tree.location:
+                    if tree.location.address:
+                        species_population_map[species_key]['addresses'].add(tree.location.address)
+                    if tree.location.latitude and tree.location.longitude:
+                        species_population_map[species_key]['locations'].add(
+                            (float(tree.location.latitude), float(tree.location.longitude))
+                        )
         
-        if len(population_data) > 1:
-            # Extract population values as numpy array
-            populations = np.array([item['population'] for item in population_data], dtype=float)
+        # Identify trees with low population based on IUCN criteria
+        low_population_trees = []
+        for species_key, data in species_population_map.items():
+            total_pop = data['total_population']
             
-            # Calculate Z-scores using SciPy
-            z_scores = stats.zscore(populations, nan_policy='omit')
+            # Determine IUCN conservation status based on population
+            if total_pop < 50:
+                iucn_status = 'Critically Endangered (CR)'
+                iucn_code = 'CR'
+            elif total_pop < 250:
+                iucn_status = 'Endangered (EN)'
+                iucn_code = 'EN'
+            elif total_pop < 1000:
+                iucn_status = 'Vulnerable (VU)'
+                iucn_code = 'VU'
+            elif total_pop < 2500:
+                iucn_status = 'Near Threatened (NT)'
+                iucn_code = 'NT'
+            else:
+                continue  # Skip species with adequate population
             
-            # Debug: Print some statistics
-            print(f"[Analytics] Total population data points: {len(population_data)}")
-            print(f"[Analytics] Population range: {populations.min():.2f} - {populations.max():.2f}")
-            print(f"[Analytics] Mean: {populations.mean():.2f}, Std: {populations.std():.2f}")
-            print(f"[Analytics] Z-score range: {z_scores.min():.2f} - {z_scores.max():.2f}")
+            # Get addresses as list
+            addresses_list = sorted(list(data['addresses'])) if data['addresses'] else ['Unknown']
+            addresses_display = " / ".join(addresses_list[:5])  # Show up to 5 addresses
+            if len(addresses_list) > 5:
+                addresses_display += f" (+{len(addresses_list) - 5} more)"
             
-            # Find outliers where Z >= 2 (good seed sources)
-            seed_sources = []
-            for i, data in enumerate(population_data):
-                z_score = float(z_scores[i]) if not np.isnan(z_scores[i]) else 0
-                if z_score >= 2:
-                    seed_sources.append({
-                        'address': data['address'],
-                        'species': data['species'],
-                        'population': data['population'],
-                        'z_score': z_score
-                    })
-                    print(f"[Analytics] Found seed source: {data['species']} at {data['address']} with Z={z_score:.2f}, Pop={data['population']}")
-            
-            # Sort seed sources by Z-score (descending)
-            seed_sources.sort(key=lambda x: x['z_score'], reverse=True)
-            print(f"[Analytics] Total seed sources found: {len(seed_sources)}")
-        else:
-            seed_sources = []
-            print(f"[Analytics] Not enough data points for Z-score calculation: {len(population_data)}")
+            low_population_trees.append({
+                'common_name': data['common_name'],
+                'scientific_name': data['scientific_name'],
+                'total_population': int(total_pop),
+                'locations_count': len(data['locations']),
+                'addresses': addresses_display,
+                'iucn_status': iucn_status,
+                'iucn_code': iucn_code
+            })
+        
+        # Sort by population (ascending - lowest first) and then by IUCN code priority
+        iucn_priority = {'CR': 1, 'EN': 2, 'VU': 3, 'NT': 4}
+        low_population_trees.sort(key=lambda x: (iucn_priority.get(x['iucn_code'], 5), x['total_population']))
+        
+        print(f"[Analytics] Total low population species found: {len(low_population_trees)}")
+        
+        # Keep seed_sources for backward compatibility but use low_population_trees
+        seed_sources = low_population_trees
 
         # Handle None values and convert Decimal to float for JSON serialization
         def clean_data(data):
@@ -429,6 +462,7 @@ def analytics(request):
 
         # Clean and prepare data for JSON serialization
         address_species_data = clean_data(address_species_data or [])
+        # Clean low population trees data
         seed_sources = clean_data(seed_sources or [])
         
         # Prepare new chart data
@@ -436,6 +470,12 @@ def analytics(request):
                                    for k, v in health_by_species.items()]
         health_by_species_list.sort(key=lambda x: x['healthy'] + x['not_healthy'], reverse=True)
 
+        # Get unique species for filter dropdown
+        unique_species = list(TreeSpecies.objects.filter(
+            user=request.user,
+            trees__isnull=False
+        ).distinct().values_list('common_name', flat=True).order_by('common_name'))
+        
         context = {
             'active_page': 'analytics',
             'address_species_data': json.dumps(address_species_data),
@@ -445,7 +485,8 @@ def analytics(request):
             'diameters': json.dumps(diameters),
             'total_healthy': total_healthy,
             'total_not_healthy': total_not_healthy,
-            'tree_coordinates': json.dumps(tree_coordinates)
+            'tree_coordinates': json.dumps(tree_coordinates),
+            'unique_species': unique_species
         }
 
         return render(request, 'app/analytics.html', context)
@@ -785,6 +826,11 @@ def upload_data(request):
                     success_count = 0
                     error_count = 0
                     
+                    # Track details for logging
+                    uploaded_species = {}  # {species_name: count}
+                    total_hectares = 0
+                    years_uploaded = set()
+                    
                     # Process each row and create individual tree records
                     for idx, row in df.iterrows():
                         # Check for cancellation flag
@@ -987,6 +1033,12 @@ def upload_data(request):
                             )
                             tree.save()
                             
+                            # Track details for logging
+                            species_name = row['common_name'] if 'common_name' in row else 'Unknown'
+                            uploaded_species[species_name] = uploaded_species.get(species_name, 0) + 1
+                            total_hectares += hectares
+                            years_uploaded.add(year)
+                            
                             success_count += 1
                             
                             # Update progress frequently
@@ -1019,6 +1071,37 @@ def upload_data(request):
                     request.session.save()
                     
                     if success_count > 0:
+                        # Get CSV file name for logging
+                        csv_file_name = csv_file.name if csv_file else 'Unknown file'
+                        
+                        # Build detailed description using tracked data
+                        details = []
+                        details.append(f"File: {csv_file_name}")
+                        details.append(f"Count: {success_count} tree(s)")
+                        if uploaded_species:
+                            species_list = ", ".join([f"{name} ({count})" for name, count in sorted(uploaded_species.items())[:10]])
+                            if len(uploaded_species) > 10:
+                                species_list += f" and {len(uploaded_species) - 10} more species"
+                            details.append(f"Species: {species_list}")
+                        if total_hectares > 0:
+                            details.append(f"Total Hectares: {total_hectares:.2f}")
+                        if years_uploaded:
+                            years_str = ", ".join(sorted([str(y) for y in years_uploaded])[:10])
+                            if len(years_uploaded) > 10:
+                                years_str += f" and {len(years_uploaded) - 10} more years"
+                            details.append(f"Years: {years_str}")
+                        if error_count > 0:
+                            details.append(f"Errors: {error_count}")
+                        
+                        description = " | ".join(details)
+                        
+                        # Log CSV upload activity
+                        History.objects.create(
+                            user=request.user,
+                            action='csv_upload',
+                            description=f'CSV Upload: {description}'
+                        )
+                        
                         messages.success(request, f'Successfully imported {success_count} tree records. {error_count} errors occurred.')
                         # Redirect to GIS page to see the newly added data
                         return redirect('app:gis')
@@ -1271,6 +1354,13 @@ def upload_data(request):
                 # Save tree
                 tree.save()
 
+                # Log manual entry activity
+                History.objects.create(
+                    user=request.user,
+                    action='manual_entry',
+                    description=f'Manual entry: Added {common_name} ({scientific_name}) at {address or f"Lat: {latitude}, Lng: {longitude}"}'
+                )
+
                 messages.success(request, f"Successfully added {common_name} record.")
                 # Redirect to GIS page to see the newly added data
                 return redirect('app:gis')
@@ -1495,14 +1585,33 @@ def settings(request):
 
 
 @login_required(login_url='app:login')
-def about(request):
+def history(request):
     """
-    About page
+    History page - displays activity logs for data uploads and deletions
     """
+    # Get base queryset
+    history_queryset = History.objects.filter(user=request.user).order_by('-created_at')
+    
+    # Calculate statistics before slicing
+    total_count = history_queryset.count()
+    csv_count = history_queryset.filter(action='csv_upload').count()
+    manual_count = history_queryset.filter(action='manual_entry').count()
+    edit_count = history_queryset.filter(action='edit_tree').count()
+    delete_count = history_queryset.filter(action__in=['delete_tree', 'delete_trees_bulk', 'delete_all_trees']).count()
+    
+    # Get limited history logs for display (most recent 100)
+    history_logs = history_queryset[:100]
+    
     context = {
-        'active_page': 'about',
+        'active_page': 'history',
+        'history_logs': history_logs,
+        'total_count': total_count,
+        'csv_count': csv_count,
+        'manual_count': manual_count,
+        'edit_count': edit_count,
+        'delete_count': delete_count,
     }
-    return render(request, 'app/about.html', context)
+    return render(request, 'app/history.html', context)
 
 
 @login_required(login_url='app:login')
@@ -2144,9 +2253,10 @@ def generate_report(request):
         selected_addresses = request.POST.getlist('selected_addresses')
         
         # If dropdown is used, convert single value to list
-        if selected_address:
+        # Treat "all" the same as empty string (include all addresses)
+        if selected_address and selected_address != 'all':
             selected_addresses = [selected_address]
-        # If no address selected from dropdown, allow all addresses (empty list means no filter)
+        # If "all" is selected or no address selected, allow all addresses (empty list means no filter)
         
         if not selected_trees:
             return JsonResponse({'success': False, 'error': 'Please select at least one tree.'}, status=400)
@@ -2160,6 +2270,9 @@ def generate_report(request):
         time_str = now.strftime('%I:%M %p')
 
         report_title = 'Endemic Trees Report'
+        
+        # Initialize address list variable
+        all_addresses_in_report = []
 
         # Get actual data statistics based on selected trees and addresses
         try:
@@ -2206,6 +2319,27 @@ def generate_report(request):
             except:
                 unique_locations = 0
             
+            # Get all unique addresses from the filtered trees for display
+            all_addresses_in_report = []
+            try:
+                if selected_addresses:
+                    # If specific addresses selected, use those
+                    all_addresses_in_report = list(selected_addresses)
+                else:
+                    # If "All address" selected, get all unique addresses from filtered trees
+                    all_addresses_in_report = list(
+                        trees_query.exclude(location__isnull=True)
+                        .exclude(location__address__isnull=True)
+                        .exclude(location__address='')
+                        .values_list('location__address', flat=True)
+                        .distinct()
+                        .order_by('location__address')
+                    )
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                all_addresses_in_report = []
+            
             # Health status distribution
             try:
                 health_distribution = list(trees_query.exclude(health_status__isnull=True).values('health_status').annotate(
@@ -2243,6 +2377,7 @@ def generate_report(request):
             health_distribution = []
             species_dist = []
             year_dist = []
+            all_addresses_in_report = []
 
         # Build the report HTML - only show the table
         html = f'''
@@ -2321,10 +2456,18 @@ def generate_report(request):
                 traceback.print_exc()
                 continue
         
-        # Get address display text
+        # Get address display text - show all addresses separated by "/"
         address_display = "Not specified"
-        if selected_addresses:
-            address_display = selected_addresses[0] if len(selected_addresses) == 1 else ", ".join(selected_addresses)
+        if all_addresses_in_report:
+            if len(all_addresses_in_report) == 1:
+                address_display = all_addresses_in_report[0]
+            else:
+                # Display all addresses separated by "/"
+                address_display = " / ".join(all_addresses_in_report)
+        elif selected_addresses:
+            address_display = selected_addresses[0] if len(selected_addresses) == 1 else " / ".join(selected_addresses)
+        else:
+            address_display = "No addresses found"
         
         # Generate table HTML
         html += f'''
@@ -2819,6 +2962,56 @@ def analytics_data(request):
     return JsonResponse(data)
 
 
+@login_required(login_url='app:login')
+def api_population_by_year(request):
+    """
+    API endpoint for population by year with filters
+    """
+    try:
+        # Get filter parameters
+        species_filter = request.GET.get('species', 'all')
+        status_filter = request.GET.get('status', 'all')  # planted, existing, all
+        health_filter = request.GET.get('health', 'all')  # healthy, not_healthy, all
+        
+        # Base queryset
+        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+        
+        # Apply filters
+        if species_filter != 'all':
+            trees = trees.filter(species__common_name=species_filter)
+        
+        if status_filter == 'planted':
+            trees = trees.filter(is_planted=True)
+        elif status_filter == 'existing':
+            trees = trees.filter(is_planted=False)
+        
+        if health_filter == 'healthy':
+            trees = trees.filter(is_healthy=True)
+        elif health_filter == 'not_healthy':
+            trees = trees.filter(is_healthy=False)
+        
+        # Group by year and sum population
+        from django.db.models import Sum
+        population_by_year = list(trees.values('year').annotate(
+            total_population=Sum('population')
+        ).order_by('year'))
+        
+        # Format data for chart
+        years = [item['year'] for item in population_by_year]
+        populations = [item['total_population'] for item in population_by_year]
+        
+        return JsonResponse({
+            'success': True,
+            'years': years,
+            'populations': populations
+        })
+    except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
 @require_POST
 def set_theme(request):
     """
@@ -3006,7 +3199,17 @@ def edit_tree(request, tree_id):
                         except Exception as e:
                             print(f"Geocoding failed for location {tree.location.id}: {str(e)}")
 
+                # Get tree info before saving for logging
+                tree_info = f"{species.common_name if species else 'Unknown'} at {address or f'Lat: {latitude}, Lng: {longitude}'}"
+                
                 tree.save()
+
+                # Log edit activity
+                History.objects.create(
+                    user=request.user,
+                    action='edit_tree',
+                    description=f'Edited tree: {tree_info}'
+                )
 
                 return JsonResponse({'success': True})
             except (ValueError, TypeError) as e:
@@ -3094,11 +3297,38 @@ def delete_tree(request, tree_id):
         tree = get_object_or_404(EndemicTree, id=tree_id, user=request.user)
         location = tree.location
         
+        # Get detailed tree info before deletion for logging
+        species_name = tree.species.common_name if tree.species else 'Unknown'
+        scientific_name = tree.species.scientific_name if tree.species else 'Unknown'
+        location_info = location.address if location and location.address else f'Lat: {location.latitude}, Lng: {location.longitude}' if location else 'Unknown location'
+        year = tree.year if tree.year else 'N/A'
+        hectares = tree.hectares if tree.hectares else 'N/A'
+        
+        # Build detailed description
+        details = []
+        details.append(f"Species: {species_name} ({scientific_name})")
+        details.append(f"Location: {location_info}")
+        details.append(f"Year: {year}")
+        details.append(f"Hectares: {hectares}")
+        if tree.height_meters:
+            details.append(f"Height: {tree.height_meters}m")
+        if tree.diameter_cm:
+            details.append(f"Diameter: {tree.diameter_cm}cm")
+        
+        tree_info = " | ".join(details)
+        
         tree.delete()
         
         # Delete the location if it's not used by any other tree
         if location and not location.trees.exists():
             location.delete()
+        
+        # Log delete activity with detailed information
+        History.objects.create(
+            user=request.user,
+            action='delete_tree',
+            description=f'Deleted tree: {tree_info}'
+        )
         
         # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
         # Taxonomy entries should remain in the database for autocomplete suggestions and future use
@@ -3131,11 +3361,17 @@ def delete_trees_bulk(request):
                 'error': 'No tree IDs provided'
             }, status=400)
         
-        # Get all trees to delete
-        trees = EndemicTree.objects.filter(id__in=tree_ids, user=request.user)
+        # Get all trees to delete with details before deletion
+        trees = EndemicTree.objects.filter(id__in=tree_ids, user=request.user).select_related('species', 'location')
         deleted_count = 0
         locations_to_check = []
         species_to_check = set()  # Use set to avoid duplicates
+        
+        # Collect details about trees being deleted
+        deleted_species = {}  # {species_name: count}
+        deleted_locations = set()
+        total_hectares = 0
+        years_deleted = set()
         
         for tree in trees:
             location = tree.location
@@ -3143,6 +3379,15 @@ def delete_trees_bulk(request):
             locations_to_check.append(location)
             if species:
                 species_to_check.add(species)
+                species_name = species.common_name or 'Unknown'
+                deleted_species[species_name] = deleted_species.get(species_name, 0) + 1
+            if location:
+                deleted_locations.add(location.address or f"Lat: {location.latitude}, Lng: {location.longitude}")
+            if tree.hectares:
+                total_hectares += tree.hectares
+            if tree.year:
+                years_deleted.add(tree.year)
+            
             tree.delete()
             deleted_count += 1
         
@@ -3150,6 +3395,32 @@ def delete_trees_bulk(request):
         for location in locations_to_check:
             if location and not location.trees.exists():
                 location.delete()
+        
+        # Build detailed description
+        details = []
+        details.append(f"Count: {deleted_count} tree(s)")
+        if deleted_species:
+            species_list = ", ".join([f"{name} ({count})" for name, count in sorted(deleted_species.items())])
+            details.append(f"Species: {species_list}")
+        if total_hectares > 0:
+            details.append(f"Total Hectares: {total_hectares:.2f}")
+        if years_deleted:
+            years_str = ", ".join(sorted([str(y) for y in years_deleted]))
+            details.append(f"Years: {years_str}")
+        if len(deleted_locations) <= 5:
+            locations_str = ", ".join(list(deleted_locations)[:5])
+            details.append(f"Locations: {locations_str}")
+        elif len(deleted_locations) > 5:
+            details.append(f"Locations: {len(deleted_locations)} unique locations")
+        
+        description = " | ".join(details)
+        
+        # Log bulk delete activity with detailed information
+        History.objects.create(
+            user=request.user,
+            action='delete_trees_bulk',
+            description=f'Bulk deleted: {description}'
+        )
         
         # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
         # Taxonomy entries should remain in the database for autocomplete suggestions and future use
@@ -3171,8 +3442,27 @@ def delete_trees_bulk(request):
 def delete_all_trees(request):
     """View for deleting all tree records."""
     try:
-        # Get count before deletion
-        total_count = EndemicTree.objects.filter(user=request.user).count()
+        # Get detailed information before deletion
+        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+        total_count = trees.count()
+        
+        # Collect details about all trees being deleted
+        deleted_species = {}  # {species_name: count}
+        total_hectares = 0
+        years_deleted = set()
+        unique_locations = set()
+        
+        for tree in trees:
+            if tree.species:
+                species_name = tree.species.common_name or 'Unknown'
+                deleted_species[species_name] = deleted_species.get(species_name, 0) + 1
+            if tree.location:
+                location_info = tree.location.address or f"Lat: {tree.location.latitude}, Lng: {tree.location.longitude}"
+                unique_locations.add(location_info)
+            if tree.hectares:
+                total_hectares += tree.hectares
+            if tree.year:
+                years_deleted.add(tree.year)
         
         # Get all locations and species to check after deletion
         locations_to_check = list(Location.objects.filter(user=request.user, trees__isnull=False).distinct())
@@ -3185,6 +3475,33 @@ def delete_all_trees(request):
         for location in locations_to_check:
             if not location.trees.exists():
                 location.delete()
+        
+        # Build detailed description
+        details = []
+        details.append(f"Count: {total_count} tree(s)")
+        if deleted_species:
+            species_list = ", ".join([f"{name} ({count})" for name, count in sorted(deleted_species.items())[:10]])
+            if len(deleted_species) > 10:
+                species_list += f" and {len(deleted_species) - 10} more species"
+            details.append(f"Species: {species_list}")
+        if total_hectares > 0:
+            details.append(f"Total Hectares: {total_hectares:.2f}")
+        if years_deleted:
+            years_str = ", ".join(sorted([str(y) for y in years_deleted])[:10])
+            if len(years_deleted) > 10:
+                years_str += f" and {len(years_deleted) - 10} more years"
+            details.append(f"Years: {years_str}")
+        if unique_locations:
+            details.append(f"Locations: {len(unique_locations)} unique locations")
+        
+        description = " | ".join(details)
+        
+        # Log delete all activity with detailed information
+        History.objects.create(
+            user=request.user,
+            action='delete_all_trees',
+            description=f'Deleted all trees: {description}'
+        )
         
         # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
         # Taxonomy entries should remain in the database for autocomplete suggestions and future use

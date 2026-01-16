@@ -390,6 +390,41 @@ html[data-theme="light"] .analytics-section-title {
   border-collapse: collapse;
 }
 
+/* IUCN Status Badges */
+.iucn-badge {
+  display: inline-block;
+  padding: 0.4rem 0.8rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.iucn-cr {
+  background-color: rgba(220, 53, 69, 0.2);
+  color: #dc3545;
+  border: 1px solid rgba(220, 53, 69, 0.4);
+}
+
+.iucn-en {
+  background-color: rgba(255, 152, 0, 0.2);
+  color: #ff9800;
+  border: 1px solid rgba(255, 152, 0, 0.4);
+}
+
+.iucn-vu {
+  background-color: rgba(255, 235, 59, 0.2);
+  color: #ffeb3b;
+  border: 1px solid rgba(255, 235, 59, 0.4);
+}
+
+.iucn-nt {
+  background-color: rgba(144, 202, 249, 0.2);
+  color: #90caf9;
+  border: 1px solid rgba(144, 202, 249, 0.4);
+}
+
 .critical-areas-table thead {
   background: rgba(255, 255, 255, 0.05);
 }

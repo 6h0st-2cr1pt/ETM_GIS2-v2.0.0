@@ -223,7 +223,9 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Handle dropdown change
     addressDropdown.addEventListener('change', function(e) {
-      selectedAddress = this.value || '';
+      const value = this.value || '';
+      // Treat "all" the same as empty string (show all trees)
+      selectedAddress = (value === 'all') ? '' : value;
       console.log('Address dropdown changed to:', selectedAddress);
       filterTreesByAddress();
     });
@@ -448,7 +450,11 @@ document.addEventListener("DOMContentLoaded", () => {
       const formData = new FormData(form);
       const selectedTrees = formData.getAll("selected_trees");
       const addressDropdown = document.getElementById('addressDropdown');
-      const selectedAddressValue = addressDropdown ? addressDropdown.value : '';
+      let selectedAddressValue = addressDropdown ? addressDropdown.value : '';
+      // Convert "all" to empty string for backend (empty means all addresses)
+      if (selectedAddressValue === 'all') {
+        selectedAddressValue = '';
+      }
       
       console.log('Selected trees:', selectedTrees);
       console.log('Selected address:', selectedAddressValue);

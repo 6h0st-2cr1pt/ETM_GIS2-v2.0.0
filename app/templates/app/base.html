@@ -24,8 +24,8 @@
     <!-- Page-specific CSS -->
     {% if active_page == 'settings' %}
     <link rel="stylesheet" href="/static/css/settings.css">
-    {% elif active_page == 'about' %}
-    <link rel="stylesheet" href="/static/css/about.css">
+    {% elif active_page == 'history' %}
+    <link rel="stylesheet" href="/static/css/history.css">
     {% endif %}
 
     {% block extra_css %}{% endblock %}
@@ -98,12 +98,12 @@
                         <span class="sidebar-text">Upload Data</span>
                     </a>
                 </li>
-                <li class="sidebar-item {% if active_page == 'about' %}active{% endif %}">
-                    <a href="{% url 'app:about' %}">
+                <li class="sidebar-item {% if active_page == 'history' %}active{% endif %}">
+                    <a href="{% url 'app:history' %}">
                         <div class="sidebar-icon">
-                            <i class="fas fa-info-circle"></i>
+                            <i class="fas fa-history"></i>
                         </div>
-                        <span class="sidebar-text">About</span>
+                        <span class="sidebar-text">History</span>
                     </a>
                 </li>
                 <li class="sidebar-item sidebar-logout">
