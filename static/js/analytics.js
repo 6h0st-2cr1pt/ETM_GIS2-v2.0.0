@@ -1009,6 +1009,71 @@ function initializePopulationByYearChart() {
   
   if (!speciesFilter || !statusFilter || !healthFilter) return
 
+  // Populate species dropdown
+  async function populateSpeciesDropdown() {
+    const analyticsContainer = document.querySelector('.analytics-container')
+    if (analyticsContainer) {
+      const uniqueSpeciesAttr = analyticsContainer.getAttribute('data-unique-species')
+      if (uniqueSpeciesAttr && uniqueSpeciesAttr !== '[]' && uniqueSpeciesAttr.trim() !== '') {
+        try {
+          // Parse the species list (it might be a JSON array or a Python list string)
+          let speciesList = []
+          const trimmed = uniqueSpeciesAttr.trim()
+          
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            // Try JSON parse first
+            try {
+              speciesList = JSON.parse(trimmed)
+            } catch (e) {
+              // If JSON parse fails, try Python list format
+              speciesList = trimmed.replace(/[\[\]']/g, '').split(',').map(s => s.trim()).filter(s => s)
+            }
+          } else {
+            // Handle comma-separated string
+            speciesList = trimmed.split(',').map(s => s.trim().replace(/['"]/g, '')).filter(s => s)
+          }
+          
+          // Populate dropdown
+          if (Array.isArray(speciesList) && speciesList.length > 0) {
+            speciesList.forEach(species => {
+              if (species && species !== 'all') {
+                const option = document.createElement('option')
+                option.value = species
+                option.textContent = species
+                speciesFilter.appendChild(option)
+              }
+            })
+            console.log('Populated species dropdown with', speciesList.length, 'species')
+            return
+          }
+        } catch (error) {
+          console.error('Error parsing species list:', error, 'Raw value:', uniqueSpeciesAttr)
+        }
+      }
+    }
+    
+    // Fallback: fetch from API
+    await fetchSpeciesList()
+  }
+
+  // Function to fetch species list from API
+  async function fetchSpeciesList() {
+    try {
+      const response = await fetch('/api/population-by-year/?species=list')
+      const data = await response.json()
+      if (data.success && data.species) {
+        data.species.forEach(species => {
+          const option = document.createElement('option')
+          option.value = species
+          option.textContent = species
+          speciesFilter.appendChild(option)
+        })
+      }
+    } catch (error) {
+      console.error('Error fetching species list:', error)
+    }
+  }
+
   // Function to load and update chart
   async function loadChartData() {
     try {
@@ -1067,7 +1132,7 @@ function initializePopulationByYearChart() {
         },
         options: {
           responsive: true,
-          maintainAspectRatio: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: {
               display: true,
@@ -1142,8 +1207,10 @@ function initializePopulationByYearChart() {
   statusFilter.addEventListener('change', loadChartData)
   healthFilter.addEventListener('change', loadChartData)
   
-  // Initial load
-  loadChartData()
+  // Populate dropdown and then load chart
+  populateSpeciesDropdown().then(() => {
+    loadChartData()
+  })
 }
 
 // Initialize population by year chart when DOM is ready

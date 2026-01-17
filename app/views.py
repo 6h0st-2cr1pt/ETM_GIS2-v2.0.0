@@ -279,7 +279,7 @@ def analytics(request):
                 'total_not_healthy': 0,
                 'tree_coordinates': '[]',
                 'seed_sources': '[]',
-                'unique_species': []
+                'unique_species': '[]'  # JSON string
             })
 
         # Get all trees for analytics (including those without addresses for scatter plot)
@@ -486,7 +486,7 @@ def analytics(request):
             'total_healthy': total_healthy,
             'total_not_healthy': total_not_healthy,
             'tree_coordinates': json.dumps(tree_coordinates),
-            'unique_species': unique_species
+            'unique_species': json.dumps(unique_species)  # Convert to JSON string
         }
 
         return render(request, 'app/analytics.html', context)
@@ -2968,6 +2968,19 @@ def api_population_by_year(request):
     API endpoint for population by year with filters
     """
     try:
+        # Check if requesting species list
+        if request.GET.get('species') == 'list':
+            # Return list of available species
+            species_list = list(TreeSpecies.objects.filter(
+                user=request.user,
+                trees__isnull=False
+            ).distinct().values_list('common_name', flat=True).order_by('common_name'))
+            
+            return JsonResponse({
+                'success': True,
+                'species': species_list
+            })
+        
         # Get filter parameters
         species_filter = request.GET.get('species', 'all')
         status_filter = request.GET.get('status', 'all')  # planted, existing, all

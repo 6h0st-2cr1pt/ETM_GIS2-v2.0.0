@@ -78,6 +78,7 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  flex-direction: column;
 }
 
 .analytics-chart-card.full-width {
@@ -423,6 +424,68 @@ html[data-theme="light"] .analytics-section-title {
   background-color: rgba(144, 202, 249, 0.2);
   color: #90caf9;
   border: 1px solid rgba(144, 202, 249, 0.4);
+}
+
+/* Population by Year Chart Filters */
+.population-year-filters {
+  margin-bottom: 1.5rem;
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 1rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: var(--border-radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.filter-group label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.filter-select {
+  padding: 0.6rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: var(--border-radius-md);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  min-width: 150px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-select:hover {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(0, 184, 148, 0.1);
+}
+
+.filter-select option {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  padding: 0.5rem;
+}
+
+/* Chart canvas container for population by year */
+#populationByYearChart {
+  flex: 1;
+  min-height: 300px;
+  max-height: 400px;
 }
 
 .critical-areas-table thead {

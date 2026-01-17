@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="analytics-container" data-seed-sources='{{ seed_sources }}'>
+<div class="analytics-container" data-seed-sources='{{ seed_sources }}' data-unique-species='{{ unique_species }}'>
 <!--    <h1 class="page-title">Analytics</h1> -->
 
     <div class="analytics-charts-container">
@@ -84,15 +84,15 @@
         <!-- Population by Year Chart with Filters -->
         <div class="analytics-chart-card full-width">
             <h3>Tree Population by Year</h3>
-            <div class="population-year-filters" style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+            <div class="population-year-filters">
                 <div class="filter-group">
-                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Common Name:</label>
+                    <label>Common Name:</label>
                     <select id="populationYearSpeciesFilter" class="filter-select">
                         <option value="all">All Species</option>
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Tree Status:</label>
+                    <label>Tree Status:</label>
                     <select id="populationYearStatusFilter" class="filter-select">
                         <option value="all">All</option>
                         <option value="planted">Planted</option>
@@ -100,7 +100,7 @@
                     </select>
                 </div>
                 <div class="filter-group">
-                    <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Health Status:</label>
+                    <label>Health Status:</label>
                     <select id="populationYearHealthFilter" class="filter-select">
                         <option value="all">All</option>
                         <option value="healthy">Healthy</option>
@@ -108,7 +108,9 @@
                     </select>
                 </div>
             </div>
-            <canvas id="populationByYearChart"></canvas>
+            <div style="flex: 1; position: relative; min-height: 300px;">
+                <canvas id="populationByYearChart"></canvas>
+            </div>
             <div class="no-data-message" id="populationYearNoData" style="display: none;">No data available</div>
         </div>
     </div>
