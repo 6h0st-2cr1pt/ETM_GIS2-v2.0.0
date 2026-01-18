@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initializeScatterPlot()
     initializePopulationByYearChart()
     loadSeedSources()
+    initializeLowPopulationYearFilter()
     return
   }
 
@@ -428,6 +429,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Load and display Seed Sources
   loadSeedSources()
+  
+  // Initialize Year filter for Low Population Trees
+  initializeLowPopulationYearFilter()
 
   // Initialize new charts (always initialize, even if address_species_data is empty)
   initializeHealthBySpeciesChart()
@@ -930,9 +934,15 @@ function initializeScatterPlot() {
 }
 
 // Function to load and display Seed Sources
-function loadSeedSources() {
+function loadSeedSources(yearFilter = 'all') {
   try {
-    // Get seed sources data from the template
+    // Fetch from API if year filter is specified or if we want to use API
+    if (yearFilter !== 'all') {
+      fetchLowPopulationTrees(yearFilter)
+      return
+    }
+    
+    // Get seed sources data from the template (for initial load with all years)
     const seedSourcesDataElement = document.querySelector('[data-seed-sources]')
     if (!seedSourcesDataElement) {
       console.error("Seed sources data element not found")
@@ -949,6 +959,33 @@ function loadSeedSources() {
     console.error("Error loading seed sources:", error)
     console.error("Error details:", error.stack)
   }
+}
+
+// Function to fetch low population trees from API
+function fetchLowPopulationTrees(yearFilter = 'all') {
+  const url = `/api/low-population-trees/?year=${yearFilter}`
+  
+  fetch(url, {
+    credentials: 'same-origin'
+  })
+    .then(response => {
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`)
+      }
+      return response.json()
+    })
+    .then(data => {
+      if (data.success) {
+        updateSeedSources(data.trees)
+      } else {
+        console.error("Error fetching low population trees:", data.error)
+        updateSeedSources([])
+      }
+    })
+    .catch(error => {
+      console.error("Error fetching low population trees:", error)
+      updateSeedSources([])
+    })
 }
 
 // Function to update Low Population Trees Table
@@ -990,6 +1027,56 @@ function updateSeedSources(lowPopulationTrees) {
       </tr>
     `
   }).join('')
+}
+
+// Initialize Year filter for Low Population Trees
+function initializeLowPopulationYearFilter() {
+  const yearFilterSelect = document.getElementById('lowPopulationYearFilter')
+  if (!yearFilterSelect) return
+  
+  // Get unique years from template
+  const container = document.querySelector('.analytics-container')
+  if (!container) return
+  
+  const uniqueYearsAttr = container.getAttribute('data-unique-years')
+  let uniqueYears = []
+  
+  try {
+    if (uniqueYearsAttr) {
+      // Parse the years (they come as a JSON string)
+      try {
+        uniqueYears = JSON.parse(uniqueYearsAttr)
+      } catch (e) {
+        // If JSON parsing fails, try to parse as Python list string
+        const cleaned = uniqueYearsAttr.replace(/[\[\]']/g, '').split(',').map(y => y.trim()).filter(y => y)
+        uniqueYears = cleaned.map(y => {
+          try {
+            return parseInt(y)
+          } catch {
+            return null
+          }
+        }).filter(y => y !== null)
+      }
+    }
+  } catch (error) {
+    console.error("Error parsing unique years:", error)
+  }
+  
+  // Populate year dropdown
+  uniqueYears.forEach(year => {
+    if (year) {
+      const option = document.createElement('option')
+      option.value = year
+      option.textContent = year
+      yearFilterSelect.appendChild(option)
+    }
+  })
+  
+  // Add event listener for year filter change
+  yearFilterSelect.addEventListener('change', function() {
+    const selectedYear = this.value
+    loadSeedSources(selectedYear)
+  })
 }
 
 // Population by Year Chart with Filters

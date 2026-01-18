@@ -5,7 +5,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="analytics-container" data-seed-sources='{{ seed_sources }}' data-unique-species='{{ unique_species }}'>
+<div class="analytics-container" data-seed-sources='{{ seed_sources }}' data-unique-species='{{ unique_species }}' data-unique-years='{{ unique_years }}'>
 <!--    <h1 class="page-title">Analytics</h1> -->
 
     <div class="analytics-charts-container">
@@ -119,6 +119,14 @@
     <div class="critical-areas-panel">
         <h2>Trees with Low Population</h2>
         <p class="panel-description">Endemic trees identified as having low population based on IUCN Regional Red List Guidelines</p>
+        <div class="low-population-filters" style="margin-bottom: 20px;">
+            <div class="filter-group">
+                <label for="lowPopulationYearFilter" style="margin-right: 10px;">Year:</label>
+                <select id="lowPopulationYearFilter" class="filter-select">
+                    <option value="all">All Years</option>
+                </select>
+            </div>
+        </div>
         <div id="seedSourcesTable" class="critical-areas-table">
             <table class="table">
                 <thead>

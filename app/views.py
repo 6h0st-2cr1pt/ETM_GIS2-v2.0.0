@@ -500,6 +500,11 @@ def analytics(request):
             trees__isnull=False
         ).distinct().values_list('common_name', flat=True).order_by('common_name'))
         
+        # Get unique years for filter dropdown
+        unique_years = list(EndemicTree.objects.all().values_list('year', flat=True).distinct().order_by('-year'))
+        # Filter out None values
+        unique_years = [y for y in unique_years if y is not None]
+        
         context = {
             'active_page': 'analytics',
             'address_species_data': json.dumps(address_species_data),
@@ -510,7 +515,8 @@ def analytics(request):
             'total_healthy': total_healthy,
             'total_not_healthy': total_not_healthy,
             'tree_coordinates': json.dumps(tree_coordinates),
-            'unique_species': json.dumps(unique_species)  # Convert to JSON string
+            'unique_species': json.dumps(unique_species),  # Convert to JSON string
+            'unique_years': json.dumps(unique_years)  # Convert to JSON string for template
         }
 
         return render(request, 'app/analytics.html', context)
@@ -529,7 +535,9 @@ def analytics(request):
             'diameters': '[]',
             'total_healthy': 0,
             'total_not_healthy': 0,
-            'tree_coordinates': '[]'
+            'tree_coordinates': '[]',
+            'unique_species': '[]',
+            'unique_years': []
         }
         return render(request, 'app/analytics.html', context)
 
@@ -3090,6 +3098,106 @@ def api_population_by_year(request):
             'populations': populations
         })
     except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_low_population_trees(request):
+    """
+    API endpoint for low population trees with year filter
+    """
+    try:
+        # Get year filter parameter
+        year_filter = request.GET.get('year', 'all')
+        
+        # Base queryset
+        trees = EndemicTree.objects.all().select_related('species', 'location')
+        
+        # Apply year filter
+        if year_filter and year_filter != 'all':
+            try:
+                year_int = int(year_filter)
+                trees = trees.filter(year=year_int)
+            except ValueError:
+                pass  # If year conversion fails, ignore the filter
+        
+        # Group trees by species to get total population per species
+        species_population_map = {}
+        for tree in trees:
+            if tree.species:
+                species_name = tree.species.common_name or 'Unknown'
+                scientific_name = tree.species.scientific_name or 'Unknown'
+                species_key = f"{species_name}|{scientific_name}"
+                
+                if species_key not in species_population_map:
+                    species_population_map[species_key] = {
+                        'common_name': species_name,
+                        'scientific_name': scientific_name,
+                        'total_population': 0,
+                        'locations': set(),
+                        'addresses': set()
+                    }
+                
+                species_population_map[species_key]['total_population'] += tree.population or 0
+                if tree.location:
+                    if tree.location.address:
+                        species_population_map[species_key]['addresses'].add(tree.location.address)
+                    if tree.location.latitude and tree.location.longitude:
+                        species_population_map[species_key]['locations'].add(
+                            (float(tree.location.latitude), float(tree.location.longitude))
+                        )
+        
+        # Identify trees with low population based on IUCN criteria
+        low_population_trees = []
+        for species_key, data in species_population_map.items():
+            total_pop = data['total_population']
+            
+            # Determine IUCN conservation status based on population
+            if total_pop < 50:
+                iucn_status = 'Critically Endangered (CR)'
+                iucn_code = 'CR'
+            elif total_pop < 250:
+                iucn_status = 'Endangered (EN)'
+                iucn_code = 'EN'
+            elif total_pop < 1000:
+                iucn_status = 'Vulnerable (VU)'
+                iucn_code = 'VU'
+            elif total_pop < 2500:
+                iucn_status = 'Near Threatened (NT)'
+                iucn_code = 'NT'
+            else:
+                continue  # Skip species with adequate population
+            
+            # Get addresses as list
+            addresses_list = sorted(list(data['addresses'])) if data['addresses'] else ['Unknown']
+            addresses_display = " / ".join(addresses_list[:5])  # Show up to 5 addresses
+            if len(addresses_list) > 5:
+                addresses_display += f" (+{len(addresses_list) - 5} more)"
+            
+            low_population_trees.append({
+                'common_name': data['common_name'],
+                'scientific_name': data['scientific_name'],
+                'total_population': int(total_pop),
+                'locations_count': len(data['locations']),
+                'addresses': addresses_display,
+                'iucn_status': iucn_status,
+                'iucn_code': iucn_code
+            })
+        
+        # Sort by population (ascending - lowest first) and then by IUCN code priority
+        iucn_priority = {'CR': 1, 'EN': 2, 'VU': 3, 'NT': 4}
+        low_population_trees.sort(key=lambda x: (iucn_priority.get(x['iucn_code'], 5), x['total_population']))
+        
+        return JsonResponse({
+            'success': True,
+            'trees': low_population_trees
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'success': False,
             'error': str(e)

@@ -20,7 +20,7 @@ class History(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='history_logs')
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='history_logs')
     action = models.CharField(max_length=50, choices=ACTION_CHOICES)
     description = models.TextField(help_text="Description of the action")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -30,14 +30,15 @@ class History(models.Model):
         verbose_name_plural = "History Logs"
     
     def __str__(self):
-        return f"{self.user.username} - {self.get_action_display()} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
+        username = self.user.username if self.user else "Deleted User"
+        return f"{username} - {self.get_action_display()} - {self.created_at.strftime('%Y-%m-%d %H:%M:%S')}"
 
 
 class TreeFamily(models.Model):
     """Tree family classification"""
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True, null=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -52,7 +53,7 @@ class TreeGenus(models.Model):
     name = models.CharField(max_length=100)
     family = models.ForeignKey(TreeFamily, on_delete=models.CASCADE, related_name='genera')
     description = models.TextField(blank=True, null=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -79,7 +80,7 @@ class TreeSpecies(models.Model):
         null=True,
         help_text="Format of the uploaded image"
     )
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.common_name} ({self.scientific_name})"
@@ -97,7 +98,7 @@ class Location(models.Model):
     elevation = models.FloatField(null=True, blank=True)
     address = models.TextField(blank=True, null=True, help_text="Human-readable address from reverse geocoding")
     description = models.TextField(blank=True, null=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.name} ({self.latitude}, {self.longitude})"
@@ -113,7 +114,7 @@ class PinStyle(models.Model):
     border_width = models.IntegerField(default=2)
     background_color = models.CharField(max_length=20, default="rgba(0, 0, 0, 0.6)")
     is_default = models.BooleanField(default=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -152,7 +153,7 @@ class EndemicTree(models.Model):
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.species.common_name} at {self.location.name} ({self.year})"
@@ -185,7 +186,7 @@ class TreeSeed(models.Model):
     notes = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return f"{self.species.common_name} seeds at {self.location.name} ({self.planting_date})"
@@ -216,7 +217,7 @@ class MapLayer(models.Model):
     is_default = models.BooleanField(default=False)
     attribution = models.CharField(max_length=255, blank=True, null=True)
     z_index = models.IntegerField(default=0)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.name
@@ -266,7 +267,7 @@ class UserSetting(models.Model):
     """User application settings"""
     key = models.CharField(max_length=50)
     value = models.TextField()
-    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True)
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.key

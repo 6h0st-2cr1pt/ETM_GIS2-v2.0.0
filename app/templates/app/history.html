@@ -95,9 +95,9 @@
                                         <span class="action-badge action-{{ log.action }}">
                                             {{ log.get_action_display }}
                                         </span>
-                                        <span class="history-user {% if log.user == user %}current-user{% else %}other-user{% endif %}">
-                                            <i class="fas fa-user"></i> {{ log.user.username }}
-                                            {% if log.user == user %}<span class="user-badge">(You)</span>{% endif %}
+                                        <span class="history-user {% if log.user and log.user == user %}current-user{% else %}other-user{% endif %}">
+                                            <i class="fas fa-user"></i> {% if log.user %}{{ log.user.username }}{% else %}Deleted User{% endif %}
+                                            {% if log.user and log.user == user %}<span class="user-badge">(You)</span>{% endif %}
                                         </span>
                                     </div>
                                     <div class="history-date-time">
