@@ -2443,13 +2443,13 @@ def generate_report(request):
             all_addresses_in_report = []
 
         # Build the report HTML - only show the table
-        # Prepare year display text
+        # Prepare year display text (just the value, not "Year:" prefix)
         year_display = "All years"
         if selected_year:
             try:
-                year_display = f"Year: {int(selected_year)}"
+                year_display = str(int(selected_year))
             except (ValueError, TypeError):
-                year_display = f"Year: {selected_year}"
+                year_display = str(selected_year)
         
         html = f'''
         <div class="report-document">
@@ -2457,7 +2457,6 @@ def generate_report(request):
                 <h1 class="report-title">{report_title}</h1>
                 <p class="report-subtitle">Endemic Trees Monitoring System - User Account Report</p>
                 <p class="report-date">Generated on {date_str} at {time_str}</p>
-                <p class="report-filter">Filter: {year_display}</p>
             </div>
         '''
 

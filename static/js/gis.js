@@ -466,8 +466,10 @@ document.addEventListener("DOMContentLoaded", () => {
   filteredDataContainer.style.display = "none"
   document.querySelector(".gis-container").appendChild(filteredDataContainer)
 
-  // Color mapping for tree species
+  // Color mapping for tree species (persistent - not cleared on filter)
   const colorMap = {}
+  // Track which species are currently visible on the map
+  const visibleSpecies = new Set()
   const colorPalette = [
     "#FF5733", // Red-Orange
     "#33FF57", // Green
@@ -490,7 +492,17 @@ document.addEventListener("DOMContentLoaded", () => {
     "#A833FF", // Lavender
     "#FF33A8", // Hot Pink
   ]
-  let colorIndex = 0
+
+  // Hash function to consistently assign colors to species names
+  function hashString(str) {
+    let hash = 0
+    for (let i = 0; i < str.length; i++) {
+      const char = str.charCodeAt(i)
+      hash = ((hash << 5) - hash) + char
+      hash = hash & hash // Convert to 32-bit integer
+    }
+    return Math.abs(hash)
+  }
 
   // Load all trees and seeds by default (show all individual tree pins for "All Trees")
   Promise.all([loadTrees(), loadSeeds()])
@@ -604,8 +616,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to apply all filters
   function applyFilters() {
       treeLayer.clearLayers()
-    // Clear colorMap to ensure legend only shows current trees
-    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    // Clear visible species set (will be repopulated when trees are loaded)
+    visibleSpecies.clear()
     updateLegend() // Update legend immediately
 
     if (currentSpeciesFilter === "all") {
@@ -839,8 +851,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadTrees() {
     // Clear existing tree markers
     treeLayer.clearLayers()
-    // Clear colorMap to ensure legend only shows current trees
-    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    // Clear visible species set (will be repopulated)
+    visibleSpecies.clear()
     updateLegend() // Update legend immediately to show "No trees on map" if no data
 
     // Add a console log to debug
@@ -913,8 +925,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadTreesByAddress() {
     // Clear existing tree markers
     treeLayer.clearLayers()
-    // Clear colorMap to ensure legend only shows current trees
-    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    // Clear visible species set (will be repopulated)
+    visibleSpecies.clear()
     updateLegend() // Update legend immediately to show "No trees on map" if no data
 
     console.log("Loading all trees aggregated by address...")
@@ -1166,8 +1178,8 @@ document.addEventListener("DOMContentLoaded", () => {
   function loadFilteredTrees(speciesId) {
     // Clear existing tree markers
     treeLayer.clearLayers()
-    // Clear colorMap to ensure legend only shows current trees
-    Object.keys(colorMap).forEach(key => delete colorMap[key])
+    // Clear visible species set (will be repopulated)
+    visibleSpecies.clear()
     updateLegend() // Update legend immediately to show "No trees on map" if no data
 
     // Add a console log to debug
@@ -1384,11 +1396,13 @@ document.addEventListener("DOMContentLoaded", () => {
     filteredDataContainer.style.display = "block"
   }
 
-  // Function to get color for a tree species
+  // Function to get color for a tree species (deterministic based on name)
   function getColorForSpecies(commonName) {
     if (!colorMap[commonName]) {
-      colorMap[commonName] = colorPalette[colorIndex % colorPalette.length]
-      colorIndex++
+      // Use hash of species name to get consistent color index
+      const hash = hashString(commonName.toLowerCase().trim())
+      const colorIndex = hash % colorPalette.length
+      colorMap[commonName] = colorPalette[colorIndex]
     }
     return colorMap[commonName]
   }
@@ -1404,6 +1418,8 @@ document.addEventListener("DOMContentLoaded", () => {
       pointToLayer: (feature, latlng) => {
         const commonName = feature.properties.common_name || 'Unknown';
         const color = getColorForSpecies(commonName)
+        // Track this species as visible
+        visibleSpecies.add(commonName)
         return L.circleMarker(latlng, {
           radius: 8,
           fillColor: color,
@@ -1586,7 +1602,16 @@ document.addEventListener("DOMContentLoaded", () => {
         // Use species-specific color when filtering by specific species
         const primarySpecies = locationData.trees.length > 0 ? locationData.trees[0].common_name : 'Unknown'
         markerColor = getColorForSpecies(primarySpecies)
+        // Track this species as visible
+        visibleSpecies.add(primarySpecies)
       }
+      
+      // Track all species at this location as visible
+      locationData.trees.forEach(tree => {
+        if (tree.common_name) {
+          visibleSpecies.add(tree.common_name)
+        }
+      })
       
       // Create marker with size based on number of trees at this location
       const marker = L.circleMarker(latlng, {
@@ -1750,9 +1775,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const legendDiv = document.getElementById("species-legend")
     if (!legendDiv) return
 
-    // Only show species that are actually on the map (in colorMap)
+    // Only show species that are currently visible on the map
     // This ensures the legend reflects only trees that exist, not all taxonomy entries
-    const speciesInMap = Object.keys(colorMap)
+    const speciesInMap = Array.from(visibleSpecies)
     
     if (speciesInMap.length === 0) {
       // Hide the legend completely when there are no trees
@@ -1767,7 +1792,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const sortedSpecies = speciesInMap.sort()
       
       sortedSpecies.forEach(species => {
-        const color = colorMap[species]
+        const color = getColorForSpecies(species) // Get color from persistent colorMap
       legendContent += `
         <div class="legend-item">
           <span class="legend-color" style="background-color: ${color}"></span>
