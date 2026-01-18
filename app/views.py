@@ -86,6 +86,15 @@ def user_login(request):
             
             # Specify the backend since we have multiple backends
             login(request, user, backend='django.contrib.auth.backends.ModelBackend')
+            
+            # Log login event
+            from django.utils import timezone
+            History.objects.create(
+                user=user,
+                action='login',
+                description=f'User {username} logged in to the system'
+            )
+            
             messages.success(request, f"Welcome back, {username}!")
 
             # Redirect to the page they were trying to access, or dashboard
@@ -106,6 +115,15 @@ def user_logout(request):
     """
     Handle user logout
     """
+    # Log logout event before logging out
+    if request.user.is_authenticated:
+        username = request.user.username
+        History.objects.create(
+            user=request.user,
+            action='logout',
+            description=f'User {username} logged out of the system'
+        )
+    
     logout(request)
     messages.success(request, "You have been logged out successfully.")
     return redirect('app:login')
@@ -123,16 +141,15 @@ def dashboard(request):
         return redirect('app:login')
     
     try:
-        # Get basic stats for dashboard with proper null checks
-        total_trees = EndemicTree.objects.filter(user=request.user).count()
-        unique_species = TreeSpecies.objects.filter(user=request.user).count()
-        tree_population = EndemicTree.objects.filter(user=request.user).aggregate(total_population=Sum('population'))['total_population'] or 0
+        # Get basic stats for dashboard with proper null checks (all users' data)
+        total_trees = EndemicTree.objects.all().count()
+        unique_species = TreeSpecies.objects.all().count()
+        tree_population = EndemicTree.objects.all().aggregate(total_population=Sum('population'))['total_population'] or 0
 
         # Calculate health percentage (trees in good health or better)
         total_population = tree_population or 0  # Avoid division by zero
         if total_population > 0:
             good_health_population = EndemicTree.objects.filter(
-                user=request.user,
                 health_status__in=['good', 'very_good', 'excellent']
             ).aggregate(total=Sum('population'))['total'] or 0
             health_percentage = round((good_health_population / total_population) * 100)
@@ -140,25 +157,25 @@ def dashboard(request):
             health_percentage = 0
 
         # Get health status distribution for chart
-        health_data = list(EndemicTree.objects.filter(user=request.user).values('health_status').annotate(
+        health_data = list(EndemicTree.objects.all().values('health_status').annotate(
             count=Sum('population')  # Changed from Count('id') to Sum('population')
         ).order_by('health_status'))
 
         # Get most recent data
-        recent_trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all().order_by('-created_at')[:5]
+        recent_trees = EndemicTree.objects.all().select_related('species', 'location').order_by('-created_at')[:5]
 
         # Get species by family for chart with null checks
-        species_by_family = list(TreeFamily.objects.filter(user=request.user).annotate(
+        species_by_family = list(TreeFamily.objects.all().annotate(
             total_population=Sum('genera__species__trees__population')
         ).values('name', 'total_population').order_by('-total_population')[:10])
 
         # Get population by year with proper aggregation and null checks
-        population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year')
+        population_by_year = list(EndemicTree.objects.all().values('year')
             .annotate(total=Sum('population'))
             .order_by('year'))
         
         # Get unique years for filter
-        years = sorted(list(EndemicTree.objects.filter(user=request.user).values_list('year', flat=True).distinct()))
+        years = sorted(list(EndemicTree.objects.all().values_list('year', flat=True).distinct()))
         
         # Get unique areas for filter (from addresses)
         def parse_administrative_area(address):
@@ -171,7 +188,7 @@ def dashboard(request):
                 return parts[0]
             return None
         
-        locations = Location.objects.filter(user=request.user).exclude(address__isnull=True).exclude(address='')
+        locations = Location.objects.all().exclude(address__isnull=True).exclude(address='')
         areas = set()
         for loc in locations:
             area = parse_administrative_area(loc.address)
@@ -180,7 +197,7 @@ def dashboard(request):
         areas = sorted(list(areas))
         
         # Get species list for filter
-        species_list = list(TreeSpecies.objects.filter(user=request.user)
+        species_list = list(TreeSpecies.objects.all()
             .order_by('common_name')
             .values('id', 'common_name', 'scientific_name'))
 
@@ -232,30 +249,31 @@ def gis(request):
     """
     GIS Map view
     """
-    # Get all available map layers
-    layers = MapLayer.objects.filter(user=request.user, is_active=True)
+    # Get all available map layers (all users' layers)
+    layers = MapLayer.objects.filter(is_active=True)
 
     # Get only tree species that have actual tree records (not all taxonomy entries)
     # Manage Taxonomy is for autocomplete/suggestions only, not for display in GIS
     tree_species = TreeSpecies.objects.filter(
-        user=request.user,
         trees__isnull=False  # Only species that have associated tree records
     ).distinct().order_by('common_name')  # Remove duplicates and order by common name
 
     # Get unique years from trees
-    unique_years = EndemicTree.objects.filter(user=request.user).values_list('year', flat=True).distinct().order_by('-year')
+    unique_years = EndemicTree.objects.all().values_list('year', flat=True).distinct().order_by('-year')
 
     # Get unique addresses from locations
     unique_addresses = Location.objects.filter(
-        user=request.user,
         address__isnull=False
     ).exclude(address='').values_list('address', flat=True).distinct().order_by('address')
 
-    # Get default pin style
+    # Get default pin style (try current user first, then any default)
     try:
         default_pin = PinStyle.objects.get(user=request.user, is_default=True)
     except PinStyle.DoesNotExist:
-        default_pin = None
+        try:
+            default_pin = PinStyle.objects.filter(is_default=True).first()
+        except:
+            default_pin = None
 
     context = {
         'active_page': 'gis',
@@ -275,7 +293,7 @@ def analytics(request):
     """
     try:
         # Check if there's any data in the database
-        if not EndemicTree.objects.filter(user=request.user).exists():
+        if not EndemicTree.objects.all().exists():
             return render(request, 'app/analytics.html', {
                 'active_page': 'analytics',
                 'address_species_data': '[]',
@@ -290,7 +308,7 @@ def analytics(request):
             })
 
         # Get all trees for analytics (including those without addresses for scatter plot)
-        all_trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+        all_trees = EndemicTree.objects.all().select_related('species', 'location')
         
         # Get population by address and species (for existing charts)
         trees = all_trees.exclude(location__address__isnull=True).exclude(location__address='')
@@ -479,7 +497,6 @@ def analytics(request):
 
         # Get unique species for filter dropdown
         unique_species = list(TreeSpecies.objects.filter(
-            user=request.user,
             trees__isnull=False
         ).distinct().values_list('common_name', flat=True).order_by('common_name'))
         
@@ -536,8 +553,8 @@ def datasets(request):
     """
     Display and manage datasets
     """
-    trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family').all()
-    species_list = TreeSpecies.objects.filter(user=request.user).select_related('genus', 'genus__family').all().order_by('common_name')
+    trees = EndemicTree.objects.all().select_related('species', 'location', 'species__genus', 'species__genus__family').all()
+    species_list = TreeSpecies.objects.all().select_related('genus', 'genus__family').all().order_by('common_name')
 
     # Expand aggregated trees into individual tree rows (each row = 1 tree)
     expanded_trees = []
@@ -614,8 +631,8 @@ def upload_species_images(request):
     """
     Display all species (with and without images) and allow uploading/changing images for them
     """
-    # Get all species for the user
-    all_species = TreeSpecies.objects.filter(user=request.user)
+    # Get all species
+    all_species = TreeSpecies.objects.all()
     
     # Track unique combinations of common_name and scientific_name
     species_data = []
@@ -1469,8 +1486,8 @@ def upload_data(request):
                 print(f"Error in seed entry: {str(e)}")
 
     # Get all families and genera for the form
-    families = TreeFamily.objects.filter(user=request.user).all()
-    genera = TreeGenus.objects.filter(user=request.user).all()
+    families = TreeFamily.objects.all().all()
+    genera = TreeGenus.objects.all().all()
 
     context = {
         'active_page': 'upload',
@@ -1594,13 +1611,15 @@ def settings(request):
 @login_required(login_url='app:login')
 def history(request):
     """
-    History page - displays activity logs for data uploads and deletions
+    History page - displays activity logs for all users (data uploads, deletions, and logins)
     """
-    # Get base queryset
-    history_queryset = History.objects.filter(user=request.user).order_by('-created_at')
+    # Get base queryset - show all users' history
+    history_queryset = History.objects.all().order_by('-created_at')
     
     # Calculate statistics before slicing
     total_count = history_queryset.count()
+    login_count = history_queryset.filter(action='login').count()
+    logout_count = history_queryset.filter(action='logout').count()
     csv_count = history_queryset.filter(action='csv_upload').count()
     manual_count = history_queryset.filter(action='manual_entry').count()
     edit_count = history_queryset.filter(action='edit_tree').count()
@@ -1613,10 +1632,13 @@ def history(request):
         'active_page': 'history',
         'history_logs': history_logs,
         'total_count': total_count,
+        'login_count': login_count,
+        'logout_count': logout_count,
         'csv_count': csv_count,
         'manual_count': manual_count,
         'edit_count': edit_count,
         'delete_count': delete_count,
+        'user': request.user,  # Pass current user to template for comparison
     }
     return render(request, 'app/history.html', context)
 
@@ -1626,20 +1648,16 @@ def reports(request):
     """View for generating reports."""
     # Get all endemic trees with species information
     trees = EndemicTree.objects.filter(
-        user=request.user,
         species__isnull=False
     ).select_related('species', 'location').order_by('species__common_name', 'year')
     
     # Get unique addresses from locations (no duplicates)
     unique_addresses = Location.objects.filter(
-        user=request.user,
         address__isnull=False
     ).exclude(address='').values_list('address', flat=True).distinct().order_by('address')
     
     # Get unique years from trees
-    unique_years = EndemicTree.objects.filter(
-        user=request.user
-    ).values_list('year', flat=True).distinct().order_by('-year')
+    unique_years = EndemicTree.objects.all().values_list('year', flat=True).distinct().order_by('-year')
     
     # Create tree list with common name, scientific name, and addresses
     # Show only unique species (prevent duplicates)
@@ -1694,7 +1712,7 @@ def api_dashboard_data(request):
         species_filter = request.GET.get('species_id', None)
         
         # Base query
-        trees_query = EndemicTree.objects.filter(user=request.user).select_related('species', 'location', 'species__genus', 'species__genus__family')
+        trees_query = EndemicTree.objects.all().select_related('species', 'location', 'species__genus', 'species__genus__family')
         
         # Apply filters
         if year_filter and year_filter != 'all':
@@ -1908,7 +1926,7 @@ def api_analytics_by_area(request):
         species_id = request.GET.get('species_id', None)
         
         # Base query
-        trees_query = EndemicTree.objects.filter(user=request.user).select_related('location', 'species')
+        trees_query = EndemicTree.objects.all().select_related('location', 'species')
         
         # Filter by species if provided
         if species_id and species_id != 'all':
@@ -2025,7 +2043,7 @@ def api_species_list(request):
     """API endpoint to get current list of species for dropdown updates."""
     try:
         # Force fresh query from database - no caching
-        species_list = TreeSpecies.objects.filter(user=request.user).all().order_by('common_name')
+        species_list = TreeSpecies.objects.all().all().order_by('common_name')
         species_data = [
             {
                 'id': str(species.id),
@@ -2058,7 +2076,7 @@ def api_endemic_trees_list(request):
         # Get taxonomy from database (TreeSpecies)
         trees_data = []
         if request.user.is_authenticated:
-            species_list = TreeSpecies.objects.filter(user=request.user).select_related('genus', 'genus__family').all()
+            species_list = TreeSpecies.objects.all().select_related('genus', 'genus__family').all()
             for species in species_list:
                 trees_data.append({
                     'common_name': species.common_name,
@@ -2134,7 +2152,7 @@ def api_locations_list(request):
     """API endpoint to get current list of locations for dropdown updates."""
     try:
         # Force fresh query from database - no caching (only user's locations)
-        location_list = Location.objects.filter(user=request.user).order_by('name')
+        location_list = Location.objects.all().order_by('name')
         location_data = [
             {
                 'id': str(location.id),
@@ -2313,7 +2331,6 @@ def generate_report(request):
             
             # Filter trees by selected species IDs (get all trees for selected species)
             trees_query = EndemicTree.objects.filter(
-                user=request.user,
                 species__id__in=species_ids
             ).select_related('species', 'location')
             
@@ -2620,7 +2637,7 @@ def tree_data(request):
     API endpoint for tree data in GeoJSON format
     """
     try:
-        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location').all()
+        trees = EndemicTree.objects.all().select_related('species', 'location').all()
 
         # No species-wide aggregation here. For the popup we return per-record distribution
         # derived strictly from the current row's health_status and population.
@@ -2709,7 +2726,7 @@ def seed_data(request):
     API endpoint for seed data in GeoJSON format
     """
     try:
-        seeds = TreeSeed.objects.filter(user=request.user).select_related('species', 'location').all()
+        seeds = TreeSeed.objects.all().select_related('species', 'location').all()
 
         # Log the count of seeds for debugging
         seed_count = seeds.count()
@@ -2859,22 +2876,22 @@ def analytics_data(request):
     API endpoint for analytics data
     """
     # Species count
-    species_count = list(TreeSpecies.objects.filter(user=request.user).annotate(
+    species_count = list(TreeSpecies.objects.all().annotate(
         count=Count('trees')
     ).values('common_name', 'count').order_by('-count')[:10])
 
     # Population by year
-    population_by_year = list(EndemicTree.objects.filter(user=request.user).values('year').annotate(
+    population_by_year = list(EndemicTree.objects.all().values('year').annotate(
         total=Sum('population')
     ).order_by('year'))
 
     # Population by family
-    population_by_family = list(TreeFamily.objects.filter(user=request.user).annotate(
+    population_by_family = list(TreeFamily.objects.all().annotate(
         total=Sum('genera__species__trees__population')
     ).values('name', 'total').order_by('-total')[:10])
 
     # Health status distribution with detailed counts
-    health_status_data = list(EndemicTree.objects.filter(user=request.user).values('health_status').annotate(
+    health_status_data = list(EndemicTree.objects.all().values('health_status').annotate(
         count=Count('id'),
         total_healthy=Sum('healthy_count'),
         total_good=Sum('good_count'),
@@ -2883,7 +2900,7 @@ def analytics_data(request):
     ).order_by('health_status'))
 
     # Health status by year with detailed counts
-    health_by_year_data = list(EndemicTree.objects.filter(user=request.user).values('year', 'health_status').annotate(
+    health_by_year_data = list(EndemicTree.objects.all().values('year', 'health_status').annotate(
         count=Count('id'),
         total_healthy=Sum('healthy_count'),
         total_good=Sum('good_count'),
@@ -2892,7 +2909,7 @@ def analytics_data(request):
     ).order_by('year', 'health_status'))
 
     # Calculate overall health metrics
-    total_trees = EndemicTree.objects.filter(user=request.user).aggregate(
+    total_trees = EndemicTree.objects.all().aggregate(
         total_healthy=Sum('healthy_count'),
         total_good=Sum('good_count'),
         total_bad=Sum('bad_count'),
@@ -2918,7 +2935,7 @@ def analytics_data(request):
 
     # Historical data analytics based on year
     # Get unique years
-    years = EndemicTree.objects.filter(user=request.user).values('year').distinct().order_by('year')
+    years = EndemicTree.objects.all().values('year').distinct().order_by('year')
     year_list = [item['year'] for item in years]
 
     # Species richness by year
@@ -2966,7 +2983,7 @@ def analytics_data(request):
         })
 
     # Top species by population (for charts fallback)
-    species_population = list(TreeSpecies.objects.filter(user=request.user).annotate(
+    species_population = list(TreeSpecies.objects.all().annotate(
         total_population=Sum('trees__population'),
         locations_count=Count('trees__location', distinct=True)
     ).values('common_name', 'scientific_name', 'total_population', 'locations_count')
@@ -3000,7 +3017,6 @@ def api_population_by_year(request):
         if request.GET.get('species') == 'list':
             # Return list of available species
             species_list = list(TreeSpecies.objects.filter(
-                user=request.user,
                 trees__isnull=False
             ).distinct().values_list('common_name', flat=True).order_by('common_name'))
             
@@ -3015,7 +3031,7 @@ def api_population_by_year(request):
         health_filter = request.GET.get('health', 'all')  # healthy, not_healthy, all
         
         # Base queryset
-        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+        trees = EndemicTree.objects.all().select_related('species', 'location')
         
         # Apply filters
         if species_filter != 'all':
@@ -3484,7 +3500,7 @@ def delete_all_trees(request):
     """View for deleting all tree records."""
     try:
         # Get detailed information before deletion
-        trees = EndemicTree.objects.filter(user=request.user).select_related('species', 'location')
+        trees = EndemicTree.objects.all().select_related('species', 'location')
         total_count = trees.count()
         
         # Collect details about all trees being deleted
@@ -3510,7 +3526,7 @@ def delete_all_trees(request):
         species_to_check = set(TreeSpecies.objects.filter(user=request.user, trees__isnull=False).distinct())
         
         # Delete all trees
-        EndemicTree.objects.filter(user=request.user).delete()
+        EndemicTree.objects.all().delete()
         
         # Delete locations that are no longer used
         for location in locations_to_check:
@@ -3645,14 +3661,14 @@ def delete_all_seeds(request):
     """View for deleting all seed records."""
     try:
         # Get count before deletion
-        total_count = TreeSeed.objects.filter(user=request.user).count()
+        total_count = TreeSeed.objects.all().count()
         
         # Get all locations and species to check after deletion
-        locations_to_check = list(Location.objects.filter(user=request.user, seeds__isnull=False).distinct())
-        species_to_check = set(TreeSpecies.objects.filter(user=request.user, seeds__isnull=False).distinct())
+        locations_to_check = list(Location.objects.filter(seeds__isnull=False).distinct())
+        species_to_check = set(TreeSpecies.objects.filter(seeds__isnull=False).distinct())
         
         # Delete all seeds
-        TreeSeed.objects.filter(user=request.user).delete()
+        TreeSeed.objects.all().delete()
         
         # Delete locations that are no longer used
         for location in locations_to_check:
@@ -4146,7 +4162,7 @@ def list_taxonomy(request):
 
     try:
 
-        species_list = TreeSpecies.objects.filter(user=request.user).select_related('genus', 'genus__family').order_by('common_name')
+        species_list = TreeSpecies.objects.all().select_related('genus', 'genus__family').order_by('common_name')
 
         taxonomy_data = []
 

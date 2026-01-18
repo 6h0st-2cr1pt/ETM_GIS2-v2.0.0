@@ -4,6 +4,7 @@
 <div class="history-container">
     <div class="history-header">
         <h1 class="page-title">History</h1>
+        <p class="history-subtitle">Showing all users' activities including manual entries, CSV uploads, edits, and deletions</p>
     </div>
     
     {% if history_logs %}
@@ -54,6 +55,24 @@
                 <div class="stat-label">Deletions</div>
             </div>
         </div>
+        <div class="stat-card stat-login">
+            <div class="stat-icon">
+                <i class="fas fa-sign-in-alt"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ login_count }}</div>
+                <div class="stat-label">Logins</div>
+            </div>
+        </div>
+        <div class="stat-card stat-logout">
+            <div class="stat-icon">
+                <i class="fas fa-sign-out-alt"></i>
+            </div>
+            <div class="stat-content">
+                <div class="stat-value">{{ logout_count }}</div>
+                <div class="stat-label">Logouts</div>
+            </div>
+        </div>
     </div>
     {% endif %}
     
@@ -76,7 +95,10 @@
                                         <span class="action-badge action-{{ log.action }}">
                                             {{ log.get_action_display }}
                                         </span>
-                                        <span class="history-user">{{ log.user.username }}</span>
+                                        <span class="history-user {% if log.user == user %}current-user{% else %}other-user{% endif %}">
+                                            <i class="fas fa-user"></i> {{ log.user.username }}
+                                            {% if log.user == user %}<span class="user-badge">(You)</span>{% endif %}
+                                        </span>
                                     </div>
                                     <div class="history-date-time">
                                         <span class="history-date">{{ log.created_at|date:"M d, Y" }}</span>

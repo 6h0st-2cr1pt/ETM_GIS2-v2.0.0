@@ -9,6 +9,8 @@ from django.dispatch import receiver
 class History(models.Model):
     """History log for tracking user activities"""
     ACTION_CHOICES = [
+        ('login', 'User Login'),
+        ('logout', 'User Logout'),
         ('csv_upload', 'CSV Upload'),
         ('manual_entry', 'Manual Tree Entry'),
         ('edit_tree', 'Edit Tree'),
