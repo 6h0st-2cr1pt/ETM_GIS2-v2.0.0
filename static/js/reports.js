@@ -456,8 +456,19 @@ document.addEventListener("DOMContentLoaded", () => {
         selectedAddressValue = '';
       }
       
+      const yearDropdown = document.getElementById('yearDropdown');
+      let selectedYearValue = yearDropdown ? yearDropdown.value : '';
+      // Convert "all" to empty string for backend (empty means all years)
+      if (selectedYearValue === 'all') {
+        selectedYearValue = '';
+      }
+      
+      // Add year to form data (always send, even if empty)
+      formData.append('selected_year', selectedYearValue || '');
+      
       console.log('Selected trees:', selectedTrees);
       console.log('Selected address:', selectedAddressValue);
+      console.log('Selected year:', selectedYearValue);
 
       if (!selectedTrees || selectedTrees.length === 0) {
         alert("Please select at least one tree.");

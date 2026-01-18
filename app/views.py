@@ -1629,6 +1629,11 @@ def reports(request):
         address__isnull=False
     ).exclude(address='').values_list('address', flat=True).distinct().order_by('address')
     
+    # Get unique years from trees
+    unique_years = EndemicTree.objects.filter(
+        user=request.user
+    ).values_list('year', flat=True).distinct().order_by('-year')
+    
     # Create tree list with common name, scientific name, and addresses
     # Show only unique species (prevent duplicates)
     # Collect all addresses where each species exists
@@ -1667,7 +1672,8 @@ def reports(request):
     return render(request, 'app/reports.html', {
         'active_page': 'reports',
         'tree_list': tree_list,
-        'address_list': list(unique_addresses)
+        'address_list': list(unique_addresses),
+        'year_list': list(unique_years)
     })
 
 
@@ -2246,11 +2252,12 @@ def generate_report(request):
         return JsonResponse({'error': 'Only POST method is allowed'}, status=405)
 
     try:
-        # Get selected trees and address
+        # Get selected trees, address, and year
         selected_trees = request.POST.getlist('selected_trees')
         # Handle both dropdown (single value) and checkbox (multiple values) formats
         selected_address = request.POST.get('selected_address', '')
         selected_addresses = request.POST.getlist('selected_addresses')
+        selected_year = request.POST.get('selected_year', '')
         
         # If dropdown is used, convert single value to list
         # Treat "all" the same as empty string (include all addresses)
@@ -2258,10 +2265,15 @@ def generate_report(request):
             selected_addresses = [selected_address]
         # If "all" is selected or no address selected, allow all addresses (empty list means no filter)
         
+        # Treat "all" the same as empty string for year (include all years)
+        if selected_year == 'all':
+            selected_year = ''
+        
         if not selected_trees:
             return JsonResponse({'success': False, 'error': 'Please select at least one tree.'}, status=400)
         
         # Address is optional - if empty, show all addresses
+        # Year is optional - if empty, show all years
 
         # Get the current date and time in local timezone
         from django.utils.timezone import localtime
@@ -2303,6 +2315,15 @@ def generate_report(request):
                 trees_query = trees_query.filter(
                     location__address__in=selected_addresses
                 )
+            
+            # Filter by selected year if provided
+            if selected_year:
+                try:
+                    year_int = int(selected_year)
+                    trees_query = trees_query.filter(year=year_int)
+                except (ValueError, TypeError):
+                    # If year conversion fails, ignore the filter
+                    pass
             
             # Calculate actual statistics with error handling
             total_trees = trees_query.count()
