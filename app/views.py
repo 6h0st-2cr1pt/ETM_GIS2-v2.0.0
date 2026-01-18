@@ -2073,17 +2073,35 @@ def api_species_list(request):
 def api_endemic_trees_list(request):
     """API endpoint to get endemic trees data for auto-population from database."""
     try:
-        # Get taxonomy from database (TreeSpecies)
+        # Get taxonomy from database (TreeSpecies) with deduplication
         trees_data = []
         if request.user.is_authenticated:
             species_list = TreeSpecies.objects.all().select_related('genus', 'genus__family').all()
+            
+            # Use a set to track unique combinations and avoid duplicates
+            seen_combinations = set()
+            
             for species in species_list:
-                trees_data.append({
-                    'common_name': species.common_name,
-                    'scientific_name': species.scientific_name,
-                    'family': species.genus.family.name if species.genus and species.genus.family else '',
-                    'genus': species.genus.name if species.genus else ''
-                })
+                family_name = species.genus.family.name if species.genus and species.genus.family else ''
+                genus_name = species.genus.name if species.genus else ''
+                
+                # Create a unique key based on taxonomy fields (not user)
+                unique_key = (
+                    species.common_name.lower().strip(),
+                    species.scientific_name.lower().strip(),
+                    family_name.lower().strip(),
+                    genus_name.lower().strip()
+                )
+                
+                # Only add if we haven't seen this combination before
+                if unique_key not in seen_combinations:
+                    seen_combinations.add(unique_key)
+                    trees_data.append({
+                        'common_name': species.common_name,
+                        'scientific_name': species.scientific_name,
+                        'family': family_name,
+                        'genus': genus_name
+                    })
         
         # Fallback to hardcoded data if no database entries
         if not trees_data:
@@ -2425,12 +2443,21 @@ def generate_report(request):
             all_addresses_in_report = []
 
         # Build the report HTML - only show the table
+        # Prepare year display text
+        year_display = "All years"
+        if selected_year:
+            try:
+                year_display = f"Year: {int(selected_year)}"
+            except (ValueError, TypeError):
+                year_display = f"Year: {selected_year}"
+        
         html = f'''
         <div class="report-document">
             <div class="report-header">
                 <h1 class="report-title">{report_title}</h1>
                 <p class="report-subtitle">Endemic Trees Monitoring System - User Account Report</p>
                 <p class="report-date">Generated on {date_str} at {time_str}</p>
+                <p class="report-filter">Filter: {year_display}</p>
             </div>
         '''
 
@@ -2518,7 +2545,8 @@ def generate_report(request):
         html += f'''
         <div class="report-section">
             <div style="margin-bottom: 1rem; padding: 0.75rem; background: #f8f9fa; border-radius: 4px;">
-                <strong>Address:</strong> {address_display}
+                <strong>Address:</strong> {address_display}<br>
+                <strong>Year:</strong> {year_display}
             </div>
             <div class="report-table-container">
                 <table class="report-table" style="width: 100%; border-collapse: collapse;">
@@ -3351,7 +3379,15 @@ def cleanup_orphaned_taxonomy(species):
 def delete_tree(request, tree_id):
     """View for deleting a tree record."""
     try:
-        tree = get_object_or_404(EndemicTree, id=tree_id, user=request.user)
+        # Check if tree exists (all users can delete any data)
+        try:
+            tree = EndemicTree.objects.get(id=tree_id)
+        except EndemicTree.DoesNotExist:
+            return JsonResponse({
+                'success': False,
+                'error': 'Tree record not found'
+            }, status=404)
+        
         location = tree.location
         
         # Get detailed tree info before deletion for logging
@@ -3374,13 +3410,14 @@ def delete_tree(request, tree_id):
         
         tree_info = " | ".join(details)
         
+        # Perform deletion
         tree.delete()
         
         # Delete the location if it's not used by any other tree
         if location and not location.trees.exists():
             location.delete()
         
-        # Log delete activity with detailed information
+        # Log delete activity ONLY after successful deletion
         History.objects.create(
             user=request.user,
             action='delete_tree',
@@ -3392,12 +3429,8 @@ def delete_tree(request, tree_id):
         # They can only be deleted explicitly from the Manage Taxonomy page
             
         return JsonResponse({'success': True})
-    except EndemicTree.DoesNotExist:
-        return JsonResponse({
-            'success': False,
-            'error': 'Tree record not found'
-        }, status=404)
     except Exception as e:
+        # If any error occurs, do NOT log to history
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -3418,8 +3451,16 @@ def delete_trees_bulk(request):
                 'error': 'No tree IDs provided'
             }, status=400)
         
-        # Get all trees to delete with details before deletion
-        trees = EndemicTree.objects.filter(id__in=tree_ids, user=request.user).select_related('species', 'location')
+        # Get all trees to delete with details before deletion (all users can delete any data)
+        trees = EndemicTree.objects.filter(id__in=tree_ids).select_related('species', 'location')
+        
+        # Check if any trees were found
+        if not trees.exists():
+            return JsonResponse({
+                'success': False,
+                'error': 'No trees found'
+            }, status=404)
+        
         deleted_count = 0
         locations_to_check = []
         species_to_check = set()  # Use set to avoid duplicates
@@ -3430,6 +3471,7 @@ def delete_trees_bulk(request):
         total_hectares = 0
         years_deleted = set()
         
+        # Perform deletions
         for tree in trees:
             location = tree.location
             species = tree.species
@@ -3445,6 +3487,7 @@ def delete_trees_bulk(request):
             if tree.year:
                 years_deleted.add(tree.year)
             
+            # Delete the tree
             tree.delete()
             deleted_count += 1
         
@@ -3453,31 +3496,33 @@ def delete_trees_bulk(request):
             if location and not location.trees.exists():
                 location.delete()
         
-        # Build detailed description
-        details = []
-        details.append(f"Count: {deleted_count} tree(s)")
-        if deleted_species:
-            species_list = ", ".join([f"{name} ({count})" for name, count in sorted(deleted_species.items())])
-            details.append(f"Species: {species_list}")
-        if total_hectares > 0:
-            details.append(f"Total Hectares: {total_hectares:.2f}")
-        if years_deleted:
-            years_str = ", ".join(sorted([str(y) for y in years_deleted]))
-            details.append(f"Years: {years_str}")
-        if len(deleted_locations) <= 5:
-            locations_str = ", ".join(list(deleted_locations)[:5])
-            details.append(f"Locations: {locations_str}")
-        elif len(deleted_locations) > 5:
-            details.append(f"Locations: {len(deleted_locations)} unique locations")
-        
-        description = " | ".join(details)
-        
-        # Log bulk delete activity with detailed information
-        History.objects.create(
-            user=request.user,
-            action='delete_trees_bulk',
-            description=f'Bulk deleted: {description}'
-        )
+        # Only log if deletions were successful
+        if deleted_count > 0:
+            # Build detailed description
+            details = []
+            details.append(f"Count: {deleted_count} tree(s)")
+            if deleted_species:
+                species_list = ", ".join([f"{name} ({count})" for name, count in sorted(deleted_species.items())])
+                details.append(f"Species: {species_list}")
+            if total_hectares > 0:
+                details.append(f"Total Hectares: {total_hectares:.2f}")
+            if years_deleted:
+                years_str = ", ".join(sorted([str(y) for y in years_deleted]))
+                details.append(f"Years: {years_str}")
+            if len(deleted_locations) <= 5:
+                locations_str = ", ".join(list(deleted_locations)[:5])
+                details.append(f"Locations: {locations_str}")
+            elif len(deleted_locations) > 5:
+                details.append(f"Locations: {len(deleted_locations)} unique locations")
+            
+            description = " | ".join(details)
+            
+            # Log bulk delete activity ONLY after successful deletion
+            History.objects.create(
+                user=request.user,
+                action='delete_trees_bulk',
+                description=f'Bulk deleted: {description}'
+            )
         
         # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
         # Taxonomy entries should remain in the database for autocomplete suggestions and future use
@@ -3499,9 +3544,15 @@ def delete_trees_bulk(request):
 def delete_all_trees(request):
     """View for deleting all tree records."""
     try:
-        # Get detailed information before deletion
+        # Get all trees (all users can delete any data)
         trees = EndemicTree.objects.all().select_related('species', 'location')
         total_count = trees.count()
+        
+        if total_count == 0:
+            return JsonResponse({
+                'success': False,
+                'error': 'No trees found to delete'
+            }, status=404)
         
         # Collect details about all trees being deleted
         deleted_species = {}  # {species_name: count}
@@ -3521,44 +3572,45 @@ def delete_all_trees(request):
             if tree.year:
                 years_deleted.add(tree.year)
         
-        # Get all locations and species to check after deletion
-        locations_to_check = list(Location.objects.filter(user=request.user, trees__isnull=False).distinct())
-        species_to_check = set(TreeSpecies.objects.filter(user=request.user, trees__isnull=False).distinct())
+        # Get all locations to check after deletion
+        locations_to_check = list(Location.objects.filter(trees__isnull=False).distinct())
         
         # Delete all trees
-        EndemicTree.objects.all().delete()
+        trees.delete()
         
         # Delete locations that are no longer used
         for location in locations_to_check:
             if not location.trees.exists():
                 location.delete()
         
-        # Build detailed description
-        details = []
-        details.append(f"Count: {total_count} tree(s)")
-        if deleted_species:
-            species_list = ", ".join([f"{name} ({count})" for name, count in sorted(deleted_species.items())[:10]])
-            if len(deleted_species) > 10:
-                species_list += f" and {len(deleted_species) - 10} more species"
-            details.append(f"Species: {species_list}")
-        if total_hectares > 0:
-            details.append(f"Total Hectares: {total_hectares:.2f}")
-        if years_deleted:
-            years_str = ", ".join(sorted([str(y) for y in years_deleted])[:10])
-            if len(years_deleted) > 10:
-                years_str += f" and {len(years_deleted) - 10} more years"
-            details.append(f"Years: {years_str}")
-        if unique_locations:
-            details.append(f"Locations: {len(unique_locations)} unique locations")
-        
-        description = " | ".join(details)
-        
-        # Log delete all activity with detailed information
-        History.objects.create(
-            user=request.user,
-            action='delete_all_trees',
-            description=f'Deleted all trees: {description}'
-        )
+        # Only log if deletions were successful
+        if total_count > 0:
+            # Build detailed description
+            details = []
+            details.append(f"Count: {total_count} tree(s)")
+            if deleted_species:
+                species_list = ", ".join([f"{name} ({count})" for name, count in sorted(deleted_species.items())[:10]])
+                if len(deleted_species) > 10:
+                    species_list += f" and {len(deleted_species) - 10} more species"
+                details.append(f"Species: {species_list}")
+            if total_hectares > 0:
+                details.append(f"Total Hectares: {total_hectares:.2f}")
+            if years_deleted:
+                years_str = ", ".join(sorted([str(y) for y in years_deleted])[:10])
+                if len(years_deleted) > 10:
+                    years_str += f" and {len(years_deleted) - 10} more years"
+                details.append(f"Years: {years_str}")
+            if unique_locations:
+                details.append(f"Locations: {len(unique_locations)} unique locations")
+            
+            description = " | ".join(details)
+            
+            # Log delete all activity ONLY after successful deletion
+            History.objects.create(
+                user=request.user,
+                action='delete_all_trees',
+                description=f'Deleted all trees: {description}'
+            )
         
         # Note: We do NOT delete taxonomy entries (species, genus, family) when trees are deleted
         # Taxonomy entries should remain in the database for autocomplete suggestions and future use
@@ -3569,6 +3621,7 @@ def delete_all_trees(request):
             'deleted_count': total_count
         })
     except Exception as e:
+        # If any error occurs, do NOT log to history
         return JsonResponse({
             'success': False,
             'error': str(e)
@@ -4155,51 +4208,47 @@ def add_taxonomy(request):
 
 
 @login_required(login_url='app:login')
-
 def list_taxonomy(request):
-
-    """List all taxonomy entries for the user"""
-
+    """List all unique taxonomy entries (removes duplicates from different users)"""
     try:
-
-        species_list = TreeSpecies.objects.all().select_related('genus', 'genus__family').order_by('common_name')
-
-        taxonomy_data = []
-
-        for species in species_list:
-
-            taxonomy_data.append({
-
-                'id': str(species.id),
-
-                'common_name': species.common_name,
-
-                'scientific_name': species.scientific_name,
-
-                'family': species.genus.family.name if species.genus and species.genus.family else '',
-
-                'genus': species.genus.name if species.genus else ''
-
-            })
-
+        # Get all species and group by unique combination of common_name, scientific_name, family, and genus
+        species_list = TreeSpecies.objects.all().select_related('genus', 'genus__family').order_by('common_name', 'scientific_name')
         
-
+        # Use a set to track unique combinations and avoid duplicates
+        seen_combinations = set()
+        taxonomy_data = []
+        
+        for species in species_list:
+            family_name = species.genus.family.name if species.genus and species.genus.family else ''
+            genus_name = species.genus.name if species.genus else ''
+            
+            # Create a unique key based on taxonomy fields (not user)
+            unique_key = (
+                species.common_name.lower().strip(),
+                species.scientific_name.lower().strip(),
+                family_name.lower().strip(),
+                genus_name.lower().strip()
+            )
+            
+            # Only add if we haven't seen this combination before
+            if unique_key not in seen_combinations:
+                seen_combinations.add(unique_key)
+                taxonomy_data.append({
+                    'id': str(species.id),
+                    'common_name': species.common_name,
+                    'scientific_name': species.scientific_name,
+                    'family': family_name,
+                    'genus': genus_name
+                })
+        
         return JsonResponse({
-
             'success': True,
-
             'taxonomy': taxonomy_data
-
         })
-
     except Exception as e:
-
         return JsonResponse({
-
             'success': False,
-
             'error': str(e)
-
         }, status=500)
 
 
@@ -4330,47 +4379,28 @@ def update_taxonomy(request, taxonomy_id):
 @login_required(login_url='app:login')
 
 def delete_taxonomy(request, taxonomy_id):
-
-    """Delete a taxonomy entry"""
-
+    """Delete a taxonomy entry (any user can delete any taxonomy entry)"""
     if request.method != 'POST':
-
         return JsonResponse({'error': 'Invalid request method'}, status=405)
-
     
-
     try:
-
-        species = TreeSpecies.objects.get(id=taxonomy_id, user=request.user)
-
+        # Allow any user to delete any taxonomy entry
+        species = TreeSpecies.objects.get(id=taxonomy_id)
         species.delete()
-
+        
         return JsonResponse({
-
             'success': True,
-
             'message': 'Taxonomy deleted successfully'
-
         })
-
     except TreeSpecies.DoesNotExist:
-
         return JsonResponse({
-
             'success': False,
-
             'error': 'Taxonomy entry not found'
-
         }, status=404)
-
     except Exception as e:
-
         return JsonResponse({
-
             'success': False,
-
             'error': str(e)
-
         }, status=500)
 
 
