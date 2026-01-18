@@ -104,6 +104,16 @@
                         <option value="existing">Existing</option>
                     </select>
                 </div>
+                
+                <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid rgba(255, 255, 255, 0.2);">
+                    <label for="addressFilter" style="display: block; margin-bottom: 8px; color: rgba(255, 255, 255, 0.9); font-size: 0.9rem;">Address:</label>
+                    <select id="addressFilter" name="addressFilter" class="filter-select">
+                        <option value="">All Addresses</option>
+                        {% for address in unique_addresses %}
+                        <option value="{{ address }}">{{ address }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
         </div>
 <!--

@@ -245,6 +245,12 @@ def gis(request):
     # Get unique years from trees
     unique_years = EndemicTree.objects.filter(user=request.user).values_list('year', flat=True).distinct().order_by('-year')
 
+    # Get unique addresses from locations
+    unique_addresses = Location.objects.filter(
+        user=request.user,
+        address__isnull=False
+    ).exclude(address='').values_list('address', flat=True).distinct().order_by('address')
+
     # Get default pin style
     try:
         default_pin = PinStyle.objects.get(user=request.user, is_default=True)
@@ -256,6 +262,7 @@ def gis(request):
         'layers': layers,
         'tree_species': tree_species,
         'unique_years': unique_years,
+        'unique_addresses': unique_addresses,
         'default_pin': default_pin,
     }
     return render(request, 'app/gis.html', context)

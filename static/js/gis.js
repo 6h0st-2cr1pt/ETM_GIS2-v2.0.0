@@ -599,6 +599,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentYearFilter = ""
   let currentHealthFilter = ""
   let currentStatusFilter = ""
+  let currentAddressFilter = ""
 
   // Function to apply all filters
   function applyFilters() {
@@ -647,6 +648,15 @@ document.addEventListener("DOMContentLoaded", () => {
   if (statusFilter) {
     statusFilter.addEventListener("change", function () {
       currentStatusFilter = this.value
+      applyFilters()
+    })
+  }
+
+  // Address filter change event
+  const addressFilter = document.getElementById('addressFilter')
+  if (addressFilter) {
+    addressFilter.addEventListener("change", function () {
+      currentAddressFilter = this.value
       applyFilters()
     })
   }
@@ -804,6 +814,14 @@ document.addEventListener("DOMContentLoaded", () => {
           return false
         }
         if (currentStatusFilter === 'existing' && isPlanted) {
+          return false
+        }
+      }
+      
+      // Filter by address
+      if (currentAddressFilter) {
+        const treeAddress = props.address ? String(props.address).trim() : ''
+        if (treeAddress !== currentAddressFilter) {
           return false
         }
       }
