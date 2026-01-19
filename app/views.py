@@ -507,16 +507,16 @@ def analytics(request):
         
         context = {
             'active_page': 'analytics',
-            'address_species_data': json.dumps(address_species_data),
-            'seed_sources': json.dumps(seed_sources),
-            'health_by_species': json.dumps(health_by_species_list),
-            'heights': json.dumps(heights),
-            'diameters': json.dumps(diameters),
+            'address_species_data': address_species_data,  # Pass as Python object for json_script filter
+            'seed_sources': seed_sources,  # Pass as Python object for json_script filter
+            'health_by_species': health_by_species_list,  # Pass as Python object for json_script filter
+            'heights': heights,  # Pass as Python object for json_script filter
+            'diameters': diameters,  # Pass as Python object for json_script filter
             'total_healthy': total_healthy,
             'total_not_healthy': total_not_healthy,
-            'tree_coordinates': json.dumps(tree_coordinates),
-            'unique_species': json.dumps(unique_species),  # Convert to JSON string
-            'unique_years': json.dumps(unique_years)  # Convert to JSON string for template
+            'tree_coordinates': tree_coordinates,  # Pass as Python object for json_script filter
+            'unique_species': unique_species,  # Pass as Python object for json_script filter
+            'unique_years': unique_years  # Pass as Python object for json_script filter
         }
 
         return render(request, 'app/analytics.html', context)
@@ -528,15 +528,15 @@ def analytics(request):
         # Return empty data in case of error
         context = {
             'active_page': 'analytics',
-            'address_species_data': '[]',
-            'seed_sources': '[]',
-            'health_by_species': '[]',
-            'heights': '[]',
-            'diameters': '[]',
+            'address_species_data': [],
+            'seed_sources': [],
+            'health_by_species': [],
+            'heights': [],
+            'diameters': [],
             'total_healthy': 0,
             'total_not_healthy': 0,
-            'tree_coordinates': '[]',
-            'unique_species': '[]',
+            'tree_coordinates': [],
+            'unique_species': [],
             'unique_years': []
         }
         return render(request, 'app/analytics.html', context)
@@ -3098,6 +3098,238 @@ def api_population_by_year(request):
             'populations': populations
         })
     except Exception as e:
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_analytics_address_species(request):
+    """
+    API endpoint for address-species data with year filter
+    Used for: Endemic Tree Population by Address (by Species) and Total Tree Population by Address
+    """
+    try:
+        year_filter = request.GET.get('year', 'all')
+        
+        # Base queryset
+        trees = EndemicTree.objects.all().select_related('species', 'location')
+        
+        # Apply year filter
+        if year_filter != 'all':
+            try:
+                year_int = int(year_filter)
+                trees = trees.filter(year=year_int)
+            except (ValueError, TypeError):
+                pass
+        
+        # Get trees with addresses
+        trees = trees.exclude(location__address__isnull=True).exclude(location__address='')
+        
+        # Group by address and species
+        address_species_map = {}
+        
+        for tree in trees:
+            address = tree.location.address if tree.location and tree.location.address else 'Unknown'
+            species_name = tree.species.common_name if tree.species else 'Unknown'
+            species_id = tree.species.id if tree.species else None
+            
+            if address not in address_species_map:
+                address_species_map[address] = {}
+            
+            if species_name not in address_species_map[address]:
+                address_species_map[address][species_name] = {
+                    'species_id': species_id,
+                    'species_name': species_name,
+                    'population': 0
+                }
+            
+            address_species_map[address][species_name]['population'] += tree.population
+        
+        # Convert to list format
+        address_species_data = []
+        for address, species_dict in address_species_map.items():
+            address_species_data.append({
+                'address': address,
+                'species': list(species_dict.values())
+            })
+        
+        # Sort addresses by total population (descending)
+        address_species_data.sort(
+            key=lambda x: sum(s['population'] for s in x['species']),
+            reverse=True
+        )
+        
+        # Clean data for JSON serialization
+        def clean_data(data):
+            if isinstance(data, list):
+                return [clean_data(item) for item in data]
+            elif isinstance(data, dict):
+                return {k: clean_data(v) if v is not None else 0 for k, v in data.items()}
+            elif str(type(data)) == "<class 'decimal.Decimal'>":
+                return float(data)
+            return data
+        
+        address_species_data = clean_data(address_species_data)
+        
+        return JsonResponse({
+            'success': True,
+            'data': address_species_data
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_analytics_health_by_species(request):
+    """
+    API endpoint for health by species data with year filter
+    Used for: Healthy vs Not Healthy Trees by Species
+    """
+    try:
+        year_filter = request.GET.get('year', 'all')
+        
+        # Base queryset
+        trees = EndemicTree.objects.all().select_related('species', 'location')
+        
+        # Apply year filter
+        if year_filter != 'all':
+            try:
+                year_int = int(year_filter)
+                trees = trees.filter(year=year_int)
+            except (ValueError, TypeError):
+                pass
+        
+        # Health status per species
+        health_by_species = {}
+        
+        for tree in trees:
+            species_name = tree.species.common_name if tree.species else 'Unknown'
+            
+            if species_name not in health_by_species:
+                health_by_species[species_name] = {'healthy': 0, 'not_healthy': 0}
+            
+            # Determine healthy count
+            is_healthy = tree.is_healthy if tree.is_healthy is not None else True
+            healthy_count = tree.healthy_count if tree.healthy_count else (tree.population if is_healthy else 0)
+            not_healthy_count = (tree.bad_count or 0) + (tree.deceased_count or 0)
+            if not_healthy_count == 0 and not is_healthy:
+                not_healthy_count = tree.population
+            
+            health_by_species[species_name]['healthy'] += healthy_count
+            health_by_species[species_name]['not_healthy'] += not_healthy_count
+        
+        # Convert to list format
+        health_by_species_list = [{'species': k, 'healthy': v['healthy'], 'not_healthy': v['not_healthy']} 
+                                 for k, v in health_by_species.items()]
+        health_by_species_list.sort(key=lambda x: x['healthy'] + x['not_healthy'], reverse=True)
+        
+        return JsonResponse({
+            'success': True,
+            'data': health_by_species_list
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_analytics_height_diameter(request):
+    """
+    API endpoint for height and diameter data with year filter
+    Used for: Tree Height/Diameter Distribution
+    """
+    try:
+        year_filter = request.GET.get('year', 'all')
+        
+        # Base queryset
+        trees = EndemicTree.objects.all().select_related('species', 'location')
+        
+        # Apply year filter
+        if year_filter != 'all':
+            try:
+                year_int = int(year_filter)
+                trees = trees.filter(year=year_int)
+            except (ValueError, TypeError):
+                pass
+        
+        # Collect height and diameter data
+        heights = []
+        diameters = []
+        
+        for tree in trees:
+            if tree.height_meters is not None:
+                heights.append(float(tree.height_meters))
+            if tree.diameter_cm is not None:
+                diameters.append(float(tree.diameter_cm))
+        
+        return JsonResponse({
+            'success': True,
+            'heights': heights,
+            'diameters': diameters
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({
+            'success': False,
+            'error': str(e)
+        }, status=500)
+
+
+@login_required(login_url='app:login')
+def api_analytics_tree_coordinates(request):
+    """
+    API endpoint for tree coordinates data with year filter
+    Used for: Tree Distribution Map (Scatter Plot)
+    """
+    try:
+        year_filter = request.GET.get('year', 'all')
+        
+        # Base queryset
+        trees = EndemicTree.objects.all().select_related('species', 'location')
+        
+        # Apply year filter
+        if year_filter != 'all':
+            try:
+                year_int = int(year_filter)
+                trees = trees.filter(year=year_int)
+            except (ValueError, TypeError):
+                pass
+        
+        # Tree coordinates with health/species
+        tree_coordinates = []
+        
+        for tree in trees:
+            species_name = tree.species.common_name if tree.species else 'Unknown'
+            is_healthy = tree.is_healthy if tree.is_healthy is not None else True
+            
+            if tree.location and tree.location.latitude and tree.location.longitude:
+                tree_coordinates.append({
+                    'latitude': float(tree.location.latitude),
+                    'longitude': float(tree.location.longitude),
+                    'species': species_name,
+                    'is_healthy': is_healthy,
+                    'health_status': 'Healthy' if is_healthy else 'Not Healthy'
+                })
+        
+        return JsonResponse({
+            'success': True,
+            'data': tree_coordinates
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JsonResponse({
             'success': False,
             'error': str(e)

@@ -1,3 +1,9 @@
+// Global chart instances
+let populationByAddressChart = null
+let totalPopulationByAddressChart = null
+let healthBySpeciesChart = null
+let scatterChart = null
+
 document.addEventListener("DOMContentLoaded", () => {
   // Check if Chart.js is loaded
   if (typeof Chart === 'undefined') {
@@ -7,6 +13,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   console.log("Chart.js loaded successfully")
+  
+  // Initialize year filters for all charts
+  initializeYearFilters()
   
   const chartCtx = document.getElementById("populationByAddressChart")
   if (!chartCtx) {
@@ -23,9 +32,9 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   try {
-    const addressSpeciesDataAttr = chartCtx.getAttribute("data-address-species") || "[]"
-    console.log("Raw address species data:", addressSpeciesDataAttr.substring(0, 100))
-    const addressSpeciesData = JSON.parse(addressSpeciesDataAttr)
+    // Get data from json_script tag
+    const addressSpeciesDataScript = document.getElementById('address-species-data')
+    const addressSpeciesData = addressSpeciesDataScript ? JSON.parse(addressSpeciesDataScript.textContent) : []
     console.log("Parsed address species data:", addressSpeciesData)
     
     if (!addressSpeciesData || addressSpeciesData.length === 0) {
@@ -100,8 +109,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (noDataMsg) noDataMsg.style.display = "none"
     chartCtx.style.display = "block"
 
+    // Destroy existing chart if it exists
+    if (populationByAddressChart) {
+      populationByAddressChart.destroy()
+    }
+    
     // Create the chart - grouped bars per address, colored by species (horizontal bars)
-    new Chart(chartCtx.getContext("2d"), {
+    populationByAddressChart = new Chart(chartCtx.getContext("2d"), {
       type: "bar",
       data: {
         labels: addresses,
@@ -212,7 +226,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!totalChartCtx) return
 
   try {
-    const addressSpeciesData = JSON.parse(totalChartCtx.getAttribute("data-address-species") || "[]")
+    // Get data from json_script tag
+    const addressSpeciesDataScript = document.getElementById('address-species-data')
+    const addressSpeciesData = addressSpeciesDataScript ? JSON.parse(addressSpeciesDataScript.textContent) : []
     
     if (!addressSpeciesData || addressSpeciesData.length === 0) {
       totalChartCtx.style.display = "none"
@@ -236,8 +252,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (noDataMsg) noDataMsg.style.display = "none"
     totalChartCtx.style.display = "block"
 
+    // Destroy existing chart if it exists
+    if (totalPopulationByAddressChart) {
+      totalPopulationByAddressChart.destroy()
+    }
+    
     // Create the chart - one bar per address showing total population (horizontal bars)
-    new Chart(totalChartCtx.getContext("2d"), {
+    totalPopulationByAddressChart = new Chart(totalChartCtx.getContext("2d"), {
       type: "bar",
       data: {
         labels: addresses,
@@ -322,7 +343,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!pieChartCtx) return
 
   try {
-    const addressSpeciesData = JSON.parse(pieChartCtx.getAttribute("data-address-species") || "[]")
+    // Get data from json_script tag
+    const addressSpeciesDataScript = document.getElementById('address-species-data')
+    const addressSpeciesData = addressSpeciesDataScript ? JSON.parse(addressSpeciesDataScript.textContent) : []
     
     if (!addressSpeciesData || addressSpeciesData.length === 0) {
       pieChartCtx.style.display = "none"
@@ -433,21 +456,454 @@ document.addEventListener("DOMContentLoaded", () => {
   // Initialize Year filter for Low Population Trees
   initializeLowPopulationYearFilter()
 
-  // Initialize new charts (always initialize, even if address_species_data is empty)
-  initializeHealthBySpeciesChart()
-  initializeHistogramChart()
+  // Initialize charts with initial data (all years) - use template data
+  // Note: The first two charts are already created inline above, so we skip them
+  initializeHealthBySpeciesChart('all')
+  initializeHistogramChart('all')
   initializeHealthPieChart()
-  initializeScatterPlot()
+  initializeScatterPlot('all')
   initializePopulationByYearChart()
 })
 
+// Function to initialize year filters for all charts
+function initializeYearFilters() {
+  // Get data from json_script tag
+  const uniqueYearsScript = document.getElementById('unique-years-data')
+  let uniqueYears = []
+  
+  try {
+    if (uniqueYearsScript) {
+      uniqueYears = JSON.parse(uniqueYearsScript.textContent)
+    }
+  } catch (error) {
+    console.error("Error parsing unique years:", error)
+  }
+  
+  // Populate all year filter dropdowns
+  const yearFilterIds = [
+    'addressSpeciesYearFilter',
+    'totalPopulationYearFilter',
+    'healthBySpeciesYearFilter',
+    'histogramYearFilter',
+    'scatterYearFilter'
+  ]
+  
+  yearFilterIds.forEach(filterId => {
+    const select = document.getElementById(filterId)
+    if (select) {
+      uniqueYears.forEach(year => {
+        if (year) {
+          const option = document.createElement('option')
+          option.value = year
+          option.textContent = year
+          select.appendChild(option)
+        }
+      })
+      
+      // Add event listener
+      select.addEventListener('change', function() {
+        const selectedYear = this.value
+        handleYearFilterChange(filterId, selectedYear)
+      })
+    }
+  })
+}
+
+// Function to handle year filter changes
+function handleYearFilterChange(filterId, year) {
+  switch(filterId) {
+    case 'addressSpeciesYearFilter':
+      loadAddressSpeciesChart(year)
+      break
+    case 'totalPopulationYearFilter':
+      loadTotalPopulationChart(year)
+      break
+    case 'healthBySpeciesYearFilter':
+      initializeHealthBySpeciesChart(year)
+      break
+    case 'histogramYearFilter':
+      initializeHistogramChart(year)
+      break
+    case 'scatterYearFilter':
+      initializeScatterPlot(year)
+      break
+  }
+}
+
+// Function to load address-species chart with year filter
+function loadAddressSpeciesChart(yearFilter = 'all') {
+  const chartCtx = document.getElementById("populationByAddressChart")
+  if (!chartCtx) return
+  
+  if (yearFilter !== 'all') {
+    fetch(`/api/analytics/address-species/?year=${yearFilter}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.data) {
+          updateAddressSpeciesChart(data.data)
+        } else {
+          chartCtx.style.display = "none"
+          const noDataMsg = chartCtx.nextElementSibling
+          if (noDataMsg) noDataMsg.style.display = "block"
+        }
+      })
+      .catch(error => {
+        console.error("Error fetching address-species data:", error)
+        chartCtx.style.display = "none"
+        const noDataMsg = chartCtx.nextElementSibling
+        if (noDataMsg) noDataMsg.style.display = "block"
+      })
+    return
+  }
+  
+  // Use initial data from template
+  const addressSpeciesDataScript = document.getElementById('address-species-data')
+  const addressSpeciesData = addressSpeciesDataScript ? JSON.parse(addressSpeciesDataScript.textContent) : []
+  if (addressSpeciesData && addressSpeciesData.length > 0) {
+    updateAddressSpeciesChart(addressSpeciesData)
+  }
+}
+
+// Function to update address-species chart
+function updateAddressSpeciesChart(addressSpeciesData) {
+  const chartCtx = document.getElementById("populationByAddressChart")
+  if (!chartCtx) return
+  
+  // Sort species within each address
+  addressSpeciesData.forEach(item => {
+    item.species.sort((a, b) => b.population - a.population)
+  })
+
+  // Get all unique species across all addresses
+  const allSpecies = new Set()
+  addressSpeciesData.forEach(item => {
+    item.species.forEach(s => {
+      allSpecies.add(s.species_name)
+    })
+  })
+  const speciesList = Array.from(allSpecies)
+
+  // Generate colors for each species
+  const colors = [
+    "rgba(0, 184, 148, 0.8)", "rgba(0, 206, 201, 0.8)", "rgba(9, 132, 227, 0.8)",
+    "rgba(108, 92, 231, 0.8)", "rgba(253, 121, 168, 0.8)", "rgba(225, 112, 85, 0.8)",
+    "rgba(46, 204, 113, 0.8)", "rgba(52, 152, 219, 0.8)", "rgba(155, 89, 182, 0.8)",
+    "rgba(241, 196, 15, 0.8)", "rgba(231, 76, 60, 0.8)", "rgba(230, 126, 34, 0.8)",
+    "rgba(26, 188, 156, 0.8)", "rgba(52, 73, 94, 0.8)", "rgba(149, 165, 166, 0.8)",
+    "rgba(192, 57, 43, 0.8)", "rgba(243, 156, 18, 0.8)", "rgba(211, 84, 0, 0.8)",
+    "rgba(142, 68, 173, 0.8)", "rgba(39, 174, 96, 0.8)", "rgba(22, 160, 133, 0.8)",
+    "rgba(44, 62, 80, 0.8)", "rgba(127, 140, 141, 0.8)", "rgba(236, 240, 241, 0.8)",
+    "rgba(52, 152, 219, 0.8)", "rgba(155, 89, 182, 0.8)", "rgba(241, 196, 15, 0.8)"
+  ]
+
+  // Prepare data for grouped bars per address
+  const addresses = addressSpeciesData.map(item => item.address)
+  
+  // Sort species by their TOTAL population across all addresses (descending)
+  const speciesWithTotalPop = speciesList.map(species => {
+    const totalPop = addressSpeciesData.reduce((sum, item) => {
+      const speciesData = item.species.find(s => s.species_name === species)
+      return sum + (speciesData ? speciesData.population : 0)
+    }, 0)
+    return { species, totalPop }
+  })
+  speciesWithTotalPop.sort((a, b) => b.totalPop - a.totalPop)
+  const sortedSpeciesList = speciesWithTotalPop.map(s => s.species)
+  
+  // Create datasets in sorted order
+  const datasets = sortedSpeciesList.map(species => {
+    const data = addressSpeciesData.map(item => {
+      const speciesData = item.species.find(s => s.species_name === species)
+      return speciesData ? speciesData.population : 0
+    })
+    const bg = colors[sortedSpeciesList.indexOf(species) % colors.length]
+    return {
+      label: species,
+      data: data,
+      backgroundColor: bg,
+      borderColor: bg.replace('0.8', '1'),
+      borderWidth: 1
+    }
+  })
+
+  // Hide no data message
+  const noDataMsg = chartCtx.nextElementSibling
+  if (noDataMsg) noDataMsg.style.display = "none"
+  chartCtx.style.display = "block"
+
+  // Destroy existing chart if it exists
+  if (populationByAddressChart) {
+    populationByAddressChart.destroy()
+  }
+
+  // Create the chart
+  populationByAddressChart = new Chart(chartCtx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: addresses,
+      datasets: datasets
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Population',
+            color: "rgba(255, 255, 255, 0.7)"
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)",
+          },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.7)"
+          }
+        },
+        y: {
+          title: {
+            display: false
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)",
+          },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.7)",
+            autoSkip: false,
+            callback: function(value) {
+              const label = this.getLabelForValue(value)
+              return label.length > 30 ? label.substring(0, 27) + '...' : label
+            }
+          }
+        },
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'right',
+          labels: {
+            color: "rgba(255, 255, 255, 0.7)",
+            boxWidth: 14,
+            padding: 10,
+            font: { size: 12 }
+          }
+        },
+        tooltip: {
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          titleColor: '#fff',
+          bodyColor: '#fff',
+          borderColor: 'rgba(255, 255, 255, 0.3)',
+          borderWidth: 1,
+          padding: 12,
+          displayColors: true,
+          callbacks: {
+            title: function(context) {
+              return 'Address: ' + context[0].label
+            },
+            label: function(context) {
+              const value = context.parsed.x
+              if (!value || value === 0) {
+                return null
+              }
+              const species = context.dataset.label || ''
+              return `${species}: ${value.toLocaleString()} trees`
+            },
+            beforeBody: function(context) {
+              return null
+            }
+          },
+          filter: function(tooltipItem) {
+            return tooltipItem.parsed.x > 0
+          }
+        }
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false
+      }
+    },
+  });
+}
+
+// Function to load total population chart with year filter
+function loadTotalPopulationChart(yearFilter = 'all') {
+  const totalChartCtx = document.getElementById("totalPopulationByAddressChart")
+  if (!totalChartCtx) return
+  
+  if (yearFilter !== 'all') {
+    // Fetch from API when a specific year is selected
+    fetch(`/api/analytics/address-species/?year=${yearFilter}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success && data.data) {
+          updateTotalPopulationChart(data.data)
+        } else {
+          totalChartCtx.style.display = "none"
+          const noDataMsg = totalChartCtx.nextElementSibling
+          if (noDataMsg) noDataMsg.style.display = "block"
+        }
+      })
+      .catch(error => {
+        console.error("Error fetching address-species data:", error)
+        totalChartCtx.style.display = "none"
+        const noDataMsg = totalChartCtx.nextElementSibling
+        if (noDataMsg) noDataMsg.style.display = "block"
+      })
+  } else {
+    // Use initial data from template when 'all' is selected
+    const addressSpeciesDataScript = document.getElementById('address-species-data')
+    try {
+      const addressSpeciesData = addressSpeciesDataScript ? JSON.parse(addressSpeciesDataScript.textContent) : []
+      if (addressSpeciesData && addressSpeciesData.length > 0) {
+        updateTotalPopulationChart(addressSpeciesData)
+      } else {
+        totalChartCtx.style.display = "none"
+        const noDataMsg = totalChartCtx.nextElementSibling
+        if (noDataMsg) noDataMsg.style.display = "block"
+      }
+    } catch (error) {
+      console.error("Error parsing address-species data:", error)
+      totalChartCtx.style.display = "none"
+      const noDataMsg = totalChartCtx.nextElementSibling
+      if (noDataMsg) noDataMsg.style.display = "block"
+    }
+  }
+}
+
+// Function to update total population chart
+function updateTotalPopulationChart(addressSpeciesData) {
+  const totalChartCtx = document.getElementById("totalPopulationByAddressChart")
+  if (!totalChartCtx) return
+  
+  // Calculate total population per address
+  const addresses = []
+  const totalPopulations = []
+  
+  addressSpeciesData.forEach(item => {
+    const total = item.species.reduce((sum, s) => sum + s.population, 0)
+    addresses.push(item.address)
+    totalPopulations.push(total)
+  })
+
+  // Hide no data message
+  const noDataMsg = totalChartCtx.nextElementSibling
+  if (noDataMsg) noDataMsg.style.display = "none"
+  totalChartCtx.style.display = "block"
+
+  // Destroy existing chart if it exists
+  if (totalPopulationByAddressChart) {
+    totalPopulationByAddressChart.destroy()
+  }
+
+  // Create the chart
+  totalPopulationByAddressChart = new Chart(totalChartCtx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: addresses,
+      datasets: [{
+        label: 'Total Population',
+        data: totalPopulations,
+        backgroundColor: "rgba(0, 184, 148, 0.8)",
+        borderColor: "rgba(0, 184, 148, 1)",
+        borderWidth: 1
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Population',
+            color: "rgba(255, 255, 255, 0.7)"
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)",
+          },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.7)"
+          }
+        },
+        y: {
+          title: {
+            display: true,
+            text: 'Address',
+            color: "rgba(255, 255, 255, 0.7)"
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)",
+          },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.7)",
+            autoSkip: false,
+            callback: function(value) {
+              const label = this.getLabelForValue(value)
+              return label.length > 30 ? label.substring(0, 27) + '...' : label
+            }
+          }
+        },
+      },
+      plugins: {
+        legend: {
+          display: false
+        },
+        tooltip: {
+          callbacks: {
+            title: function(context) {
+              return context[0].label
+            },
+            label: function(context) {
+              const value = context.parsed.x
+              return `Total Population: ${value.toLocaleString()}`
+            }
+          }
+        }
+      },
+      interaction: {
+        mode: 'index',
+        intersect: false
+      }
+    },
+  });
+}
+
 // 1. Stacked Bar Chart: Healthy vs Not Healthy Trees by Species
-function initializeHealthBySpeciesChart() {
+function initializeHealthBySpeciesChart(yearFilter = 'all') {
   const chartCtx = document.getElementById("healthBySpeciesChart")
   if (!chartCtx) return
 
   try {
-    const healthData = JSON.parse(chartCtx.getAttribute("data-health-by-species") || "[]")
+    // If year filter is provided, fetch from API
+    if (yearFilter !== 'all') {
+      fetch(`/api/analytics/health-by-species/?year=${yearFilter}`)
+        .then(response => response.json())
+        .then(data => {
+          if (data.success) {
+            updateHealthBySpeciesChart(data.data)
+          } else {
+            console.error("Error fetching health by species data:", data.error)
+            chartCtx.style.display = "none"
+            const noDataMsg = chartCtx.nextElementSibling
+            if (noDataMsg) noDataMsg.style.display = "block"
+          }
+        })
+        .catch(error => {
+          console.error("Error fetching health by species data:", error)
+          chartCtx.style.display = "none"
+          const noDataMsg = chartCtx.nextElementSibling
+          if (noDataMsg) noDataMsg.style.display = "block"
+        })
+      return
+    }
+    
+    // Otherwise use initial data from template
+    const healthDataScript = document.getElementById('health-by-species-data')
+    const healthData = healthDataScript ? JSON.parse(healthDataScript.textContent) : []
     
     if (!healthData || healthData.length === 0) {
       chartCtx.style.display = "none"
@@ -456,6 +912,20 @@ function initializeHealthBySpeciesChart() {
       return
     }
 
+    updateHealthBySpeciesChart(healthData)
+  } catch (error) {
+    console.error("Error creating Health by Species Chart:", error)
+    chartCtx.style.display = "none"
+    const noDataMsg = chartCtx.nextElementSibling
+    if (noDataMsg) noDataMsg.style.display = "block"
+  }
+}
+
+function updateHealthBySpeciesChart(healthData) {
+  const chartCtx = document.getElementById("healthBySpeciesChart")
+  if (!chartCtx) return
+  
+  try {
     const species = healthData.map(item => item.species)
     const healthy = healthData.map(item => item.healthy)
     const notHealthy = healthData.map(item => item.not_healthy)
@@ -464,7 +934,12 @@ function initializeHealthBySpeciesChart() {
     if (noDataMsg) noDataMsg.style.display = "none"
     chartCtx.style.display = "block"
 
-    new Chart(chartCtx.getContext("2d"), {
+    // Destroy existing chart if it exists
+    if (healthBySpeciesChart) {
+      healthBySpeciesChart.destroy()
+    }
+
+    healthBySpeciesChart = new Chart(chartCtx.getContext("2d"), {
       type: "bar",
       data: {
         labels: species,
@@ -546,110 +1021,171 @@ function initializeHealthBySpeciesChart() {
 
 // 2. Histogram: Tree Height or Diameter Distribution
 let histogramChart = null
-function initializeHistogramChart() {
+
+function createHistogram(type, heights, diameters) {
+  const chartCtx = document.getElementById("histogramChart")
+  if (!chartCtx) return
+  
+  const data = type === 'height' ? heights : diameters
+  const label = type === 'height' ? 'Height (meters)' : 'Diameter (cm)'
+  
+  if (!data || data.length === 0) {
+    chartCtx.style.display = "none"
+    const noDataMsg = chartCtx.nextElementSibling
+    if (noDataMsg) noDataMsg.style.display = "block"
+    return
+  }
+
+  // Calculate bins
+  const min = Math.min(...data)
+  const max = Math.max(...data)
+  const binCount = Math.min(20, Math.ceil(Math.sqrt(data.length)))
+  const binWidth = (max - min) / binCount
+  
+  const bins = Array(binCount).fill(0)
+  const binLabels = []
+  
+  for (let i = 0; i < binCount; i++) {
+    binLabels.push((min + i * binWidth).toFixed(2))
+  }
+  
+  data.forEach(value => {
+    const binIndex = Math.min(Math.floor((value - min) / binWidth), binCount - 1)
+    bins[binIndex]++
+  })
+
+  const noDataMsg = chartCtx.nextElementSibling
+  if (noDataMsg) noDataMsg.style.display = "none"
+  chartCtx.style.display = "block"
+
+  if (histogramChart) {
+    histogramChart.destroy()
+  }
+
+  histogramChart = new Chart(chartCtx.getContext("2d"), {
+    type: "bar",
+    data: {
+      labels: binLabels,
+      datasets: [{
+        label: `Frequency`,
+        data: bins,
+        backgroundColor: "rgba(52, 152, 219, 0.6)",
+        borderColor: "rgba(52, 152, 219, 1)",
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: label,
+            color: "rgba(255, 255, 255, 0.7)"
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)"
+          },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.7)"
+          }
+        },
+        y: {
+          beginAtZero: true,
+          title: {
+            display: true,
+            text: 'Frequency',
+            color: "rgba(255, 255, 255, 0.7)"
+          },
+          grid: {
+            color: "rgba(255, 255, 255, 0.1)"
+          },
+          ticks: {
+            color: "rgba(255, 255, 255, 0.7)"
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          display: false
+        }
+      }
+    }
+  });
+}
+
+function initializeHistogramChart(yearFilter = 'all') {
   const chartCtx = document.getElementById("histogramChart")
   if (!chartCtx) return
 
-  const heights = JSON.parse(chartCtx.getAttribute("data-heights") || "[]")
-  const diameters = JSON.parse(chartCtx.getAttribute("data-diameters") || "[]")
-
-  function createHistogram(type) {
-    const data = type === 'height' ? heights : diameters
-    const label = type === 'height' ? 'Height (meters)' : 'Diameter (cm)'
-    
-    if (!data || data.length === 0) {
-      chartCtx.style.display = "none"
-      const noDataMsg = chartCtx.nextElementSibling
-      if (noDataMsg) noDataMsg.style.display = "block"
-      return
-    }
-
-    // Calculate bins
-    const min = Math.min(...data)
-    const max = Math.max(...data)
-    const binCount = Math.min(20, Math.ceil(Math.sqrt(data.length)))
-    const binWidth = (max - min) / binCount
-    
-    const bins = Array(binCount).fill(0)
-    const binLabels = []
-    
-    for (let i = 0; i < binCount; i++) {
-      binLabels.push((min + i * binWidth).toFixed(2))
-    }
-    
-    data.forEach(value => {
-      const binIndex = Math.min(Math.floor((value - min) / binWidth), binCount - 1)
-      bins[binIndex]++
-    })
-
-    const noDataMsg = chartCtx.nextElementSibling
-    if (noDataMsg) noDataMsg.style.display = "none"
-    chartCtx.style.display = "block"
-
-    if (histogramChart) {
-      histogramChart.destroy()
-    }
-
-    histogramChart = new Chart(chartCtx.getContext("2d"), {
-      type: "bar",
-      data: {
-        labels: binLabels,
-        datasets: [{
-          label: `Frequency`,
-          data: bins,
-          backgroundColor: "rgba(52, 152, 219, 0.6)",
-          borderColor: "rgba(52, 152, 219, 1)",
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          x: {
-            title: {
-              display: true,
-              text: label,
-              color: "rgba(255, 255, 255, 0.7)"
-            },
-            grid: {
-              color: "rgba(255, 255, 255, 0.1)"
-            },
-            ticks: {
-              color: "rgba(255, 255, 255, 0.7)"
-            }
-          },
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Frequency',
-              color: "rgba(255, 255, 255, 0.7)"
-            },
-            grid: {
-              color: "rgba(255, 255, 255, 0.1)"
-            },
-            ticks: {
-              color: "rgba(255, 255, 255, 0.7)"
-            }
-          }
-        },
-        plugins: {
-          legend: {
-            display: false
-          }
+  // If year filter is provided, fetch from API
+  if (yearFilter !== 'all') {
+    fetch(`/api/analytics/height-diameter/?year=${yearFilter}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          const heights = data.heights || []
+          const diameters = data.diameters || []
+          const selectedType = document.querySelector('input[name="histogramType"]:checked')?.value || 'height'
+          createHistogram(selectedType, heights, diameters)
+        } else {
+          console.error("Error fetching height/diameter data:", data.error)
+          chartCtx.style.display = "none"
+          const noDataMsg = chartCtx.nextElementSibling
+          if (noDataMsg) noDataMsg.style.display = "block"
         }
-      }
-    });
+      })
+      .catch(error => {
+        console.error("Error fetching height/diameter data:", error)
+        chartCtx.style.display = "none"
+        const noDataMsg = chartCtx.nextElementSibling
+        if (noDataMsg) noDataMsg.style.display = "block"
+      })
+    return
+  }
+  
+  // Otherwise use initial data from template
+  try {
+    const heightsScript = document.getElementById('heights-data')
+    const diametersScript = document.getElementById('diameters-data')
+    const heights = heightsScript ? JSON.parse(heightsScript.textContent) : []
+    const diameters = diametersScript ? JSON.parse(diametersScript.textContent) : []
+    
+    const selectedType = document.querySelector('input[name="histogramType"]:checked')?.value || 'height'
+    createHistogram(selectedType, heights, diameters)
+  } catch (error) {
+    console.error("Error parsing height/diameter data:", error)
+    chartCtx.style.display = "none"
+    const noDataMsg = chartCtx.nextElementSibling
+    if (noDataMsg) noDataMsg.style.display = "block"
   }
 
-  // Initial chart
-  createHistogram('height')
-
-  // Radio button change handler
-  document.querySelectorAll('input[name="histogramType"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-      createHistogram(this.value)
+  // Radio button change handler (only set up once)
+  const radios = document.querySelectorAll('input[name="histogramType"]')
+  radios.forEach(radio => {
+    // Remove existing listeners to avoid duplicates
+    const newRadio = radio.cloneNode(true)
+    radio.parentNode.replaceChild(newRadio, radio)
+    
+    newRadio.addEventListener('change', function() {
+      const yearFilter = document.getElementById('histogramYearFilter')?.value || 'all'
+      if (yearFilter !== 'all') {
+        fetch(`/api/analytics/height-diameter/?year=${yearFilter}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data.success) {
+              createHistogram(this.value, data.heights || [], data.diameters || [])
+            }
+          })
+          .catch(error => console.error("Error fetching height/diameter data:", error))
+      } else {
+        const heightsScript = document.getElementById('heights-data')
+        const diametersScript = document.getElementById('diameters-data')
+        const heights = heightsScript ? JSON.parse(heightsScript.textContent) : []
+        const diameters = diametersScript ? JSON.parse(diametersScript.textContent) : []
+        createHistogram(this.value, heights, diameters)
+      }
     })
   })
 }
@@ -733,19 +1269,63 @@ function initializeHealthPieChart() {
 }
 
 // 4. Scatter Plot: Tree Distribution by Coordinates
-let scatterChart = null
-function initializeScatterPlot() {
+function initializeScatterPlot(yearFilter = 'all') {
   const chartCtx = document.getElementById("scatterPlotChart")
   if (!chartCtx) return
 
-  const treeCoordinates = JSON.parse(chartCtx.getAttribute("data-tree-coordinates") || "[]")
+  // If year filter is provided, fetch from API
+  if (yearFilter !== 'all') {
+    fetch(`/api/analytics/tree-coordinates/?year=${yearFilter}`)
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          updateScatterPlot(data.data)
+        } else {
+          console.error("Error fetching tree coordinates data:", data.error)
+          chartCtx.style.display = "none"
+          const noDataMsg = chartCtx.nextElementSibling
+          if (noDataMsg) noDataMsg.style.display = "block"
+        }
+      })
+      .catch(error => {
+        console.error("Error fetching tree coordinates data:", error)
+        chartCtx.style.display = "none"
+        const noDataMsg = chartCtx.nextElementSibling
+        if (noDataMsg) noDataMsg.style.display = "block"
+      })
+    return
+  }
   
-  if (!treeCoordinates || treeCoordinates.length === 0) {
+  // Otherwise use initial data from template
+  const treeCoordinatesScript = document.getElementById('tree-coordinates-data')
+  try {
+    const treeCoordinates = treeCoordinatesScript ? JSON.parse(treeCoordinatesScript.textContent) : []
+    
+    if (!treeCoordinates || treeCoordinates.length === 0) {
+      chartCtx.style.display = "none"
+      const noDataMsg = chartCtx.nextElementSibling
+      if (noDataMsg) noDataMsg.style.display = "block"
+      return
+    }
+    
+    updateScatterPlot(treeCoordinates)
+  } catch (error) {
+    console.error("Error parsing tree-coordinates data:", error)
     chartCtx.style.display = "none"
     const noDataMsg = chartCtx.nextElementSibling
     if (noDataMsg) noDataMsg.style.display = "block"
-    return
   }
+}
+
+// Store tree coordinates globally for scatter plot filters
+let globalTreeCoordinates = []
+
+function updateScatterPlot(treeCoordinates) {
+  const chartCtx = document.getElementById("scatterPlotChart")
+  if (!chartCtx) return
+
+  // Store coordinates globally for filter updates
+  globalTreeCoordinates = treeCoordinates
 
   // Get unique species and health statuses
   const speciesSet = new Set()
@@ -773,14 +1353,14 @@ function initializeScatterPlot() {
       filterValueSelect.appendChild(optionEl)
     })
     
-    updateScatterPlot()
+    renderScatterPlot()
   }
 
-  function updateScatterPlot() {
+  function renderScatterPlot() {
     const filterType = filterTypeSelect.value
     const filterValue = filterValueSelect.value
 
-    let filteredData = treeCoordinates
+    let filteredData = globalTreeCoordinates
     if (filterValue !== 'all') {
       filteredData = treeCoordinates.filter(tree => {
         return filterType === 'species' 
@@ -928,7 +1508,7 @@ function initializeScatterPlot() {
   }
 
   filterTypeSelect.addEventListener('change', updateFilterOptions)
-  filterValueSelect.addEventListener('change', updateScatterPlot)
+  filterValueSelect.addEventListener('change', renderScatterPlot)
   
   updateFilterOptions()
 }
@@ -943,15 +1523,13 @@ function loadSeedSources(yearFilter = 'all') {
     }
     
     // Get seed sources data from the template (for initial load with all years)
-    const seedSourcesDataElement = document.querySelector('[data-seed-sources]')
-    if (!seedSourcesDataElement) {
+    const seedSourcesScript = document.getElementById('seed-sources-data')
+    if (!seedSourcesScript) {
       console.error("Seed sources data element not found")
       return
     }
     
-    const seedSourcesJson = seedSourcesDataElement.getAttribute("data-seed-sources") || "[]"
-    console.log("Seed sources JSON:", seedSourcesJson)
-    const seedSources = JSON.parse(seedSourcesJson)
+    const seedSources = JSON.parse(seedSourcesScript.textContent)
     console.log("Parsed seed sources:", seedSources)
     console.log("Number of seed sources:", seedSources.length)
     updateSeedSources(seedSources)
@@ -1035,28 +1613,12 @@ function initializeLowPopulationYearFilter() {
   if (!yearFilterSelect) return
   
   // Get unique years from template
-  const container = document.querySelector('.analytics-container')
-  if (!container) return
-  
-  const uniqueYearsAttr = container.getAttribute('data-unique-years')
+  const uniqueYearsScript = document.getElementById('unique-years-data')
   let uniqueYears = []
   
   try {
-    if (uniqueYearsAttr) {
-      // Parse the years (they come as a JSON string)
-      try {
-        uniqueYears = JSON.parse(uniqueYearsAttr)
-      } catch (e) {
-        // If JSON parsing fails, try to parse as Python list string
-        const cleaned = uniqueYearsAttr.replace(/[\[\]']/g, '').split(',').map(y => y.trim()).filter(y => y)
-        uniqueYears = cleaned.map(y => {
-          try {
-            return parseInt(y)
-          } catch {
-            return null
-          }
-        }).filter(y => y !== null)
-      }
+    if (uniqueYearsScript) {
+      uniqueYears = JSON.parse(uniqueYearsScript.textContent)
     }
   } catch (error) {
     console.error("Error parsing unique years:", error)
@@ -1098,44 +1660,26 @@ function initializePopulationByYearChart() {
 
   // Populate species dropdown
   async function populateSpeciesDropdown() {
-    const analyticsContainer = document.querySelector('.analytics-container')
-    if (analyticsContainer) {
-      const uniqueSpeciesAttr = analyticsContainer.getAttribute('data-unique-species')
-      if (uniqueSpeciesAttr && uniqueSpeciesAttr !== '[]' && uniqueSpeciesAttr.trim() !== '') {
-        try {
-          // Parse the species list (it might be a JSON array or a Python list string)
-          let speciesList = []
-          const trimmed = uniqueSpeciesAttr.trim()
-          
-          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-            // Try JSON parse first
-            try {
-              speciesList = JSON.parse(trimmed)
-            } catch (e) {
-              // If JSON parse fails, try Python list format
-              speciesList = trimmed.replace(/[\[\]']/g, '').split(',').map(s => s.trim()).filter(s => s)
+    const uniqueSpeciesScript = document.getElementById('unique-species-data')
+    if (uniqueSpeciesScript) {
+      try {
+        const speciesList = JSON.parse(uniqueSpeciesScript.textContent)
+        
+        // Populate dropdown
+        if (Array.isArray(speciesList) && speciesList.length > 0) {
+          speciesList.forEach(species => {
+            if (species && species !== 'all') {
+              const option = document.createElement('option')
+              option.value = species
+              option.textContent = species
+              speciesFilter.appendChild(option)
             }
-          } else {
-            // Handle comma-separated string
-            speciesList = trimmed.split(',').map(s => s.trim().replace(/['"]/g, '')).filter(s => s)
-          }
-          
-          // Populate dropdown
-          if (Array.isArray(speciesList) && speciesList.length > 0) {
-            speciesList.forEach(species => {
-              if (species && species !== 'all') {
-                const option = document.createElement('option')
-                option.value = species
-                option.textContent = species
-                speciesFilter.appendChild(option)
-              }
-            })
-            console.log('Populated species dropdown with', speciesList.length, 'species')
-            return
-          }
-        } catch (error) {
-          console.error('Error parsing species list:', error, 'Raw value:', uniqueSpeciesAttr)
+          })
+          console.log('Populated species dropdown with', speciesList.length, 'species')
+          return
         }
+      } catch (error) {
+        console.error('Error parsing species list:', error)
       }
     }
     

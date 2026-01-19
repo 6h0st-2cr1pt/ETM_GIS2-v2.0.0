@@ -27,6 +27,10 @@ urlpatterns = [
     path('api/analytics-by-area/', views.api_analytics_by_area, name='api_analytics_by_area'),
     path('api/population-by-year/', views.api_population_by_year, name='api_population_by_year'),
     path('api/low-population-trees/', views.api_low_population_trees, name='api_low_population_trees'),
+    path('api/analytics/address-species/', views.api_analytics_address_species, name='api_analytics_address_species'),
+    path('api/analytics/health-by-species/', views.api_analytics_health_by_species, name='api_analytics_health_by_species'),
+    path('api/analytics/height-diameter/', views.api_analytics_height_diameter, name='api_analytics_height_diameter'),
+    path('api/analytics/tree-coordinates/', views.api_analytics_tree_coordinates, name='api_analytics_tree_coordinates'),
     path('api/dashboard-data/', views.api_dashboard_data, name='api_dashboard_data'),
     # Map layer APIs
     path('api/layers/', views.api_layers, name='api_layers'),

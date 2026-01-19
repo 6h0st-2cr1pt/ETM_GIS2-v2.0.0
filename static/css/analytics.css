@@ -78,12 +78,37 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  flex-direction: column;
 }
 
 .analytics-chart-card.full-width {
   grid-column: 1 / -1;
   height: 600px;
+}
+
+/* Tall charts for better visibility */
+.analytics-chart-card.chart-tall {
+  height: 600px;
+}
+
+.analytics-chart-card.chart-tall-full {
+  height: 700px;
+}
+
+/* Chart wrapper for better height control */
+.chart-wrapper {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chart-wrapper canvas {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: none !important;
+  flex: 1;
 }
 
 .analytics-chart-card:hover {
@@ -101,12 +126,25 @@
 
 .analytics-chart-card canvas {
   width: 100% !important;
-  height: calc(100% - 3rem) !important;
-  max-height: 400px;
+  height: 100% !important;
+  max-height: none;
+  flex: 1;
 }
 
 .analytics-chart-card.full-width canvas {
-  max-height: 500px;
+  max-height: none;
+  height: 100% !important;
+}
+
+/* Tall chart canvas heights */
+.analytics-chart-card.chart-tall canvas {
+  max-height: none;
+  height: 100% !important;
+}
+
+.analytics-chart-card.chart-tall-full canvas {
+  max-height: none;
+  height: 100% !important;
 }
 
 /* Filter controls styling */

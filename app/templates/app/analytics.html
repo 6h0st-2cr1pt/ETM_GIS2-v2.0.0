@@ -5,51 +5,100 @@
 {% endblock %}
 
 {% block content %}
-<div class="analytics-container" data-seed-sources='{{ seed_sources }}' data-unique-species='{{ unique_species }}' data-unique-years='{{ unique_years }}'>
+<!-- JSON data in script tags for safe parsing -->
+{{ address_species_data|json_script:"address-species-data" }}
+{{ seed_sources|json_script:"seed-sources-data" }}
+{{ unique_species|json_script:"unique-species-data" }}
+{{ unique_years|json_script:"unique-years-data" }}
+{{ health_by_species|json_script:"health-by-species-data" }}
+{{ heights|json_script:"heights-data" }}
+{{ diameters|json_script:"diameters-data" }}
+{{ tree_coordinates|json_script:"tree-coordinates-data" }}
+
+<div class="analytics-container">
 <!--    <h1 class="page-title">Analytics</h1> -->
 
     <div class="analytics-charts-container">
-        <div class="analytics-chart-card">
+        <div class="analytics-chart-card chart-tall">
             <h3>Endemic Tree Population by Address (by Species)</h3>
-            <canvas id="populationByAddressChart" data-address-species='{{ address_species_data }}'></canvas>
+            <div class="population-year-filters" style="margin-bottom: 15px;">
+                <div class="filter-group">
+                    <label>Year:</label>
+                    <select id="addressSpeciesYearFilter" class="filter-select">
+                        <option value="all">All Years</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="populationByAddressChart"></canvas>
+            </div>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
         <div class="analytics-chart-card">
             <h3>Endemic Tree Species Distribution</h3>
-            <canvas id="speciesDistributionPieChart" data-address-species='{{ address_species_data }}'></canvas>
+            <canvas id="speciesDistributionPieChart"></canvas>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
-        <div class="analytics-chart-card full-width">
+        <div class="analytics-chart-card full-width chart-tall-full">
             <h3>Total Tree Population by Address</h3>
-            <canvas id="totalPopulationByAddressChart" data-address-species='{{ address_species_data }}'></canvas>
+            <div class="population-year-filters" style="margin-bottom: 15px;">
+                <div class="filter-group">
+                    <label>Year:</label>
+                    <select id="totalPopulationYearFilter" class="filter-select">
+                        <option value="all">All Years</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="totalPopulationByAddressChart"></canvas>
+            </div>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
         <!-- New Charts -->
-        <div class="analytics-chart-card full-width">
+        <div class="analytics-chart-card full-width chart-tall-full">
             <h3>Healthy vs Not Healthy Trees by Species</h3>
-            <canvas id="healthBySpeciesChart" 
-                    data-health-by-species='{{ health_by_species }}'></canvas>
+            <div class="population-year-filters" style="margin-bottom: 15px;">
+                <div class="filter-group">
+                    <label>Year:</label>
+                    <select id="healthBySpeciesYearFilter" class="filter-select">
+                        <option value="all">All Years</option>
+                    </select>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="healthBySpeciesChart"></canvas>
+            </div>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
-        <div class="analytics-chart-card">
+        <div class="analytics-chart-card chart-tall">
             <h3>Tree Height/Diameter Distribution</h3>
-            <div style="margin-bottom: 15px;">
-                <label style="color: rgba(255,255,255,0.7); margin-right: 10px;">
-                    <input type="radio" name="histogramType" value="height" checked style="margin-right: 5px;">
-                    Height (meters)
-                </label>
-                <label style="color: rgba(255,255,255,0.7);">
-                    <input type="radio" name="histogramType" value="diameter" style="margin-right: 5px;">
-                    Diameter (cm)
-                </label>
+            <div style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                <div class="population-year-filters" style="margin-bottom: 0;">
+                    <div class="filter-group">
+                        <label>Year:</label>
+                        <select id="histogramYearFilter" class="filter-select">
+                            <option value="all">All Years</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label style="color: rgba(255,255,255,0.7); margin-right: 10px;">
+                        <input type="radio" name="histogramType" value="height" checked style="margin-right: 5px;">
+                        Height (meters)
+                    </label>
+                    <label style="color: rgba(255,255,255,0.7);">
+                        <input type="radio" name="histogramType" value="diameter" style="margin-right: 5px;">
+                        Diameter (cm)
+                    </label>
+                </div>
             </div>
-            <canvas id="histogramChart" 
-                    data-heights='{{ heights }}' 
-                    data-diameters='{{ diameters }}'></canvas>
+            <div class="chart-wrapper">
+                <canvas id="histogramChart"></canvas>
+            </div>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
@@ -61,9 +110,17 @@
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
-        <div class="analytics-chart-card full-width">
+        <div class="analytics-chart-card full-width chart-tall-full">
             <h3>Tree Distribution Map (Scatter Plot)</h3>
-            <div style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap;">
+            <div style="margin-bottom: 15px; display: flex; gap: 15px; flex-wrap: wrap; align-items: center;">
+                <div class="population-year-filters" style="margin-bottom: 0;">
+                    <div class="filter-group">
+                        <label>Year:</label>
+                        <select id="scatterYearFilter" class="filter-select">
+                            <option value="all">All Years</option>
+                        </select>
+                    </div>
+                </div>
                 <div>
                     <label style="color: rgba(255,255,255,0.7); margin-right: 5px;">Filter by:</label>
                     <select id="scatterFilterType">
@@ -75,9 +132,11 @@
                     <select id="scatterFilterValue">
                         <option value="all">All</option>
                     </select>
-    </div>
-        </div>
-            <canvas id="scatterPlotChart" data-tree-coordinates='{{ tree_coordinates }}'></canvas>
+                </div>
+            </div>
+            <div class="chart-wrapper">
+                <canvas id="scatterPlotChart"></canvas>
+            </div>
             <div class="no-data-message" style="display: none;">No data available</div>
         </div>
 
